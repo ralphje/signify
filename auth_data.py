@@ -28,6 +28,8 @@ from asn1 import dn
 from asn1 import oids
 from asn1 import pkcs7
 from asn1 import spc
+from M2Crypto import Err as M2_Err
+from M2Crypto import RSA as M2_RSA
 from M2Crypto import X509 as M2_X509
 from pyasn1.codec.ber import decoder
 from pyasn1.codec.der import encoder as der_encoder
@@ -48,6 +50,7 @@ class AuthData(object):
   """
 
   container = None
+  trailing_data = None
   signed_data = None
   digest_algorithm = None
   spc_info = None
@@ -72,7 +75,8 @@ class AuthData(object):
   def __init__(self, content):
     self.container, rest = decoder.decode(content,
                                           asn1Spec=pkcs7.ContentInfo())
-    if rest: raise Asn1Error('Extra unparsed content.')
+    if rest:
+      self.trailing_data = rest
 
     self.signed_data, rest = decoder.decode(self.container['content'],
                                             asn1Spec=pkcs7.SignedData())
@@ -161,6 +165,8 @@ class AuthData(object):
   def _ParseIssuerInfo(self, issuer_and_serial):
     # Extract the information that identifies the certificate to be
     # used for verification on the encryptedDigest in signer_info
+    # TODO: there is probably more validation to be done on these
+    # fields.
     issuer = issuer_and_serial['issuer']
     serial_number = int(issuer_and_serial['serialNumber'])
     issuer_dn = str(dn.DistinguishedName.TraverseRdn(issuer[0]))
@@ -206,6 +212,9 @@ class AuthData(object):
     return program_name, more_info_link
 
   def _ParseCerts(self, certs):
+    # TODO:
+    # Parse them into a dict with serial, subject dn, issuer dn, lifetime,
+    # algorithm, x509 version, extensions, ...
     res = dict()
     for cert in certs:
       cert_issuer = cert[0][0]['issuer']
@@ -398,6 +407,8 @@ class AuthData(object):
     _, rest = decoder.decode(message_digest_set[0])
     if rest:
       raise Asn1Error('Extra unparsed content.')
+    # TODO: Check SigningTime integrity
+    # e.g. only one value in the set
 
     enc_alg = self.counter_sig_info['digestEncryptionAlgorithm']['algorithm']
     if enc_alg not in oids.OID_TO_PUBKEY:
@@ -447,7 +458,36 @@ class AuthData(object):
         raise Asn1Error('3: Validation of countersignature hash failed.')
 
   def ValidateCertChains(self, time):  # pylint: disable-msg=W0613
+    # TODO:
+    # check ASN.1 on the certs, check validity timespan
+    # check designated certificate use
+    # check extension consistency
+    # check wether timestamping is prohibited
     return
+
+  def _ValidatePubkeyGeneric(self, m2_cert, digest_alg, payload, enc_digest):
+    pubkey = m2_cert.get_pubkey()
+    pubkey.reset_context(digest_alg().name)
+    pubkey.verify_init()
+    pubkey.verify_update(payload)
+    v = pubkey.verify_final(enc_digest)
+    if v != 1:
+      self.openssl_error = M2_Err.get_error()
+      # Let's try a special case. I have no idea how I would determine when
+      # to use this instead of the above code, so I'll always try. The
+      # observed problem was that for one countersignature (RSA on MD5),
+      # the encrypted digest did not contain an ASN.1 structure, but the
+      # raw hash value instead.
+      try:
+        rsa = pubkey.get_rsa()
+      except ValueError:
+        # It's not an RSA key, just fall through...
+        pass
+      else:
+        clear = rsa.public_decrypt(enc_digest, M2_RSA.pkcs1_padding)
+        if digest_alg(payload).digest() == clear:
+          return 1
+    return v
 
   def ValidateSignatures(self):
     """Validate encrypted hashes with respective public keys.
@@ -462,19 +502,17 @@ class AuthData(object):
     # Encrypted digest is that of auth_attrs, see comments in ValidateHashes.
     cert = self.certificates[self.signing_cert_id]
     m2_cert = M2_X509.load_cert_der_string(der_encoder.encode(cert))
-    pubkey = m2_cert.get_pubkey()
-    pubkey.verify_init()
-    pubkey.verify_update(self.computed_auth_attrs_for_hash)
-    v = pubkey.verify_final(self.encrypted_digest)
+    v = self._ValidatePubkeyGeneric(m2_cert, self.digest_algorithm,
+                                    self.computed_auth_attrs_for_hash,
+                                    self.encrypted_digest)
     if v != 1:
       raise Asn1Error('1: Validation of basic signature failed.')
 
     if self.has_countersignature:
       cert = self.certificates[self.counter_sig_cert_id]
       m2_cert = M2_X509.load_cert_der_string(der_encoder.encode(cert))
-      pubkey = m2_cert.get_pubkey()
-      pubkey.verify_init()
-      pubkey.verify_update(self.computed_counter_attrs_for_hash)
-      v = pubkey.verify_final(self.encrypted_counter_digest)
+      v = self._ValidatePubkeyGeneric(m2_cert, self.digest_algorithm,
+                                      self.computed_counter_attrs_for_hash,
+                                      self.encrypted_counter_digest)
       if v != 1:
         raise Asn1Error('2: Validation of counterSignature failed.')

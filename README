@@ -7,7 +7,7 @@ binaries.
 
 DEPENDENCIES
 ------------
-You need pyasn1 and M2Crypto to parse and validate signatures.
+You need pyasn1 >=0.13b and M2Crypto to parse and validate signatures.
 To exercise some demonstrator code, you may need pefile.
 M2Crypto: http://chandlerproject.org/Projects/MeTooCrypto/
 pyasn1: http://pyasn1.sourceforge.net/
