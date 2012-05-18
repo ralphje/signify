@@ -1,13 +1,13 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 # Copyright 2011 Google Inc. All Rights Reserved.
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,15 +15,16 @@
 # limitations under the License.
 #
 # Author: caronni@google.com (Germano Caronni)
-
 # Partially derived from pyasn1 examples.
 
 """Subset of PKCS#7 message syntax."""
+
 
 from pyasn1.type import namedtype
 from pyasn1.type import tag
 from pyasn1.type import univ
 import x509
+from x509_time import Time
 
 
 class Attribute(univ.Sequence):
@@ -169,5 +170,5 @@ class CountersignInfo(SignerInfo):
   pass
 
 
-class SigningTime(x509.Time):
+class SigningTime(Time):
   pass

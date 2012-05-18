@@ -1,13 +1,13 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
-# Copyright 2011 Google Inc. All Rights Reserved.
-# 
+# Copyright 2010 Google Inc. All Rights Reserved.
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,17 +21,19 @@
 import os
 import pickle
 import StringIO
-import unittest
 
+
+
+import unittest as test
 import fingerprint
 
 
-class FingerprinterTest(unittest.TestCase):
+class FingerprinterTest(test.TestCase):
 
   def testRunTestData(self):
     # Walk through all data files in the test_data folder, and compare output
     # with precomputed expected output.
-    data_dir = os.path.join(".", "test_data")
+    data_dir = os.path.join("test_data")
     files = os.listdir(data_dir)
     for fnam in files:
       if not fnam.lower().endswith(".res"):
@@ -42,10 +44,8 @@ class FingerprinterTest(unittest.TestCase):
           results = fp.HashIt()
           with file(os.path.join(data_dir, fnam + ".res"), "rb") as resf:
             exp_results = pickle.load(resf)
-            # diff = deep.diff(exp_results, results)
             diff = (exp_results != results)
             if diff:
-              # diff.print_full()
               print
               print fingerprint.FormatResults(resf, exp_results)
               print fingerprint.FormatResults(objf, results)
@@ -108,7 +108,17 @@ class FingerprinterTest(unittest.TestCase):
     fp._HashBlock(dummy, 0, len(dummy))
     self.assertEquals(hasher.seen, dummy)
 
+  # TODO(user): Add more tests for the carry-over of HashIt,
+  # the pecoff parsing pieces, and the parser / collector of the SignedData
+  # blob.
+  # Make sure Authenticode hashes are set to MD5, SHA1 by default, since so
+  # far authenticode does not support other hashing functions.
+  # Check that default hashers get used when no argument is provided, or
+  # None is provided. Make sure 'empty iterable' actually works as intended.
+
+
+def main():
+  test.main()
 
 if __name__ == "__main__":
-  unittest.main()
-
+  main()

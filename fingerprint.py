@@ -1,13 +1,13 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
-# Copyright 2011 Google Inc. All Rights Reserved.
-# 
+# Copyright 2010 Google Inc. All Rights Reserved.
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -23,6 +23,8 @@ are meant for exploration and debugging. Intended use is through the
 Fingerprinter, as exemplified in main.
 """
 
+# TODO(user): Consider how to organically support multi-level
+# hashes such as e.g. the magnet: scheme.
 
 import collections
 import hashlib

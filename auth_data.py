@@ -1,13 +1,13 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 # Copyright 2011 Google Inc. All Rights Reserved.
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,7 +16,6 @@
 #
 # Author: caronni@google.com (Germano Caronni)
 
-
 """auth_data represents ASN.1 encoded Authenticode data.
 
    Provides high-level validators and accessor functions.
@@ -24,20 +23,36 @@
 
 import hashlib
 
+
 from asn1 import dn
 from asn1 import oids
 from asn1 import pkcs7
 from asn1 import spc
-from M2Crypto import Err as M2_Err
-from M2Crypto import RSA as M2_RSA
-from M2Crypto import X509 as M2_X509
+
 from pyasn1.codec.ber import decoder
 from pyasn1.codec.der import encoder as der_encoder
 from pyasn1.type import univ
 
+try:
+  from M2Crypto import Err as M2_Err    # pylint: disable-msg=C6204
+  from M2Crypto import RSA as M2_RSA    # pylint: disable-msg=C6204
+  from M2Crypto import X509 as M2_X509  # pylint: disable-msg=C6204
+except ImportError:
+  M2_X509 = None
+
 
 class Asn1Error(Exception):
   pass
+
+
+def RequiresM2Crypto(fn):
+  """Decorator to support limited functionality if M2Crypto is missing."""
+
+  def M2CheckingWrapper(*args, **kwargs):
+    if not M2_X509:
+      raise Asn1Error('%s requires M2Crypto, which is not available', fn)
+    return fn(*args, **kwargs)
+  return M2CheckingWrapper
 
 
 # This is meant to hold the ASN.1 data representing all pieces
@@ -71,6 +86,9 @@ class AuthData(object):
   computed_counter_attrs_for_hash = None
   expected_auth_attrs_hash = None
   encrypted_counter_digest = None
+  openssl_error = None
+  cert_chain_head = None
+  counter_chain_head = None
 
   def __init__(self, content):
     self.container, rest = decoder.decode(content,
@@ -151,21 +169,12 @@ class AuthData(object):
     timestamp_choice, rest = decoder.decode(time_asn1,
                                             asn1Spec=pkcs7.SigningTime())
     if rest: raise Asn1Error('Extra unparsed content.')
-    utc_time = timestamp_choice['utcTime']
-    general_time = timestamp_choice['generalTime']
-    if utc_time and general_time:
-      raise Asn1Error('Both elements of a choice are present.')
-    if general_time:
-      return str(general_time)
-    if str(utc_time)[0] < '5':
-      return '20' + str(utc_time)
-    else:
-      return '19' + str(utc_time)
+    return timestamp_choice.ToPythonEpochTime()
 
   def _ParseIssuerInfo(self, issuer_and_serial):
     # Extract the information that identifies the certificate to be
     # used for verification on the encryptedDigest in signer_info
-    # TODO: there is probably more validation to be done on these
+    # TODO(user): there is probably more validation to be done on these
     # fields.
     issuer = issuer_and_serial['issuer']
     serial_number = int(issuer_and_serial['serialNumber'])
@@ -211,16 +220,19 @@ class AuthData(object):
 
     return program_name, more_info_link
 
+  def _ExtractIssuer(self, cert):
+    issuer = cert[0][0]['issuer']
+    serial_number = int(cert[0][0]['serialNumber'])
+    issuer_dn = str(dn.DistinguishedName.TraverseRdn(issuer[0]))
+    return (issuer_dn, serial_number)
+
   def _ParseCerts(self, certs):
-    # TODO:
+    # TODO(user):
     # Parse them into a dict with serial, subject dn, issuer dn, lifetime,
     # algorithm, x509 version, extensions, ...
     res = dict()
     for cert in certs:
-      cert_issuer = cert[0][0]['issuer']
-      cert_serial_number = int(cert[0][0]['serialNumber'])
-      cert_issuer_dn = str(dn.DistinguishedName.TraverseRdn(cert_issuer[0]))
-      res[(cert_issuer_dn, cert_serial_number)] = cert
+      res[self._ExtractIssuer(cert)] = cert
     return res
 
   def _ParseCountersig(self, unauth_attrs):
@@ -350,7 +362,7 @@ class AuthData(object):
     if oids.OID_TO_CLASS.get(content_type) is not spc.SpcIndirectDataContent:
       raise Asn1Error('Unexpected authAttr.content_type OID: %s' %
                       content_type.prettyPrint())
-    # message_digest -- 'just' an octet string
+    # Message_digest -- 'just' an octet string
     message_digest_set = self.auth_attrs[pkcs7.DigestInfo]
     if len(message_digest_set) != 1:
       raise Asn1Error('authAttr.messageDigest expected to hold one value.')
@@ -407,7 +419,7 @@ class AuthData(object):
     _, rest = decoder.decode(message_digest_set[0])
     if rest:
       raise Asn1Error('Extra unparsed content.')
-    # TODO: Check SigningTime integrity
+    # TODO(user): Check SigningTime integrity
     # e.g. only one value in the set
 
     enc_alg = self.counter_sig_info['digestEncryptionAlgorithm']['algorithm']
@@ -457,15 +469,67 @@ class AuthData(object):
       if auth_attr_hash != self.expected_auth_attrs_hash:
         raise Asn1Error('3: Validation of countersignature hash failed.')
 
-  def ValidateCertChains(self, time):  # pylint: disable-msg=W0613
-    # TODO:
-    # check ASN.1 on the certs, check validity timespan
-    # check designated certificate use
-    # check extension consistency
-    # check wether timestamping is prohibited
-    return
+  def ValidateCertChains(self, timestamp):  # pylint: disable-msg=W0613
+    # TODO(user):
+    # Check ASN.1 on the certs
+    # Check designated certificate use
+    # Check extension consistency
+    # Check wether timestamping is prohibited
+    not_before, not_after, top_cert = self._ValidateCertChain(
+        self.certificates[self.signing_cert_id])
+    self.cert_chain_head = (not_before, not_after,
+                            self._ExtractIssuer(top_cert))
 
-  def _ValidatePubkeyGeneric(self, m2_cert, digest_alg, payload, enc_digest):
+    if self.has_countersignature:
+      cs_not_before, cs_not_after, cs_top_cert = self._ValidateCertChain(
+          self.certificates[self.counter_sig_cert_id])
+      self.counter_chain_head = (cs_not_before, cs_not_after,
+                                 self._ExtractIssuer(cs_top_cert))
+      # Time of countersignature needs to be within validity of both chains
+      if (not_before > self.counter_timestamp > not_after or
+          cs_not_before > self.counter_timestamp > cs_not_after):
+        raise Asn1Error('Cert chain not valid at countersig time.')
+    else:
+      # Check if certificate chain was valid at time 'timestamp'
+      if timestamp:
+        if not_before > timestamp > not_after:
+          raise Asn1Error('Cert chain not valid at time timestamp.')
+
+  def _ValidateCertChain(self, signee):
+    # Get start of 'regular' chain
+    not_before = signee[0][0]['validity']['notBefore'].ToPythonEpochTime()
+    not_after = signee[0][0]['validity']['notAfter'].ToPythonEpochTime()
+    while True:
+      issuer = signee[0][0]['issuer']
+      issuer_dn = str(dn.DistinguishedName.TraverseRdn(issuer[0]))
+      signer = None
+      for cert in self.certificates.values():
+        subject = cert[0][0]['subject']
+        subject_dn = str(dn.DistinguishedName.TraverseRdn(subject[0]))
+        if subject_dn == issuer_dn:
+          signer = cert
+      # Are we at the end of the chain?
+      if not signer:
+        break
+      self.ValidateCertificateSignature(signee, signer)
+      # Did we hit a self-signed certificate?
+      if signee == signer:
+        break
+      t_not_before = signer[0][0]['validity']['notBefore'].ToPythonEpochTime()
+      t_not_after = signer[0][0]['validity']['notAfter'].ToPythonEpochTime()
+      if t_not_before > not_before:
+        # why would a cert be signed with something that was not valid yet
+        # just silently absorbing this case for now
+        not_before = t_not_before
+      not_after = min(not_after, t_not_after)
+      # Now let's go up a step in the cert chain.
+      signee = signer
+    return not_before, not_after, signee
+
+  @RequiresM2Crypto
+  def _ValidatePubkeyGeneric(self, signing_cert, digest_alg, payload,
+                             enc_digest):
+    m2_cert = M2_X509.load_cert_der_string(der_encoder.encode(signing_cert))
     pubkey = m2_cert.get_pubkey()
     pubkey.reset_context(digest_alg().name)
     pubkey.verify_init()
@@ -489,6 +553,18 @@ class AuthData(object):
           return 1
     return v
 
+  @RequiresM2Crypto
+  def ValidateCertificateSignature(self, signed_cert, signing_cert):
+    """Given a cert signed by another cert, validates the signature."""
+    # First the naive way -- note this does not check expiry / use etc.
+    signed_m2 = M2_X509.load_cert_der_string(der_encoder.encode(signed_cert))
+    signing_m2 = M2_X509.load_cert_der_string(der_encoder.encode(signing_cert))
+    pubkey = signing_m2.get_pubkey()
+    v = signed_m2.verify(pubkey)
+    if v != 1:
+      self.openssl_error = M2_Err.get_error()
+      raise Asn1Error('1: Validation of cert signature failed.')
+
   def ValidateSignatures(self):
     """Validate encrypted hashes with respective public keys.
 
@@ -500,18 +576,16 @@ class AuthData(object):
       Asn1Error: if signature validation fails.
     """
     # Encrypted digest is that of auth_attrs, see comments in ValidateHashes.
-    cert = self.certificates[self.signing_cert_id]
-    m2_cert = M2_X509.load_cert_der_string(der_encoder.encode(cert))
-    v = self._ValidatePubkeyGeneric(m2_cert, self.digest_algorithm,
+    signing_cert = self.certificates[self.signing_cert_id]
+    v = self._ValidatePubkeyGeneric(signing_cert, self.digest_algorithm,
                                     self.computed_auth_attrs_for_hash,
                                     self.encrypted_digest)
     if v != 1:
       raise Asn1Error('1: Validation of basic signature failed.')
 
     if self.has_countersignature:
-      cert = self.certificates[self.counter_sig_cert_id]
-      m2_cert = M2_X509.load_cert_der_string(der_encoder.encode(cert))
-      v = self._ValidatePubkeyGeneric(m2_cert, self.digest_algorithm,
+      signing_cert = self.certificates[self.counter_sig_cert_id]
+      v = self._ValidatePubkeyGeneric(signing_cert, self.digest_algorithm,
                                       self.computed_counter_attrs_for_hash,
                                       self.encrypted_counter_digest)
       if v != 1:
