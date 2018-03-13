@@ -29,11 +29,25 @@ from . import asn1
 ACCEPTED_DIGEST_ALGORITHMS = (hashlib.md5, hashlib.sha1)
 
 
+class AuthenticodeParseError(Exception):
+    pass
+
+
+def _print_type(t):
+    if t is None:
+        return ""
+    elif isinstance(t, tuple):
+        return ".".join(t)
+    elif hasattr(t, "__name__"):
+        return t.__name__
+    else:
+        return type(t).__name__
+
+
 def _guarded_ber_decode(data, asn1_spec=None):
     result, rest = decoder.decode(data, asn1Spec=asn1_spec)
     if rest:
-        raise SignedDataParseError("Extra information after parsing %s BER" %
-                                   (type(asn1_spec).__name__ if asn1_spec is not None else ""))
+        raise AuthenticodeParseError("Extra information after parsing %s BER" % _print_type(asn1_spec))
     return result
 
 
@@ -41,14 +55,14 @@ def _verify_empty_algorithm_parameters(algorithm, location):
     if 'parameters' in algorithm and algorithm['parameters'].isValue:
         parameters = _guarded_ber_decode(algorithm['parameters'])
         if not isinstance(parameters, univ.Null):
-            raise SignedDataParseError("%s has parameters set, which is unexpected" % (location, ))
+            raise AuthenticodeParseError("%s has parameters set, which is unexpected" % (location,))
 
 
 def _get_digest_algorithm(algorithm, location):
     result = asn1.oids.get(algorithm['algorithm'])
     if result not in ACCEPTED_DIGEST_ALGORITHMS:
-        raise SignedDataParseError("%s must be one of %s, not %s" %
-                                   (location, [x().name for x in ACCEPTED_DIGEST_ALGORITHMS], result().name))
+        raise AuthenticodeParseError("%s must be one of %s, not %s" %
+                                     (location, [x().name for x in ACCEPTED_DIGEST_ALGORITHMS], result().name))
 
     _verify_empty_algorithm_parameters(algorithm, location)
     return result
@@ -57,24 +71,11 @@ def _get_digest_algorithm(algorithm, location):
 def _get_encryption_algorithm(algorithm, location):
     result = asn1.oids.OID_TO_PUBKEY.get(algorithm['algorithm'])
     if result is None:
-        raise SignedDataParseError("%s: %s is not acceptable as encryption algorithm" %
-                                   (location, algorithm['algorithm']))
+        raise AuthenticodeParseError("%s: %s is not acceptable as encryption algorithm" %
+                                     (location, algorithm['algorithm']))
 
     _verify_empty_algorithm_parameters(algorithm, location)
     return result
-
-
-def _print_type(t):
-    if isinstance(t, tuple):
-        return ".".join(t)
-    elif hasattr(t, "__name__"):
-        return t.__name__
-    else:
-        return type(t).__name__
-
-
-class SignedDataParseError(Exception):
-    pass
 
 
 class Certificate(object):
@@ -125,7 +126,7 @@ class SignerInfo(object):
 
     def _parse(self):
         if self.data['version'] != 1:
-            raise SignedDataParseError("SignerInfo.version must be 1, not %d" % self.data['version'])
+            raise AuthenticodeParseError("SignerInfo.version must be 1, not %d" % self.data['version'])
 
         self.issuer = self.data['issuerAndSerialNumber']['issuer']
         self.issuer_dn = self.data['issuerAndSerialNumber']['issuer'][0].to_string()
@@ -144,7 +145,7 @@ class SignerInfo(object):
         self.program_name = self.more_info = None
         if asn1.spc.SpcSpOpusInfo in self.authenticated_attributes:
             if len(self.authenticated_attributes[asn1.spc.SpcSpOpusInfo]) != 1:
-                raise SignedDataParseError("Only one SpcSpOpusInfo expected in SignerInfo.authenticatedAttributes")
+                raise AuthenticodeParseError("Only one SpcSpOpusInfo expected in SignerInfo.authenticatedAttributes")
 
             self.program_name = self.authenticated_attributes[asn1.spc.SpcSpOpusInfo][0]['programName'].to_python()
             self.more_info = str(self.authenticated_attributes[asn1.spc.SpcSpOpusInfo][0]['moreInfo']['url'])
@@ -153,7 +154,7 @@ class SignerInfo(object):
         self.message_digest = None
         if asn1.pkcs7.Digest in self.authenticated_attributes:
             if len(self.authenticated_attributes[asn1.pkcs7.Digest]) != 1:
-                raise SignedDataParseError("Only one Digest expected in SignerInfo.authenticatedAttributes")
+                raise AuthenticodeParseError("Only one Digest expected in SignerInfo.authenticatedAttributes")
 
             self.message_digest = bytes(self.authenticated_attributes[asn1.pkcs7.Digest][0])
 
@@ -161,20 +162,20 @@ class SignerInfo(object):
         self.content_type = None
         if asn1.pkcs7.ContentType in self.authenticated_attributes:
             if len(self.authenticated_attributes[asn1.pkcs7.ContentType]) != 1:
-                raise SignedDataParseError("Only one ContentType expected in SignerInfo.authenticatedAttributes")
+                raise AuthenticodeParseError("Only one ContentType expected in SignerInfo.authenticatedAttributes")
 
             self.content_type = asn1.oids.get(self.authenticated_attributes[asn1.pkcs7.ContentType][0])
 
             if self.content_type is not self._expected_content_type:
-                raise SignedDataParseError("Unexpected content type for SignerInfo, expected %s, got %s" %
-                                           (_print_type(self.content_type),
+                raise AuthenticodeParseError("Unexpected content type for SignerInfo, expected %s, got %s" %
+                                             (_print_type(self.content_type),
                                             _print_type(self._expected_content_type)))
 
         # - The signingTime (used by countersigner)
         self.signing_time = None
         if asn1.pkcs7.SigningTime in self.authenticated_attributes:
             if len(self.authenticated_attributes[asn1.pkcs7.SigningTime]) != 1:
-                raise SignedDataParseError("Only one SigningTime expected in SignerInfo.authenticatedAttributes")
+                raise AuthenticodeParseError("Only one SigningTime expected in SignerInfo.authenticatedAttributes")
 
             self.signing_time = self.authenticated_attributes[asn1.pkcs7.SigningTime][0].to_python_time()
 
@@ -190,7 +191,7 @@ class SignerInfo(object):
         self.countersigner = None
         if asn1.pkcs7.CountersignInfo in self.unauthenticated_attributes:
             if len(self.unauthenticated_attributes[asn1.pkcs7.CountersignInfo]) != 1:
-                raise SignedDataParseError("Only one CountersignInfo expected in SignerInfo.unauthenticatedAttributes")
+                raise AuthenticodeParseError("Only one CountersignInfo expected in SignerInfo.unauthenticatedAttributes")
 
             self.countersigner = CounterSignerInfo(self.unauthenticated_attributes[asn1.pkcs7.CountersignInfo][0])
 
@@ -206,8 +207,8 @@ class SignerInfo(object):
             result[typ] = values
 
         if not all((x in result for x in required)):
-            raise SignedDataParseError("Not all required attributes found. Required: %s; Found: %s" %
-                                       ([_print_type(x) for x in required], [_print_type(x) for x in result]))
+            raise AuthenticodeParseError("Not all required attributes found. Required: %s; Found: %s" %
+                                         ([_print_type(x) for x in required], [_print_type(x) for x in result]))
 
         return result
 
@@ -245,8 +246,8 @@ class SignedData(object):
     @classmethod
     def from_certificate(cls, data):
         content = _guarded_ber_decode(data, asn1_spec=asn1.pkcs7.ContentInfo())
-        if asn1.oids.OID_TO_CLASS.get(content['contentType']) is not asn1.pkcs7.SignedData:
-            raise SignedDataParseError("ContentInfo does not contain SignedData")
+        if asn1.oids.get(content['contentType']) is not asn1.pkcs7.SignedData:
+            raise AuthenticodeParseError("ContentInfo does not contain SignedData")
 
         data = _guarded_ber_decode(content['content'], asn1_spec=asn1.pkcs7.SignedData())
 
@@ -255,17 +256,18 @@ class SignedData(object):
     def _parse(self):
         # Parse the fields of the SignedData structure
         if self.data['version'] != 1:
-            raise SignedDataParseError("SignedData.version must be 1, not %d" % self.data['version'])
+            raise AuthenticodeParseError("SignedData.version must be 1, not %d" % self.data['version'])
 
         # digestAlgorithms
         if len(self.data['digestAlgorithms']) != 1:
-            raise SignedDataParseError("SignedData.digestAlgorithms must contain exactly 1 algorithm, not %d" %
-                                       len(self.data['digestAlgorithms']))
+            raise AuthenticodeParseError("SignedData.digestAlgorithms must contain exactly 1 algorithm, not %d" %
+                                         len(self.data['digestAlgorithms']))
         self.digest_algorithm = _get_digest_algorithm(self.data['digestAlgorithms'][0], "SignedData.digestAlgorithm")
 
         # SpcIndirectDataContent
-        if asn1.oids.OID_TO_CLASS.get(self.data['contentInfo']['contentType']) is not asn1.spc.SpcIndirectDataContent:
-            raise SignedDataParseError("SignedData.contentInfo does not contain SpcIndirectDataContent")
+        self.content_type = asn1.oids.get(self.data['contentInfo']['contentType'])
+        if self.content_type is not asn1.spc.SpcIndirectDataContent:
+            raise AuthenticodeParseError("SignedData.contentInfo does not contain SpcIndirectDataContent")
         spc_info = _guarded_ber_decode(self.data['contentInfo']['content'], asn1_spec=asn1.spc.SpcIndirectDataContent())
         self.spc_info = SpcInfo(spc_info)
 
@@ -274,7 +276,7 @@ class SignedData(object):
 
         # signerInfos
         if len(self.data['signerInfos']) != 1:
-            raise SignedDataParseError("SignedData.signerInfos must contain 1 signer, not %d" %
-                                       len(self.data['signerInfos']))
+            raise AuthenticodeParseError("SignedData.signerInfos must contain exactly 1 signer, not %d" %
+                                         len(self.data['signerInfos']))
 
         self.signer_info = SignerInfo(self.data['signerInfos'][0])
