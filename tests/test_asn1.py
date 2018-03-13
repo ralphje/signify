@@ -31,11 +31,11 @@ class TimeTest(unittest.TestCase):
         utctime = useful.UTCTime('120614235959Z')
         t = Time()
         t['utcTime'] = utctime
-        self.assertEqual(t.to_python_time(), datetime.datetime(2012, 6, 14, 23, 59, 59))
+        self.assertEqual(t.to_python_time(), datetime.datetime(2012, 6, 14, 23, 59, 59, tzinfo=datetime.timezone.utc))
 
     def test_conversion_gen(self):
         gen_time = useful.GeneralizedTime('20120614235959Z')
         t = Time()
         t['generalTime'] = gen_time
-        self.assertEqual(t.to_python_time(), datetime.datetime(2012, 6, 14, 23, 59, 59))
+        self.assertEqual(t.to_python_time(), datetime.datetime(2012, 6, 14, 23, 59, 59, tzinfo=datetime.timezone.utc))
 

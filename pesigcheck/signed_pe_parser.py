@@ -20,6 +20,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""This module effectively implements the relevant parts of the PECOFF_ documentation to find the relevant parts of the
+PE structure.
+
+It is also capable of listing all the certificates in the Certificate Table and find the certificate with type 0x2.
+The actual parsing of this certificate is perfomed by :mod:`pesigcheck.authenticode_parser`.
+
+.. _PECOFF: http://www.microsoft.com/whdc/system/platform/firmware/PECOFF.mspx
+"""
+
 import collections
 import logging
 import os
@@ -37,12 +46,31 @@ class SignedPEParseError(Exception):
 
 class SignedPEFile(object):
     def __init__(self, file_obj):
+        """A PE file that is to be parsed to find the relevant sections for Authenticode parsing.
+
+        :param file_obj: A PE file opened in binary file
+        """
+
         self.file = file_obj
 
         self.file.seek(0, os.SEEK_END)
         self._filelength = self.file.tell()
 
     def get_authenticode_omit_sections(self):
+        """Returns all ranges of the raw file that are relevant for exclusion for the calculation of the hash
+        function used in Authenticode.
+
+        The relevant sections are (as per Authenticode_PE_, chapter Calculating the PE Image Hash):
+
+        * The location of the checksum
+        * The location of the entry of the Certificate Table in the Data Directory
+        * The location of the Certificate Table.
+
+        .. _Authenticode_PE: http://download.microsoft.com/download/9/c/5/9c5b2167-8017-4bae-9fde-d599bac8184a/Authenticode_PE.docx
+
+        :returns: dict if successful, or None if not successful
+        """
+
         try:
             locations = self._parse_pe_header_locations()
         except (SignedPEParseError, struct.error):
@@ -142,34 +170,44 @@ class SignedPEFile(object):
         return location
 
     def _parse_cert_table(self):
+        """Parses the Certificate Table, iterates over all certificates"""
+
         locations = self._parse_pe_header_locations()
         if 'certtable' not in locations:
             raise SignedPEParseError("The PE file does not contain a certificate table.")
 
-        certificates = []
         position = locations['certtable'].start
-        while position < locations['certtable'].length:
-            self.file.seek(position)
+        while position < sum(locations['certtable']):
+            self.file.seek(position, os.SEEK_SET)
             length = struct.unpack('<I', self.file.read(4))[0]
             revision = struct.unpack('<H', self.file.read(2))[0]
             certificate_type = struct.unpack('<H', self.file.read(2))[0]
             certificate = self.file.read(length - 8)
 
-            certificates.append({'revision': revision, 'type': certificate_type, 'certificate': certificate})
+            yield {'revision': revision, 'type': certificate_type, 'certificate': certificate}
             position += length + (8 - (length % 8))
 
-        return certificates
+    def get_signed_datas(self):
+        """Returns a :class:`pesigcheck.authenticode_parser.SignedData` object relevant for this PE file.
 
-    def get_signed_data(self):
-        for certificate in self._parse_cert_table():
-            if certificate['type'] == 2:
-                signeddata = certificate['certificate']
-                break
-        else:
-            raise SignedPEParseError("A SignedData structure was not found in the PE file's Certificate Table")
+        :raises: SignedPEParseError For parse errors in the PEFile
+        :raises: pesigcheck.authenticode_parser.AuthenticodeParseError For parse errors in the SignedData
+        :return: iterator of pesigcheck.authenticode_parser.SignedData
+        """
 
         from pesigcheck.authenticode_parser import SignedData
-        return SignedData.from_certificate(signeddata)
+
+        found = False
+        for certificate in self._parse_cert_table():
+            if certificate['revision'] != 0x200:
+                raise SignedPEParseError("Unknown certificate revision %x" % certificate['revision'])
+
+            if certificate['type'] == 2:
+                yield SignedData.from_certificate(certificate['certificate'])
+                found = True
+
+        if not found:
+            raise SignedPEParseError("A SignedData structure was not found in the PE file's Certificate Table")
 
 
 def main(*filenames):
@@ -178,29 +216,28 @@ def main(*filenames):
         with open(filename, "rb") as file_obj:
             try:
                 pe = SignedPEFile(file_obj)
-                signed_data = pe.get_signed_data()
+                for signed_data in pe.get_signed_datas():
+                    print("    Included certificates:")
+                    for cert in signed_data.certificates:
+                        print("      - Subject: {}".format(cert.subject_dn))
+                        print("        Issuer: {}".format(cert.issuer_dn))
+                        print("        Serial: {}".format(cert.serial_number))
+                        print("        Valid from: {}".format(cert.valid_from))
+                        print("        Valid to: {}".format(cert.valid_to))
 
-                print("    Included certificates:")
-                for cert in signed_data.certificates:
-                    print("      - Subject: {}".format(cert.subject_dn))
-                    print("        Issuer: {}".format(cert.issuer_dn))
-                    print("        Serial: {}".format(cert.serial_number))
-                    print("        Valid from: {}".format(cert.valid_from))
-                    print("        Valid to: {}".format(cert.valid_to))
-
-                print()
-                print("    Signer:")
-                print("        Issuer: {}".format(signed_data.signer_info.issuer_dn))
-                print("        Serial: {}".format(signed_data.signer_info.serial_number))
-                print("        Program name: {}".format(signed_data.signer_info.program_name))
-                print("        More info: {}".format(signed_data.signer_info.more_info))
-
-                if signed_data.signer_info.countersigner:
                     print()
-                    print("    Countersigner:")
-                    print("        Issuer: {}".format(signed_data.signer_info.countersigner.issuer_dn))
-                    print("        Serial: {}".format(signed_data.signer_info.countersigner.serial_number))
-                    print("        Signing time: {}".format(signed_data.signer_info.countersigner.signing_time))
+                    print("    Signer:")
+                    print("        Issuer: {}".format(signed_data.signer_info.issuer_dn))
+                    print("        Serial: {}".format(signed_data.signer_info.serial_number))
+                    print("        Program name: {}".format(signed_data.signer_info.program_name))
+                    print("        More info: {}".format(signed_data.signer_info.more_info))
+
+                    if signed_data.signer_info.countersigner:
+                        print()
+                        print("    Countersigner:")
+                        print("        Issuer: {}".format(signed_data.signer_info.countersigner.issuer_dn))
+                        print("        Serial: {}".format(signed_data.signer_info.countersigner.serial_number))
+                        print("        Signing time: {}".format(signed_data.signer_info.countersigner.signing_time))
 
             except Exception as e:
                 print("    Error while parsing: " + str(e))

@@ -20,6 +20,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""This module effectively implements the first few chapters of Microsoft's documentation on Authenticode_PE_.
+
+.. _Authenticode_PE: http://download.microsoft.com/download/9/c/5/9c5b2167-8017-4bae-9fde-d599bac8184a/Authenticode_PE.docx
+"""
+
 import hashlib
 from pyasn1.codec.ber import decoder
 from pyasn1.type import univ
@@ -245,13 +250,16 @@ class SignedData(object):
 
     @classmethod
     def from_certificate(cls, data):
-        content = _guarded_ber_decode(data, asn1_spec=asn1.pkcs7.ContentInfo())
+        # This one is not guarded, which is intentional
+        content, rest = decoder.decode(data, asn1Spec=asn1.pkcs7.ContentInfo())
         if asn1.oids.get(content['contentType']) is not asn1.pkcs7.SignedData:
             raise AuthenticodeParseError("ContentInfo does not contain SignedData")
 
         data = _guarded_ber_decode(content['content'], asn1_spec=asn1.pkcs7.SignedData())
 
-        return SignedData(data)
+        signed_data = SignedData(data)
+        signed_data._rest_data = rest
+        return signed_data
 
     def _parse(self):
         # Parse the fields of the SignedData structure
