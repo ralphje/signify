@@ -51,8 +51,8 @@ class FingerPrinterTestCase(unittest.TestCase):
         fp._fingers.append(Finger(None, [Range(0, 1000001)],  None))
 
         start, stop = fp._next_interval
-        self.assertEquals(0, start)
-        self.assertEquals(1000000, stop)
+        self.assertEqual(0, start)
+        self.assertEqual(1000000, stop)
 
     def test_adjustments(self):
         fp = Fingerprinter(io.StringIO(""))
@@ -60,19 +60,19 @@ class FingerPrinterTestCase(unittest.TestCase):
 
         # The remaining range should not yet be touched...
         fp._consume(9, 10)
-        self.assertEquals([Range(10, 20)], fp._fingers[0]._ranges)
+        self.assertEqual([Range(10, 20)], fp._fingers[0]._ranges)
         # Trying to consume into the range. Blow up.
         self.assertRaises(RuntimeError, fp._consume, 9, 11)
         # We forgot a byte. Blow up.
         self.assertRaises(RuntimeError, fp._consume, 11, 12)
         # Consume a byte
         fp._consume(10, 11)
-        self.assertEquals([Range(11, 20)], fp._fingers[0]._ranges)
+        self.assertEqual([Range(11, 20)], fp._fingers[0]._ranges)
         # Consumed too much. Blow up.
         self.assertRaises(RuntimeError, fp._consume, 11, 21)
         # Consume exactly.
         fp._consume(11, 20)
-        self.assertEquals(0, len(fp._fingers[0]._ranges))
+        self.assertEqual(0, len(fp._fingers[0]._ranges))
 
     def test_hash_block(self):
         # Does it invoke a hash function?
@@ -93,4 +93,4 @@ class FingerPrinterTestCase(unittest.TestCase):
         fp._fingers.append(big_finger)
         # Let's process the block
         fp._hash_block(dummy, 0, len(dummy))
-        self.assertEquals(hasher.seen, dummy)
+        self.assertEqual(hasher.seen, dummy)

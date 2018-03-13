@@ -25,15 +25,13 @@ import hashlib
 import os
 import sys
 import logging
-
-import struct
-
 import binascii
+
+from pesigcheck.signed_pe_parser import SignedPEFile
 
 logger = logging.getLogger(__name__)
 
 Range = collections.namedtuple('Range', 'start end')
-RelRange = collections.namedtuple('RelRange', 'start length')
 
 
 class Finger(object):
@@ -233,109 +231,9 @@ class Fingerprinter(object):
 
 
 class AuthenticodeFingerprinter(Fingerprinter):
-    def _get_authenticode_omit_ranges(self):
-        """Parses a PE file to find the sections to exclude from the AuthentiCode hash.
-
-        See http://www.microsoft.com/whdc/system/platform/firmware/PECOFF.mspx for information about the structure.
-        """
-
-        omit = {}
-
-        # Check if file starts with MZ
-        self.file.seek(0, os.SEEK_SET)
-        if self.file.read(2) != b'MZ':
-            logger.debug("MZ header not found")
-            return None
-
-        # Offset to e_lfanew (which is the PE header) is at 0x3C of the MZ header
-        self.file.seek(0x3C, os.SEEK_SET)
-        pe_offset = struct.unpack('<I', self.file.read(4))[0]
-        if pe_offset >= self._filelength:
-            logger.debug("PE header location is beyond file boundaries (%d >= %d)", pe_offset, self._filelength)
-            return None
-
-        # Check if the PE header is PE
-        self.file.seek(pe_offset, os.SEEK_SET)
-        if self.file.read(4) != b'PE\0\0':
-            logger.debug("PE header not found")
-            return None
-
-        # The COFF header contains the size of the optional header
-        self.file.seek(pe_offset + 20, os.SEEK_SET)
-        optional_header_size = struct.unpack('<H', self.file.read(2))[0]
-        optional_header_offset = pe_offset + 24
-        if optional_header_size + optional_header_offset > self._filelength:
-            # This is not strictly a failure for windows, but such files better
-            # be treated as generic files. They can not be carrying SignedData.
-            logger.warning("The optional header exceeds the file length (%d + %d > %d)",
-                           optional_header_size, optional_header_offset, self._filelength)
-            return None
-
-        if optional_header_size < 68:
-            # We can't do authenticode-style hashing. If this is a valid binary,
-            # which it can be, the header still does not even contain a checksum.
-            logger.warning("The optional header size is %d < 68, which is insufficient for authenticode",
-                           optional_header_size)
-            return None
-
-        # The optional header contains the signature of the image
-        self.file.seek(optional_header_offset, os.SEEK_SET)
-        signature = struct.unpack('<H', self.file.read(2))[0]
-        if signature == 0x10b:  # IMAGE_NT_OPTIONAL_HDR32_MAGIC
-            rva_base = optional_header_offset + 92  # NumberOfRvaAndSizes
-            cert_base = optional_header_offset + 128  # Certificate Table
-        elif signature == 0x20b:  # IMAGE_NT_OPTIONAL_HDR64_MAGIC
-            rva_base = optional_header_offset + 108  # NumberOfRvaAndSizes
-            cert_base = optional_header_offset + 144  # Certificate Table
-        else:
-            # A ROM image or such, not in the PE/COFF specs. Not sure what to do.
-            logger.warning("The PE Optional Header signature is %x, which is unknown", signature)
-            return None
-
-        # According to the specification, the checksum should not be hashed.
-        omit['checksum'] = RelRange(optional_header_offset + 64, 4)
-
-        # Read the RVA
-        if optional_header_size + optional_header_size < rva_base + 4:
-            logger.debug("The PE Optional Header size can not accommodate for the NumberOfRvaAndSizes field")
-            return omit
-        self.file.seek(rva_base, os.SEEK_SET)
-        number_of_rva = struct.unpack('<I', self.file.read(4))[0]
-        if number_of_rva < 5:
-            logger.debug("The PE Optional Header does not have a Certificate Table entry in its Data Directory; "
-                         "NumberOfRvaAndSizes = %d", number_of_rva)
-            return omit
-        if optional_header_offset + optional_header_size < cert_base + 8:
-            logger.debug("The PE Optional Header size can not accommodate for a Certificate Table entry in its Data "
-                         "Directory")
-            return omit
-
-        # According to the spec, the certificate table entry of the data directory should be omitted
-        omit['certtable'] = RelRange(cert_base, 8)
-
-        # Read the certificate table entry of the Data Directory
-        self.file.seek(cert_base, os.SEEK_SET)
-        address, size = struct.unpack('<II', self.file.read(8))
-
-        if not size:
-            logger.debug("The Certificate Table is empty")
-            return omit
-
-        if address < optional_header_size + optional_header_offset or address + size > self._filelength:
-            logger.debug("The location of the Certificate Table in the binary makes no sense and is either beyond the "
-                         "boundaries of the file, or in the middle of the PE header; "
-                         "VirtualAddress: %x, Size: %x", address, size)
-            return omit
-
-        omit['signeddata'] = RelRange(address, size)
-        return omit
-
     def add_authenticode_hashers(self, *hashers):
-        try:
-            omit = self._get_authenticode_omit_ranges()
-        except struct.error:
-            logger.warning("Parsing PE header failed, assuming it is not a valid header")
-            omit = None
+        pefile = SignedPEFile(self.file)
+        omit = pefile.get_authenticode_omit_sections()
 
         if omit is None:
             return False
