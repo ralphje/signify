@@ -187,6 +187,10 @@ class SignedPEFile(object):
             yield {'revision': revision, 'type': certificate_type, 'certificate': certificate}
             position += length + (8 - (length % 8))
 
+    def get_fingerprinter(self):
+        from pesigcheck.fingerprinter import AuthenticodeFingerprinter
+        return AuthenticodeFingerprinter(self.file)
+
     def get_signed_datas(self):
         """Returns a :class:`pesigcheck.authenticode_parser.SignedData` object relevant for this PE file.
 
@@ -203,7 +207,7 @@ class SignedPEFile(object):
                 raise SignedPEParseError("Unknown certificate revision %x" % certificate['revision'])
 
             if certificate['type'] == 2:
-                yield SignedData.from_certificate(certificate['certificate'])
+                yield SignedData.from_certificate(certificate['certificate'], pefile=self)
                 found = True
 
         if not found:
@@ -238,6 +242,14 @@ def main(*filenames):
                         print("        Issuer: {}".format(signed_data.signer_info.countersigner.issuer_dn))
                         print("        Serial: {}".format(signed_data.signer_info.countersigner.serial_number))
                         print("        Signing time: {}".format(signed_data.signer_info.countersigner.signing_time))
+
+                    print()
+                    try:
+                        signed_data.verify()
+                        print("    Signature: valid")
+                    except Exception as e:
+                        print("    Signature: invalid")
+                        print("    {}".format(e))
 
             except Exception as e:
                 print("    Error while parsing: " + str(e))

@@ -38,6 +38,10 @@ class AuthenticodeParseError(Exception):
     pass
 
 
+class AuthenticodeVerificationError(Exception):
+    pass
+
+
 def _print_type(t):
     if t is None:
         return ""
@@ -84,8 +88,9 @@ def _get_encryption_algorithm(algorithm, location):
 
 
 class Certificate(object):
-    def __init__(self, data):
+    def __init__(self, data, signed_data):
         self.data = data
+        self.signed_data = signed_data
         self._parse()
 
     def _parse(self):
@@ -120,13 +125,20 @@ class Certificate(object):
             for extension in tbs_certificate['extensions']:
                 self.extensions[asn1.oids.get(extension['extnID'])] = extension['extnValue']
 
+    def get_issuing_certificates(self):
+        yield from self.signed_data._find_certificates(subject=self.issuer)
+
+    def is_self_signed(self):
+        return self.subject == self.issuer
+
 
 class SignerInfo(object):
     _expected_content_type = asn1.spc.SpcIndirectDataContent
     _required_authenticated_attributes = (asn1.pkcs7.ContentType, asn1.pkcs7.Digest, asn1.spc.SpcSpOpusInfo)
 
-    def __init__(self, data):
+    def __init__(self, data, signed_data):
         self.data = data
+        self.signed_data = signed_data
         self._parse()
 
     def _parse(self):
@@ -198,7 +210,8 @@ class SignerInfo(object):
             if len(self.unauthenticated_attributes[asn1.pkcs7.CountersignInfo]) != 1:
                 raise AuthenticodeParseError("Only one CountersignInfo expected in SignerInfo.unauthenticatedAttributes")
 
-            self.countersigner = CounterSignerInfo(self.unauthenticated_attributes[asn1.pkcs7.CountersignInfo][0])
+            self.countersigner = CounterSignerInfo(self.unauthenticated_attributes[asn1.pkcs7.CountersignInfo][0],
+                                                   signed_data=self.signed_data)
 
     @classmethod
     def _parse_attributes(cls, data, required=()):
@@ -217,6 +230,9 @@ class SignerInfo(object):
 
         return result
 
+    def get_issuing_certificates(self):
+        yield from self.signed_data._find_certificates(issuer=self.issuer, serial_number=self.serial_number)
+
 
 class CounterSignerInfo(SignerInfo):
     _required_authenticated_attributes = (asn1.pkcs7.ContentType, asn1.pkcs7.SigningTime, asn1.pkcs7.Digest)
@@ -224,8 +240,9 @@ class CounterSignerInfo(SignerInfo):
 
 
 class SpcInfo(object):
-    def __init__(self, data):
+    def __init__(self, data, signed_data):
         self.data = data
+        self.signed_data = signed_data
         self._parse()
 
     def _parse(self):
@@ -244,12 +261,13 @@ class SpcInfo(object):
 
 
 class SignedData(object):
-    def __init__(self, data):
+    def __init__(self, data, pefile=None):
         self.data = data
+        self.pefile = pefile
         self._parse()
 
     @classmethod
-    def from_certificate(cls, data):
+    def from_certificate(cls, data, *args, **kwargs):
         # This one is not guarded, which is intentional
         content, rest = decoder.decode(data, asn1Spec=asn1.pkcs7.ContentInfo())
         if asn1.oids.get(content['contentType']) is not asn1.pkcs7.SignedData:
@@ -257,7 +275,7 @@ class SignedData(object):
 
         data = _guarded_ber_decode(content['content'], asn1_spec=asn1.pkcs7.SignedData())
 
-        signed_data = SignedData(data)
+        signed_data = SignedData(data, *args, **kwargs)
         signed_data._rest_data = rest
         return signed_data
 
@@ -277,14 +295,69 @@ class SignedData(object):
         if self.content_type is not asn1.spc.SpcIndirectDataContent:
             raise AuthenticodeParseError("SignedData.contentInfo does not contain SpcIndirectDataContent")
         spc_info = _guarded_ber_decode(self.data['contentInfo']['content'], asn1_spec=asn1.spc.SpcIndirectDataContent())
-        self.spc_info = SpcInfo(spc_info)
+        self.spc_info = SpcInfo(spc_info, signed_data=self)
 
         # Certificates
-        self.certificates = [Certificate(cert) for cert in self.data['certificates']]
+        self.certificates = [Certificate(cert, signed_data=self) for cert in self.data['certificates']]
 
         # signerInfos
         if len(self.data['signerInfos']) != 1:
             raise AuthenticodeParseError("SignedData.signerInfos must contain exactly 1 signer, not %d" %
                                          len(self.data['signerInfos']))
 
-        self.signer_info = SignerInfo(self.data['signerInfos'][0])
+        self.signer_info = SignerInfo(self.data['signerInfos'][0], signed_data=self)
+
+        # CRLs
+        if 'crls' in self.data and self.data['crls'].isValue:
+            raise AuthenticodeParseError("SignedData.crls is present, but that is unexpected.")
+
+    def _find_certificates(self, *, subject=None, serial_number=None, issuer=None):
+        for certificate in self.certificates:
+            if subject is not None and certificate.subject != subject:
+                continue
+            if serial_number is not None and certificate.serial_number != serial_number:
+                continue
+            if issuer is not None and certificate.issuer != issuer:
+                continue
+            yield certificate
+
+    def verify(self, expected_hash=None):
+        # Check that the digest algorithms match
+        if self.digest_algorithm != self.spc_info.digest_algorithm:
+            raise AuthenticodeVerificationError("SignedData.digestAlgorithm must equal SpcInfo.digestAlgorithm")
+
+        if self.digest_algorithm != self.signer_info.digest_algorithm:
+            raise AuthenticodeVerificationError("SignedData.digestAlgorithm must equal SignerInfo.digestAlgorithm")
+
+        # Check that the hashes are correct
+        # 1. The hash of the file
+        if expected_hash is None:
+            fingerprinter = self.pefile.get_fingerprinter()
+            fingerprinter.add_authenticode_hashers(self.digest_algorithm)
+            expected_hash = fingerprinter.hash()[self.digest_algorithm().name]
+
+        if expected_hash != self.spc_info.digest:
+            raise AuthenticodeVerificationError("The expected hash does not match the digest in SpcInfo")
+
+        # 2. The hash of the spc blob
+        # According to RFC2315, 9.3, identifier (tag) and length need to be
+        # stripped for hashing. We do this by having the parser just strip
+        # out the SEQUENCE part of the spcIndirectData.
+        # Alternatively this could be done by re-encoding and concatenating
+        # the individual elements in spc_value, I _think_.
+        _, hashable_spc_blob = decoder.decode(self.data['contentInfo']['content'], recursiveFlag=0)
+        spc_blob_hash = self.digest_algorithm(bytes(hashable_spc_blob)).digest()
+        if spc_blob_hash != self.signer_info.message_digest:
+            raise AuthenticodeVerificationError('The expected hash of the SpcInfo does not match SignerInfo')
+
+        # TODO:
+        # Can't check authAttr hash against encrypted hash, done implicitly in
+        # M2's pubkey.verify. This can be added by explicit decryption of
+        # encryptedDigest, if really needed. (See sample code for RSA in
+        # 'verbose_authenticode_sig.py')
+
+        if self.signer_info.countersigner:
+            auth_attr_hash = self.digest_algorithm(self.signer_info.encrypted_digest).digest()
+            if auth_attr_hash != self.signer_info.countersigner.message_digest:
+                raise AuthenticodeVerificationError('The expected hash of the encryptedDigest does not match '
+                                                    'countersigner\'s SignerInfo')
