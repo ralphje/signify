@@ -55,7 +55,12 @@ class AuthenticodeParserTestCase(unittest.TestCase):
 
             self.assertEqual(signed_data._rest_data, b'\0')
 
-            # TODO: Test that validation succeeds
-            # auth.ValidateHashes(computed_content_hash)
-            # auth.ValidateSignatures()
-            # auth.ValidateCertChains(time.gmtime())
+            signed_data.verify()
+
+    def test_pciide(self):
+        with open(str(root_dir / "test_data" / "pciide.sys"), "rb") as f:
+            pefile = SignedPEFile(f)
+            signed_datas = list(pefile.get_signed_datas())
+            self.assertEqual(len(signed_datas), 1)
+            signed_data = signed_datas[0]
+            signed_data.verify()

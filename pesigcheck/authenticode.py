@@ -610,7 +610,8 @@ class SignerInfo(object):
             typ = asn1.oids.get(attr['type'])
             values = []
             for value in attr['values']:
-                value = _guarded_ber_decode(value, asn1_spec=typ() if not isinstance(typ, tuple) else None)
+                if not isinstance(typ, tuple):
+                    value = _guarded_ber_decode(value, asn1_spec=typ())
                 values.append(value)
             result[typ] = values
 
@@ -830,12 +831,10 @@ class SignedData(object):
         if spc_blob_hash != self.signer_info.message_digest:
             raise AuthenticodeVerificationError('The expected hash of the SpcInfo does not match SignerInfo')
 
-        # TODO:
         # Can't check authAttr hash against encrypted hash, done implicitly in
-        # M2's pubkey.verify. This can be added by explicit decryption of
-        # encryptedDigest, if really needed. (See sample code for RSA in
-        # 'verbose_authenticode_sig.py')
+        # M2's pubkey.verify.
 
+        # 3. Check the countersigner hash.
         if self.signer_info.countersigner:
             auth_attr_hash = self.digest_algorithm(self.signer_info.encrypted_digest).digest()
             if auth_attr_hash != self.signer_info.countersigner.message_digest:
