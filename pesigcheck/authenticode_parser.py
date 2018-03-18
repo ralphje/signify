@@ -20,7 +20,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""This module effectively implements the first few chapters of Microsoft's documentation on Authenticode_PE_.
+"""This module effectively implements Microsoft's documentation on Authenticode_PE_.
 
 .. _Authenticode_PE: http://download.microsoft.com/download/9/c/5/9c5b2167-8017-4bae-9fde-d599bac8184a/Authenticode_PE.docx
 """
@@ -35,12 +35,13 @@ from cryptography import x509
 from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import rsa, padding, ec
+from cryptography.hazmat.primitives.asymmetric import rsa, padding, ec, utils
 from pyasn1.codec.ber import decoder as ber_decoder
 from pyasn1.codec.der import encoder as der_encoder
 from pyasn1.codec.der import decoder as der_decoder
 from pyasn1.type import univ
 
+from ._legacy import rsa_public_decrypt
 from . import asn1
 
 logger = logging.getLogger(__name__)
@@ -100,6 +101,17 @@ def _get_encryption_algorithm(algorithm, location):
 
     _verify_empty_algorithm_parameters(algorithm, location)
     return result
+
+
+def _from_hashlib_to_crypto(algorithm):
+    return {
+        hashlib.md5: hashes.MD5(),
+        hashlib.sha1: hashes.SHA1(),
+        hashlib.sha224: hashes.SHA224(),
+        hashlib.sha256: hashes.SHA256(),
+        hashlib.sha384: hashes.SHA384(),
+        hashlib.sha512: hashes.SHA512(),
+    }.get(algorithm, algorithm)
 
 
 class CertificateStore(list):
@@ -271,6 +283,41 @@ class Certificate(object):
                 raise AuthenticodeVerificationError("Certificate %s does not have %s in its extendedKeyUsage" %
                                                     (self, context.extended_key_usage))
 
+    def _legacy_verify_signature(self, signature, data, algorithm):
+        """Performs a legacy signature verification. This method is intended for the case where the encryptedDigest
+        does not contain an ASN.1 structure, but a raw hash value instead.
+
+        This case is described in more detail on
+        https://mta.openssl.org/pipermail/openssl-users/2015-September/002053.html
+
+        As there is no module in Python that allows us to do this (M2Crypto is not Python 3 compatible at this time),
+        we use direct calls to the CFFI module of OpenSSL. That ugly *barf* is put in _legacy.
+
+        The arguments are identical to those of :meth:`verify_signature`.
+        """
+
+        public_key = self.x509.public_key()
+        if not isinstance(public_key, rsa.RSAPublicKey):
+            logger.info("Legacy signature verification only allowed for RSA public keys.")
+            return False
+
+        crypto_algorithm = _from_hashlib_to_crypto(algorithm)
+        expected_hash = rsa_public_decrypt(public_key, signature, padding.PKCS1v15(), crypto_algorithm)
+
+        if isinstance(crypto_algorithm, hashes.MD5):
+            hash_algorithm = hashlib.md5
+        elif isinstance(crypto_algorithm, hashes.SHA1):
+            hash_algorithm = hashlib.sha1
+        else:
+            logger.info("Legacy signature verification only allowed for MD5 and SHA1 signatures.")
+            return False
+
+        actual_hash = hash_algorithm(data).digest()
+        if expected_hash != actual_hash:
+            raise AuthenticodeVerificationError("Invalid legacy RSA signature for %s" % self)
+
+        return True
+
     def verify_signature(self, signature, data, algorithm):
         """Verifies whether the signature bytes match the data using the hashing algorithm. Supports RSA and EC keys.
         Note that not all hashing algorithms are supported by the cryptography module.
@@ -282,25 +329,18 @@ class Certificate(object):
         """
 
         # Given a hashlib.sha1 object, convert it to the appropritate value
-        algorithm = {
-            hashlib.md5: hashes.MD5(),
-            hashlib.sha1: hashes.SHA1(),
-            hashlib.sha224: hashes.SHA224(),
-            hashlib.sha256: hashes.SHA256(),
-            hashlib.sha384: hashes.SHA384(),
-            hashlib.sha512: hashes.SHA512(),
-        }.get(algorithm, algorithm)
-
+        crypto_algorithm = _from_hashlib_to_crypto(algorithm)
         public_key = self.x509.public_key()
+
         if isinstance(public_key, rsa.RSAPublicKey):
             try:
-                public_key.verify(signature, data, padding.PKCS1v15(), algorithm)
-            except InvalidSignature as e:
+                public_key.verify(signature, data, padding.PKCS1v15(), crypto_algorithm)
+            except InvalidSignature:
                 raise AuthenticodeVerificationError("Invalid RSA signature for %s" % self)
 
         elif isinstance(public_key, ec.EllipticCurvePublicKey):
             try:
-                public_key.verify(signature, data, ec.ECDSA(algorithm))
+                public_key.verify(signature, data, ec.ECDSA(crypto_algorithm))
             except InvalidSignature:
                 raise AuthenticodeVerificationError("Invalid EC signature for %s" % self)
         else:
@@ -388,9 +428,12 @@ class Certificate(object):
         except UnsupportedAlgorithm:
             logger.info("The hashing algorithm is not supported by the cryptography module. "
                         "Trying pyopenssl instead")
-            if not context.allow_legacy or not self._legacy_verify_issuer(issuer, context.timestamp):
-                raise AuthenticodeVerificationError("The algorithm is too old to use by cryptography and pyOpenSSL "
-                                                    "is not installed, or legacy checking is disallowed.")
+            if not context.allow_legacy:
+                raise AuthenticodeVerificationError("The signature algorithm of {} is unsupported by cryptography, and "
+                                                    "legacy checking is disallowed.")
+            elif not self._legacy_verify_issuer(issuer, context.timestamp):
+                raise AuthenticodeVerificationError("The signature algorithm of {} is unsupported by cryptography and "
+                                                    "pyOpenSSL is not installed.")
 
         return True
 
@@ -576,9 +619,15 @@ class SignerInfo(object):
                                     self._encoded_authenticated_attributes,
                                     self.digest_algorithm)
         except AuthenticodeVerificationError as e:
-            raise AuthenticodeVerificationError("Could not verify {cert} as the signer of the authenticated attributes "
-                                                "in {cls}: {exc}"
-                                                .format(cert=issuer, cls=type(self).__name__, exc=e))
+            if not context.allow_legacy:
+                raise AuthenticodeVerificationError("Could not verify {cert} as the signer of the authenticated "
+                                                    "attributes in {cls}, and legacy checking is disallowed: {exc}"
+                                                    .format(cert=issuer, cls=type(self).__name__, exc=e))
+            elif not issuer._legacy_verify_signature(self.encrypted_digest, self._encoded_authenticated_attributes,
+                                                     self.digest_algorithm):
+                raise AuthenticodeVerificationError("Could not verify {cert} as the signer of the authenticated "
+                                                    "attributes in {cls}, and legacy checking was not possible: {exc}"
+                                                    .format(cert=issuer, cls=type(self).__name__, exc=e))
 
     def _build_chain(self, context):
         succeeded, last_error = False, None
