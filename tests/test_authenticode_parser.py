@@ -29,9 +29,12 @@ from pesigcheck.fingerprinter import AuthenticodeFingerprinter
 from pesigcheck.signed_pe import SignedPEFile
 
 
+root_dir = pathlib.Path(__file__).parent
+
+
 class AuthenticodeParserTestCase(unittest.TestCase):
     def test_software_update(self):
-        with open(str(pathlib.Path("./test_data/SoftwareUpdate.exe")), "rb") as f:
+        with open(str(root_dir / "test_data" / "SoftwareUpdate.exe"), "rb") as f:
             fingerprinter = AuthenticodeFingerprinter(f)
             fingerprinter.add_authenticode_hashers(hashlib.sha1)
             hashes = fingerprinter.hash()

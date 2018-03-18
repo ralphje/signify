@@ -1,5 +1,12 @@
 pesigcheck
 ==========
+.. image:: https://travis-ci.org/ralphje/pesigcheck.svg?branch=master
+    :target: https://travis-ci.org/ralphje/pesigcheck
+.. image:: https://codecov.io/gh/ralphje/pesigcheck/branch/master/graph/badge.svg
+    :target: https://codecov.io/gh/ralphje/pesigcheck
+.. image:: https://readthedocs.org/projects/pesigcheck/badge/?version=latest
+    :target: http://pesigcheck.readthedocs.io/en/latest/?badge=latest
+
 pesigcheck is a Python module to compute and validate hashes on different file
 types, mostly aimed at computing PE Authenticode-signed binaries.
 

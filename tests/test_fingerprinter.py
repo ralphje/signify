@@ -27,10 +27,12 @@ import pathlib
 
 from pesigcheck.fingerprinter import AuthenticodeFingerprinter, Fingerprinter, Finger, Range
 
+root_dir = pathlib.Path(__file__).parent
+
 
 class FingerPrinterTestCase(unittest.TestCase):
     def test_entire_blobs(self):
-        for filename in pathlib.Path("./test_data").iterdir():
+        for filename in (root_dir / "test_data").iterdir():
             if str(filename).endswith(".res"):
                 continue
             with self.subTest(filename):
