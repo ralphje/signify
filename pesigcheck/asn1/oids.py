@@ -56,6 +56,9 @@ OID_TO_RDN = {
     (1, 2, 840, 113549, 1, 9, 1): 'EMAIL',  # emailaddress
 }
 
+EKU_CODE_SIGNING = (1, 3, 6, 1, 5, 5, 7, 3, 3)  # codeSigning
+EKU_TIME_STAMPING = (1, 3, 6, 1, 5, 5, 7, 3, 8)  # timeStamping
+
 
 def get(key, oids=OID_TO_CLASS):
     return oids.get(key, tuple(key))
