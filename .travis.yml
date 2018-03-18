@@ -11,7 +11,8 @@ install:
   - python setup.py install
 
 script:
-  - python -m unittest
+  - coverage run --source=pesigcheck --branch -m unittest
 
 after_success:
+  - coverage report
   - codecov
