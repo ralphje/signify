@@ -27,25 +27,31 @@ import sys
 import logging
 import binascii
 
-from pesigcheck.signed_pe_parser import SignedPEFile
+from pesigcheck.signed_pe import SignedPEFile
 
 logger = logging.getLogger(__name__)
 
 Range = collections.namedtuple('Range', 'start end')
+"""A range with a start and an end."""
 
 
 class Finger(object):
     """A Finger defines how to hash a file to get specific fingerprints.
 
-    The Finger contains one or more hash functions, a set of ranges in the
-    file that are to be processed with these hash functions, and relevant
-    metadata and accessor methods.
+    The Finger contains one or more hash functions, a set of ranges in the file that are to be processed with these
+    hash functions, and a description.
 
-    While one Finger provides potentially multiple hashers, they all get
-    fed the same ranges of the file.
+    While one Finger provides potentially multiple hashers, they all get fed the same ranges of the file.
     """
 
     def __init__(self, hashers, ranges, description=None):
+        """
+
+        :param hashers: A list of hashers to feed.
+        :param ranges: A list of Ranges that are hashed.
+        :param description: The description of this Finger.
+        """
+
         self._ranges = ranges
         self.hashers = hashers
         self.description = description
@@ -60,21 +66,15 @@ class Finger(object):
     def consume(self, start, end):
         """Consumes an entire range, or part thereof.
 
-        If the finger has no ranges left, or the curent range start is higher
-        than the end of the consumed block, nothing happens. Otherwise,
-        the current range is adjusted for the consumed block, or removed,
-        if the entire block is consumed. For things to work, the consumed
-        range and the current finger starts must be equal, and the length
-        of the consumed range may not exceed the length of the current range.
+        If the finger has no ranges left, or the current range start is higher than the end of the consumed block,
+        nothing happens. Otherwise, the current range is adjusted for the consumed block, or removed, if the entire
+        block is consumed. For things to work, the consumed range and the current finger starts must be equal, and the
+        length of the consumed range may not exceed the length of the current range.
 
-        Args:
-          start: Beginning of range to be consumed.
-          end: First offset after the consumed range (end + 1).
-
-        Raises:
-          RuntimeError: if the start position of the consumed range is
-              higher than the start of the current range in the finger, or if
-              the consumed range cuts accross block boundaries.
+        :param start: Beginning of range to be consumed.
+        :param end: First offset after the consumed range (end + 1).
+        :raises RuntimeError: if the start position of the consumed range is higher than the start of the current range
+                              in the finger, or if the consumed range cuts across block boundaries.
         """
 
         old = self.current_range
@@ -102,7 +102,18 @@ class Finger(object):
 
 
 class Fingerprinter(object):
+    """A Fingerprinter is an interface to generate hashes of (parts) of a file.
+
+    It is passed in a file object and given a set of :class:`Finger`s that define how a file must be hashed. It is a
+    generic approach to not hashing parts of a file.
+    """
+
     def __init__(self, file_obj, block_size=1000000):
+        """
+        :param file_obj: A file opened in bytes-mode
+        :param block_size: The block size used to feed to the hashers.
+        """
+
         self.file = file_obj
         self.block_size = block_size
 
@@ -112,6 +123,13 @@ class Fingerprinter(object):
         self._fingers = []
 
     def add_hashers(self, *hashers, ranges=None, description="generic"):
+        """Add hash methods to the fingerprinter.
+
+        :param hashers: A list of hashers to add to the Fingerprinter. This generally will be hashlib functions.
+        :param ranges: A list of Range objects that the hashers should hash. If set to :const:`None`, it is set to the
+                       entire file.
+        :param description: The name for the hashers. This name will return in :meth:`hashes`
+        """
         hashers = [x() for x in hashers]
         if not ranges:
             ranges = [Range(0, self._filelength)]
@@ -181,19 +199,14 @@ class Fingerprinter(object):
     def hashes(self):
         """Finalizing function for the Fingerprint class.
 
-        This method applies all the different hash functions over the
-        previously specified different ranges of the input file, and
-        computes the resulting hashes.
+        This method applies all the different hash functions over the previously specified different ranges of the
+        input file, and computes the resulting hashes.
 
-        After calling HashIt, the state of the object is reset to its
-        initial state, with no fingers defined.
+        After calling this function, the state of the object is reset to its  initial state, with no fingers defined.
 
-        Returns:
-            A dict of dicts, with each dict containing name of fingerprint
-            type, names of hashes and values
-
-        Raises:
-           RuntimeError: when internal inconsistencies occur.
+        :returns: A dict of dicts, the outer dict being a mapping of the description (as set in :meth:`add_hashers`
+                  and the inner dict being a mapping of hasher name to digest.
+        :raises RuntimeError: when internal inconsistencies occur.
         """
         while True:
             interval = self._next_interval
@@ -223,15 +236,25 @@ class Fingerprinter(object):
         return results
 
     def hash(self):
+        """Very similar to :meth:`hashes`, but only returns a single dict of hash names to digests.
+
+        This method can only be called when the :meth:`add_hashers` method was called exactly once.
+        """
         hashes = self.hashes()
-        if len(hashes) >= 2:
+        if len(hashes) != 1:
             raise RuntimeError("Can't return a single hash, use hashes() instead")
 
         return list(hashes.values())[0]
 
 
 class AuthenticodeFingerprinter(Fingerprinter):
+    """An extension of the :class:`Fingerprinter` class that enables the calculation of authentihashes of PE Files."""
+
     def add_authenticode_hashers(self, *hashers):
+        """Specialized method of :meth:`add_hashers` to add hashers with ranges limited to those that are needed to
+        calculate the hash of signed PE Files.
+        """
+
         pefile = SignedPEFile(self.file)
         omit = pefile.get_authenticode_omit_sections()
 

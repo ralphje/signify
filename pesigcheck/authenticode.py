@@ -51,10 +51,12 @@ CERTIFICATE_LOCATION = pathlib.Path(__file__).resolve().parent.parent / "certifi
 
 
 class AuthenticodeParseError(Exception):
+    """Raised when any exception regarding parsing Authenticode structures occurs."""
     pass
 
 
 class AuthenticodeVerificationError(Exception):
+    """Raised when any exception regarding verifying Authenticode structures occurs."""
     pass
 
 
@@ -115,7 +117,12 @@ def _from_hashlib_to_crypto(algorithm):
 
 
 class CertificateStore(list):
+    """A list of :class:`Certificate` objects."""
+
     def __init__(self, *args, trusted=False, **kwargs):
+        """
+        :param bool trusted: If true, all certificates that are appended to this structure are set to trusted.
+        """
         super().__init__(*args, **kwargs)
         self.trusted = trusted
 
@@ -125,9 +132,16 @@ class CertificateStore(list):
 
 
 class FileSystemCertificateStore(CertificateStore):
+    """A list of :class:`Certificate` objects loaded from the file system."""
+
     _loaded = False
 
     def __init__(self, location, *args, **kwargs):
+        """
+        :param str location: The file system location for the certificates.
+        :param bool trusted: If true, all certificates that are appended to this structure are set to trusted.
+        """
+
         super().__init__(*args, **kwargs)
         self.location = location
 
@@ -152,9 +166,9 @@ class FileSystemCertificateStore(CertificateStore):
 trusted_certificate_store = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True)
 
 
-class CertificateVerificationContext(object):
+class VerificationContext(object):
     def __init__(self, *stores, timestamp=None, extended_key_usage=None, allow_legacy=True):
-        """A Context holding
+        """A context holding properties about the verification of a signature or certificate.
 
         :param Iterable[CertificateStore] stores: A list of CertificateStore objects that contain certificates
         :param datetime.datetime timestamp: The timestamp to verify with. If None, the current time is used.
@@ -162,7 +176,9 @@ class CertificateVerificationContext(object):
         :param tuple extended_key_usage: A tuple with the OID of an EKU to check for. Typical values are
             asn1.oids.EKU_CODE_SIGNING and asn1.oids.EKU_TIME_STAMPING
         :param bool allow_legacy: If True, allows chain verification using pyOpenSSL if the signature hash algorithm
-            is too old to be supported by cryptography (e.g. MD2).
+            is too old to be supported by cryptography (e.g. MD2). Additionally, allows the SignedInfo encryptedDigest
+            to contain an encrypted hash instead of an encrypted DigestInfo ASN.1 structure. Both are found in the wild,
+            but setting to True does reduce the reliability of the verification.
         """
 
         self.stores = stores
@@ -204,6 +220,12 @@ class CertificateVerificationContext(object):
 
 class Certificate(object):
     def __init__(self, data):
+        """Representation of a Certificate. It is built from an ASN.1 structure.
+
+        :type data: asn1.pkcs7.ExtendedCertificateOrCertificate or asn1.x509.Certificate or asn1.x509.TBSCertificate
+        :param data: The ASN.1 structure
+        """
+
         self.data = data
         self.trusted = False
         self._x509 = None
@@ -253,6 +275,8 @@ class Certificate(object):
 
     @property
     def x509(self):
+        """The :mod:`cryptography` x509 object."""
+
         if self._x509 is None:
             self._x509 = x509.load_der_x509_certificate(der_encoder.encode(self.data), default_backend())
         return self._x509
@@ -385,7 +409,7 @@ class Certificate(object):
         instead, if this is available and allowed by the context.
 
         :param Certificate issuer: the issuer to verify
-        :param CertificateVerificationContext context: Used for some parameters, such as the timestamp.
+        :param VerificationContext context: Used for some parameters, such as the timestamp.
         :param int depth: The current verification depth, used to check the BasicConstraints
         :raises AuthenticodeVerificationError: when this is not a valid issuer
         """
@@ -440,7 +464,7 @@ class Certificate(object):
     def _build_chain(self, context, depth=0):
         """Given a context, builds a chain up to a trusted certificate.
 
-        :param CertificateVerificationContext context: The context for building the chain. Most importantly, contains
+        :param VerificationContext context: The context for building the chain. Most importantly, contains
             all certificates to build the chain from, but also ther properties are relevant.
         :param depth: The depth of the chain building. Used for recursive calling of this method.
         :return: Iterable of all of the valid chains from this certificate up to and including a trusted anchor.
@@ -477,7 +501,7 @@ class Certificate(object):
     def verify(self, context):
         """Verifies the certificate, and its chain.
 
-        :param CertificateVerificationContext context: The context for verifying the certificate.
+        :param VerificationContext context: The context for verifying the certificate.
         :return: A list of valid certificate chains for this certificate.
         :rtype: Iterable[Iterable[Certificate]]
         :raises AuthenticodeVerificationError: When the certificate could not be verified.
@@ -494,6 +518,11 @@ class SignerInfo(object):
     _required_authenticated_attributes = (asn1.pkcs7.ContentType, asn1.pkcs7.Digest, asn1.spc.SpcSpOpusInfo)
 
     def __init__(self, data):
+        """The Authenticode's SignerInfo structure.
+
+        :param data: The ASN.1 structure of the SignerInfo.
+        """
+
         self.data = data
         self._parse()
 
@@ -610,7 +639,7 @@ class SignerInfo(object):
         :meth:`Certificate._verify_issuer`. Does not support legacy verification method.
 
         :param Certificate issuer: The Certificate to verify
-        :param CertificateVerificationContext context: The
+        :param VerificationContext context: The
         """
 
         issuer.verify(context)
@@ -650,7 +679,7 @@ class SignerInfo(object):
     def verify(self, context):
         """Verifies the SignerInfo, and its chain.
 
-        :param CertificateVerificationContext context: The context for verifying the SignerInfo.
+        :param VerificationContext context: The context for verifying the SignerInfo.
         :return: A list of valid certificate chains for this SignerInfo.
         :rtype: Iterable[Iterable[Certificate]]
         :raises AuthenticodeVerificationError: When the SignerInfo could not be verified.
@@ -665,9 +694,10 @@ class CounterSignerInfo(SignerInfo):
 
 
 class SpcInfo(object):
-    def __init__(self, data, signed_data):
+    def __init__(self, data):
+        """The Authenticode's SpcIndirectDataContent information, and their children. It is only partially parsed."""
+
         self.data = data
-        self.signed_data = signed_data
         self._parse()
 
     def _parse(self):
@@ -687,12 +717,22 @@ class SpcInfo(object):
 
 class SignedData(object):
     def __init__(self, data, pefile=None):
+        """The SignedData object of Authenticode. It is the root of all Authenticode related information.
+
+        :param asn1.pkcs7.SignedData data: The ASN.1 structure of the SignedData object
+        :param pefile: The related PEFile.
+        """
+
         self.data = data
         self.pefile = pefile
         self._parse()
 
     @classmethod
     def from_certificate(cls, data, *args, **kwargs):
+        """Loads a :class:`SignedData` object from raw data that contains ContentInfo.
+
+        :param bytes data: The bytes to parse
+        """
         # This one is not guarded, which is intentional
         content, rest = ber_decoder.decode(data, asn1Spec=asn1.pkcs7.ContentInfo())
         if asn1.oids.get(content['contentType']) is not asn1.pkcs7.SignedData:
@@ -720,7 +760,7 @@ class SignedData(object):
         if self.content_type is not asn1.spc.SpcIndirectDataContent:
             raise AuthenticodeParseError("SignedData.contentInfo does not contain SpcIndirectDataContent")
         spc_info = _guarded_ber_decode(self.data['contentInfo']['content'], asn1_spec=asn1.spc.SpcIndirectDataContent())
-        self.spc_info = SpcInfo(spc_info, signed_data=self)
+        self.spc_info = SpcInfo(spc_info)
 
         # Certificates
         self.certificates = CertificateStore([Certificate(cert) for cert in self.data['certificates']])
@@ -736,7 +776,32 @@ class SignedData(object):
         if 'crls' in self.data and self.data['crls'].isValue:
             raise AuthenticodeParseError("SignedData.crls is present, but that is unexpected.")
 
-    def verify(self, expected_hash=None, certificate_context=None, cs_certificate_context=None):
+    def verify(self, expected_hash=None, verification_context=None, cs_verification_context=None):
+        """Verifies the SignedData structure:
+
+        * Verifies that the digest algorithms match across the structure
+        * Ensures that the hash in the :class:`SpcInfo` structure matches the expected hash. If no expected hash is
+          provided to this function, it is calculated using the :class:`Fingerprinter` obtained from the
+          :class:`SignedPEFile` object.
+        * Verifies that the SpcInfo is signed by the :class:`SignerInfo`
+        * In the case of a countersigner, verifies that the :class:`CounterSignerInfo` has the hashed encrypted digest
+          of the :class:`SignerInfo`
+        * Verifies the chain of the countersigner up to a trusted root
+        * Verifies the chain of the signer up to a trusted root
+
+        In the case of a countersigner, the verification is performed using the timestamp of the
+        :class:`CounterSignerInfo`, otherwise now is assumed. If there is no countersigner, you can override this
+        by specifying a different timestamp in the :class:`VerificationContext`
+
+        :param bytes expected_hash: The expected hash digest of the :class:`SignedPEFile`.
+        :param VerificationContext verification_context: The VerificationContext for verifying the chain of the
+            :class:`SignerInfo`. The timestamp is overridden in the case of a countersigner.
+        :param VerificationContext cs_verification_context: The VerificationContext for verifying the chain of the
+            :class:`CounterSignerInfo`. The timestamp is overridden in the case of a countersigner.
+        :raises AuthenticodeVerificationError: when the verification failed
+        :return: :const:`None`
+        """
+
         # Check that the digest algorithms match
         if self.digest_algorithm != self.spc_info.digest_algorithm:
             raise AuthenticodeVerificationError("SignedData.digestAlgorithm must equal SpcInfo.digestAlgorithm")
@@ -777,20 +842,20 @@ class SignedData(object):
                 raise AuthenticodeVerificationError('The expected hash of the encryptedDigest does not match '
                                                     'countersigner\'s SignerInfo')
 
-        if certificate_context is None:
-            certificate_context = CertificateVerificationContext(trusted_certificate_store, self.certificates,
-                                                                 extended_key_usage=asn1.oids.EKU_CODE_SIGNING)
+        if verification_context is None:
+            verification_context = VerificationContext(trusted_certificate_store, self.certificates,
+                                                       extended_key_usage=asn1.oids.EKU_CODE_SIGNING)
 
         if self.signer_info.countersigner:
-            if cs_certificate_context is None:
-                cs_certificate_context = CertificateVerificationContext(trusted_certificate_store, self.certificates,
-                                                                        extended_key_usage=asn1.oids.EKU_TIME_STAMPING)
-            cs_certificate_context.timestamp = self.signer_info.countersigner.signing_time
+            if cs_verification_context is None:
+                cs_verification_context = VerificationContext(trusted_certificate_store, self.certificates,
+                                                              extended_key_usage=asn1.oids.EKU_TIME_STAMPING)
+            cs_verification_context.timestamp = self.signer_info.countersigner.signing_time
 
-            self.signer_info.countersigner.verify(cs_certificate_context)
+            self.signer_info.countersigner.verify(cs_verification_context)
 
             # TODO: What to do when the verification fails? Check it as if the countersignature is not present?
             # Or fail all together? (Which is done now)
-            certificate_context.timestamp = self.signer_info.countersigner.signing_time
+            verification_context.timestamp = self.signer_info.countersigner.signing_time
 
-        self.signer_info.verify(certificate_context)
+        self.signer_info.verify(verification_context)

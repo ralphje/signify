@@ -26,7 +26,7 @@ import pathlib
 import binascii
 
 from pesigcheck.fingerprinter import AuthenticodeFingerprinter
-from pesigcheck.signed_pe_parser import SignedPEFile
+from pesigcheck.signed_pe import SignedPEFile
 
 
 class AuthenticodeParserTestCase(unittest.TestCase):
