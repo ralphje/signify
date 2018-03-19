@@ -25,9 +25,12 @@ import pathlib
 
 import binascii
 
+import datetime
+
 from pesigcheck.fingerprinter import AuthenticodeFingerprinter
 from pesigcheck.signed_pe import SignedPEFile
-
+from pesigcheck.authenticode import Certificate, trusted_certificate_store, VerificationContext, \
+    AuthenticodeVerificationError, CertificateStore
 
 root_dir = pathlib.Path(__file__).parent
 
@@ -64,3 +67,32 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             self.assertEqual(len(signed_datas), 1)
             signed_data = signed_datas[0]
             signed_data.verify()
+
+
+class CertificateTestCase(unittest.TestCase):
+    def test_all_trusted_certificates_are_trusted(self):
+        context = VerificationContext(trusted_certificate_store)
+        for certificate in trusted_certificate_store:
+            # Trust depends on the timestamp
+            context.timestamp = certificate.valid_to
+            self.assertListEqual(certificate.verify(context), [[certificate]])
+
+    def test_all_trusted_certificates_are_only_trusted_within_their_validity(self):
+        context = VerificationContext(trusted_certificate_store)
+        for certificate in trusted_certificate_store:
+            # Trust depends on the timestamp
+            context.timestamp = certificate.valid_to + datetime.timedelta(seconds=1)
+            self.assertRaises(AuthenticodeVerificationError, certificate.verify, context)
+            context.timestamp = certificate.valid_from - datetime.timedelta(seconds=1)
+            self.assertRaises(AuthenticodeVerificationError, certificate.verify, context)
+
+    def test_trust_fails(self):
+        # we get a certificate we currently trust
+        certificate = list(trusted_certificate_store)[0]
+        # we add it to an untrusted store
+        store = CertificateStore()
+        store.append(certificate)
+        # and verify using this store
+        context = VerificationContext(store)
+        self.assertRaises(AuthenticodeVerificationError, certificate.verify, context)
+
