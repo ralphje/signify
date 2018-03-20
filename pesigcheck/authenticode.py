@@ -127,7 +127,6 @@ class CertificateStore(list):
         self.trusted = trusted
 
     def append(self, elem):
-        elem.trusted = self.trusted
         return super().append(elem)
 
 
@@ -217,6 +216,18 @@ class VerificationContext(object):
                 continue
             yield certificate
 
+    def is_trusted(self, certificate):
+        """Determines whether the given certificate is in a trusted certificate store.
+
+        :param Certificate certificate: The certificate to verify trust for.
+        :return: True if the certificate is in a trusted certificate store.
+        """
+
+        for store in self.stores:
+            if certificate in store and store.trusted:
+                return True
+        return False
+
 
 class Certificate(object):
     def __init__(self, data):
@@ -227,7 +238,6 @@ class Certificate(object):
         """
 
         self.data = data
-        self.trusted = False
         self._x509 = None
         self._parse()
 
@@ -269,8 +279,6 @@ class Certificate(object):
                 self.extensions[asn1.oids.get(extension['extnID'])] = extension['extnValue']
 
     def __str__(self):
-        if self.trusted:
-            return "{}(serial:{})(trusted)".format(self.subject_dn, self.serial_number)
         return "{}(serial:{})".format(self.subject_dn, self.serial_number)
 
     @property
@@ -436,7 +444,7 @@ class Certificate(object):
         try:
             key_usage = issuer.x509.extensions.get_extension_for_class(x509.KeyUsage).value
         except x509.ExtensionNotFound:
-            if issuer.version <= 2 or issuer.trusted:
+            if issuer.version <= 2 or context.is_trusted(issuer):
                 logger.warning("Certificate %s does not have the KeyUsage extension" % issuer)
             else:
                 raise AuthenticodeVerificationError("Certificate %s does not have the KeyUsage extension" % issuer)
@@ -462,41 +470,72 @@ class Certificate(object):
         return True
 
     def _build_chain(self, context, depth=0):
-        """Given a context, builds a chain up to a trusted certificate.
+        """Given a context, builds a chain up to a trusted certificate. This is a generator function, generating all
+        valid chains.
+
+        This method is called recursively and calls :meth:`_verify_issuer` on all possible issuers of this certificate.
+        If the parent certificate is a valid issuer, it gets the same treatment. The method :meth:`_verify_issuer` may
+        raise an error. This error is silently swallowed when another issuer is valid. Otherwise, this error is passed
+        down.
+
+        This method will stop calling itself when a trust anchor is found according to the context. This method will
+        also stop when some depth is reached, or the candidate parent is already in the chain.
+
+        .. warning::
+           No error is raised when :meth:`_verify_issuer` never fails, but no chain is found either. This may happen
+           when somewhere in the chain, no valid parent was found. Always check whether this method returns a chain.
 
         :param VerificationContext context: The context for building the chain. Most importantly, contains
-            all certificates to build the chain from, but also ther properties are relevant.
-        :param depth: The depth of the chain building. Used for recursive calling of this method.
+            all certificates to build the chain from, but also their properties are relevant.
+        :param depth: The depth of the chain building. Used for recursive calling of this method, and should be set to
+            0 for all other uses of this method.
         :return: Iterable of all of the valid chains from this certificate up to and including a trusted anchor.
+            Note that this may be an empty iteration if no candidate parent certificate was found.
         :rtype: Iterable[Iterable[Certificate]]
-        :raises AuthenticodeVerificationError: if no valid chain was found, which may be an underlying error.
+        :raises AuthenticodeVerificationError: When somewhere up the chain an error occurs; this may happen when a
+            candidate parent certificate does not pass verification. If an error is raised, it will be that of the
+            first parent certificate that was attempted, or anywhere up its chain. If any other valid chain was found,
+            the error for that first invalid candidate parent is silently swallowed. Note that all of this does not
+            happen when no candidate parent certificate was found (anywhere up the chain); in that case this iterator
+            simply yields nothing.
         """
+        # when we are too deep and have not found any trusted root, we just bail out (not yielding anything)
         if depth > 10:
             return
-        if self.trusted:
+        # when this certificate is trusted, we found a trust anchor.
+        if context.is_trusted(self):
             yield [self]
             return
-        # TODO: check when we must stop.
-        if self.issuer == self.subject:
-            return
 
-        succeeded, last_error = False, None
+        # first_error is raised when the loop iteration fails, and no other iteration succeeds
+        # first_error is None: no iteration has been performed
+        # first_error is False: at least one iteration has succeeded
+        first_error = None
         for issuer in context.find_certificates(subject=self.issuer):
             try:
+                # prevent looping on itself for self-signed certificates
+                if issuer == self:
+                    continue
+
+                # _verify_issuer may raise an error when the issuer is not valid for this certificate
                 self._verify_issuer(issuer, context, depth)
-            except AuthenticodeVerificationError as e:
-                last_error = e
-            else:
-                succeeded = True
-                # TODO: issuer._build_chain may also raise errors
-                for chain in issuer._build_chain(context, depth+1):
+
+                # _build_chain may raise an error when the issuer can't find its issuer
+                for chain in issuer._build_chain(context, depth + 1):
                     yield [self] + chain
 
-        if not succeeded:
-            if last_error:
-                raise last_error
+            except AuthenticodeVerificationError as e:
+                # if first_error is None, this is the first run.
+                if first_error is None:
+                    first_error = e
+                continue
+
             else:
-                raise AuthenticodeVerificationError("No valid chain found from certificate {}".format(self))
+                # the iteration succeeded once, so we don't bother raising errors from the other iterations anymore
+                first_error = False
+
+        if first_error:
+            raise first_error
 
     def verify(self, context):
         """Verifies the certificate, and its chain.
@@ -509,6 +548,10 @@ class Certificate(object):
 
         self._verify_certificate(context)
         chains = list(self._build_chain(context))
+
+        if not chains:
+            raise AuthenticodeVerificationError("No valid certificate chain found to a trust anchor from {}"
+                                                .format(self))
 
         return chains
 
@@ -644,6 +687,7 @@ class SignerInfo(object):
         """
 
         issuer.verify(context)
+
         try:
             issuer.verify_signature(self.encrypted_digest,
                                     self._encoded_authenticated_attributes,
@@ -660,22 +704,45 @@ class SignerInfo(object):
                                                     .format(cert=issuer, cls=type(self).__name__, exc=e))
 
     def _build_chain(self, context):
-        succeeded, last_error = False, None
+        """Given a context, builds a chain up to a trusted certificate. This is a generator function, generating all
+        valid chains.
+
+        This method will call :meth:`Certificate._build_chain` for all possible candidates, which has some interesting
+        semantics:
+
+        .. warning::
+           No error is raised when :meth:`_verify_issuer` never fails, but no chain is found either. This may happen
+           when somewhere in the chain, no valid parent was found. Always check whether this method returns a chain.
+
+        :param VerificationContext context: The context for building the chain. Most importantly, contains
+            all certificates to build the chain from, but also their properties are relevant.
+        :return: Iterable of all of the valid chains from this SignedInfo up to and including a trusted anchor.
+            Note that this may be an empty iteration if no candidate parent certificate was found.
+        :rtype: Iterable[Iterable[Certificate]]
+        :raises AuthenticodeVerificationError: When :meth:`_verify_issuer` fails or any of the underlying calls to
+            :meth:`Certificate._build_chain` fails. See the semantics of :meth:`Certificate._build_chain` for when
+            that may happen. If any error occurs, it is silently swallowed unless no valid chain is found. In that case
+            the first error that occurred is raised. If no error occurs, no error is raised.
+        """
+
+        # this loop was designed in the same way that Certificate._build_chain was built
+        # first_error is None until the first iteration. When it becomes False, we do not need to raise anything.
+        first_error = None
         for issuer in context.find_certificates(issuer=self.issuer, serial_number=self.serial_number):
             try:
+                # _verify_issuer may fail when it is not a valid issuer for this SignedInfo
                 self._verify_issuer(issuer, context)
-            except AuthenticodeVerificationError as e:
-                last_error = e
-            else:
-                succeeded = True
-                # TODO: _build_chain may also raise errors
-                yield from issuer._build_chain(context)
 
-        if not succeeded:
-            if last_error:
-                raise last_error
+                # _build_chain may fail when anywhere up its chain an error occurs
+                yield from issuer._build_chain(context)
+            except AuthenticodeVerificationError as e:
+                if first_error is None:
+                    first_error = e
             else:
-                raise AuthenticodeVerificationError("No valid chain found from {}".format(type(self).__name__))
+                first_error = False
+
+        if first_error:
+            raise first_error
 
     def verify(self, context):
         """Verifies the SignerInfo, and its chain.
@@ -686,7 +753,13 @@ class SignerInfo(object):
         :raises AuthenticodeVerificationError: When the SignerInfo could not be verified.
         """
 
-        return list(self._build_chain(context))
+        chains = list(self._build_chain(context))
+
+        if not chains:
+            raise AuthenticodeVerificationError("No valid certificate chain found to a trust anchor from {}"
+                                                .format(type(self).__name__))
+
+        return chains
 
 
 class CounterSignerInfo(SignerInfo):

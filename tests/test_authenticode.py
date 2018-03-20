@@ -88,11 +88,11 @@ class CertificateTestCase(unittest.TestCase):
 
     def test_trust_fails(self):
         # we get a certificate we currently trust
-        certificate = list(trusted_certificate_store)[0]
-        # we add it to an untrusted store
-        store = CertificateStore()
-        store.append(certificate)
-        # and verify using this store
-        context = VerificationContext(store)
-        self.assertRaises(AuthenticodeVerificationError, certificate.verify, context)
+        for certificate in trusted_certificate_store:
+            # we add it to an untrusted store
+            store = CertificateStore(trusted=False)
+            store.append(certificate)
+            # and verify using this store
+            context = VerificationContext(store, timestamp=certificate.valid_to)
+            self.assertRaises(AuthenticodeVerificationError, certificate.verify, context)
 
