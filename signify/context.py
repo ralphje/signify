@@ -111,7 +111,7 @@ class VerificationContext(object):
     def verify(self, certificate):
         """Verifies the certificate, and its chain.
 
-        :param Certificiate certificate: The certificate to verify
+        :param Certificate certificate: The certificate to verify
         :return: A list of valid certificate chains for this certificate.
         :rtype: Iterable[Certificate]
         :raises AuthenticodeVerificationError: When the certificate could not be verified.

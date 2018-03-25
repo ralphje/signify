@@ -90,7 +90,7 @@ class Certificate(object):
 
         :param bytes signature: The signature to verify
         :param bytes data: The data that must be verified
-        :type algorithm: cryptography.hazmat.primitives.hashes.HashAlgorithm or hashlib.function
+        :type algorithm: a hashlib function
         :param algorithm: The hashing algorithm to use
         :param bool allow_legacy: If True, allows a legacy signature verification. This method is intended for the case
             where the encryptedDigest does not contain an ASN.1 structure, but a raw hash value instead. It is attempted
