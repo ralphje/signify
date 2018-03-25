@@ -15,6 +15,7 @@ Python module.
    :caption: Python interface
 
    fingerprinter
+   certificates
    authenticode
 
 

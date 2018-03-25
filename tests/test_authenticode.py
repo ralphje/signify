@@ -27,12 +27,14 @@ import binascii
 
 import datetime
 
+from signify.authenticode import CERTIFICATE_LOCATION
+from signify.context import VerificationContext, FileSystemCertificateStore, CertificateStore
+from signify.exceptions import VerificationError
 from signify.fingerprinter import AuthenticodeFingerprinter
 from signify.signed_pe import SignedPEFile
-from signify.authenticode import Certificate, trusted_certificate_store, VerificationContext, \
-    AuthenticodeVerificationError, CertificateStore
 
 root_dir = pathlib.Path(__file__).parent
+trusted_certificate_store = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True)
 
 
 class AuthenticodeParserTestCase(unittest.TestCase):
@@ -82,9 +84,9 @@ class CertificateTestCase(unittest.TestCase):
         for certificate in trusted_certificate_store:
             # Trust depends on the timestamp
             context.timestamp = certificate.valid_to + datetime.timedelta(seconds=1)
-            self.assertRaises(AuthenticodeVerificationError, certificate.verify, context)
+            self.assertRaises(VerificationError, certificate.verify, context)
             context.timestamp = certificate.valid_from - datetime.timedelta(seconds=1)
-            self.assertRaises(AuthenticodeVerificationError, certificate.verify, context)
+            self.assertRaises(VerificationError, certificate.verify, context)
 
     def test_trust_fails(self):
         # we get a certificate we currently trust
@@ -94,5 +96,5 @@ class CertificateTestCase(unittest.TestCase):
             store.append(certificate)
             # and verify using this store
             context = VerificationContext(store, timestamp=certificate.valid_to)
-            self.assertRaises(AuthenticodeVerificationError, certificate.verify, context)
+            self.assertRaises(VerificationError, certificate.verify, context)
 

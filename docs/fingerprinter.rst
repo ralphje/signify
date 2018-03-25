@@ -1,7 +1,7 @@
 Fingerprinter
 =============
 
-.. module:: pesigcheck.fingerprinter
+.. module:: signify.fingerprinter
 
 The fingerprinter is a simple module that allows you to apply multiple hashes in a single run. It is intended to be
 used as follows::

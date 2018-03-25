@@ -48,7 +48,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = 'PESigCheck'
+project = 'Signify'
 copyright = '2018, Ralph Broenink'
 author = 'Ralph Broenink'
 
@@ -207,7 +207,7 @@ html_static_path = ['_static']
 #html_search_scorer = 'scorer.js'
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'PESigCheckdoc'
+htmlhelp_basename = 'Signifydoc'
 
 # -- Options for LaTeX output ---------------------------------------------
 
@@ -229,7 +229,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'PESigCheck.tex', 'PESigCheck Documentation',
+    (master_doc, 'Signify.tex', 'Signify Documentation',
      'Ralph Broenink', 'manual'),
 ]
 
@@ -273,8 +273,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'PESigCheck', 'PESigCheck Documentation',
-     author, 'PESigCheck', 'One line description of project.',
+    (master_doc, 'Signify', 'Signify Documentation',
+     author, 'Signify', 'One line description of project.',
      'Miscellaneous'),
 ]
 

@@ -4,40 +4,23 @@ Authenticode
 
 Signed PE File
 --------------
-.. module:: pesigcheck.signed_pe
+.. module:: signify.signed_pe
 
 .. autoclass:: SignedPEFile
    :members:
 
 
-.. module:: pesigcheck.authenticode
+.. module:: signify.authenticode
 
 Data structures
 ---------------
 .. autoclass:: SignedData
    :members:
-.. autoclass:: Certificate
+.. autoclass:: AuthenticodeSignerInfo
    :members:
-.. autoclass:: SignerInfo
-   :members:
-.. autoclass:: CounterSignerInfo
+.. autoclass:: AuthenticodeCounterSignerInfo
    :members:
 .. autoclass:: SpcInfo
    :members:
 
-Verification
-------------
-.. autoclass:: VerificationContext
-   :members:
-.. autoclass:: CertificateStore
-   :members:
-.. autoclass:: FileSystemCertificateStore
-   :members:
-
-Exceptions
-----------
-.. autoclass:: AuthenticodeParseError
-   :members:
-.. autoclass:: AuthenticodeVerificationError
-   :members:
 
