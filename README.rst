@@ -17,6 +17,12 @@ replacement, as significant changes have occurred.
 This module is compatible with Python 3.4+ and does not support Python 2. It requires the *cryptography*
 Python module.
 
+Installation
+------------
+Installation is very simple::
+
+    pip install signify
+
 Documentation
 -------------
 Documentation is available at http://signify.readthedocs.io/en/latest/ or in the docs/ directory.
