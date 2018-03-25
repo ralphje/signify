@@ -35,7 +35,7 @@ from signify.asn1 import guarded_ber_decode
 from signify.certificates import Certificate
 from signify.context import CertificateStore, VerificationContext, FileSystemCertificateStore
 from signify.exceptions import AuthenticodeParseError, AuthenticodeVerificationError
-from signify.signerinfo import _get_digest_algorithm, SignerInfo
+from signify.signerinfo import _get_digest_algorithm, SignerInfo, CounterSignerInfo
 from . import asn1
 
 logger = logging.getLogger(__name__)
@@ -44,12 +44,16 @@ ACCEPTED_DIGEST_ALGORITHMS = (hashlib.md5, hashlib.sha1)
 CERTIFICATE_LOCATION = pathlib.Path(__file__).resolve().parent.parent / "certificates" / "authenticode"
 
 
-class AuthenticodeCounterSignerInfo(SignerInfo):
+class AuthenticodeCounterSignerInfo(CounterSignerInfo):
+    """Subclass of CounterSignerInfo that is used to contain the countersignerinfo for Authenticode."""
+
     _required_authenticated_attributes = (asn1.pkcs7.ContentType, asn1.pkcs7.SigningTime, asn1.pkcs7.Digest)
     _expected_content_type = asn1.pkcs7.Data
 
 
 class AuthenticodeSignerInfo(SignerInfo):
+    """Subclass of SignerInfo that is used to contain the signerinfo for Authenticode."""
+
     _countersigner_class = AuthenticodeCounterSignerInfo
     _expected_content_type = asn1.spc.SpcIndirectDataContent
     _required_authenticated_attributes = (asn1.pkcs7.ContentType, asn1.pkcs7.Digest, asn1.spc.SpcSpOpusInfo)

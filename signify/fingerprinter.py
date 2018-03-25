@@ -102,14 +102,12 @@ class Finger(object):
 
 
 class Fingerprinter(object):
-    """A Fingerprinter is an interface to generate hashes of (parts) of a file.
-
-    It is passed in a file object and given a set of :class:`Finger`s that define how a file must be hashed. It is a
-    generic approach to not hashing parts of a file.
-    """
-
     def __init__(self, file_obj, block_size=1000000):
-        """
+        """A Fingerprinter is an interface to generate hashes of (parts) of a file.
+
+        It is passed in a file object and given a set of :class:`Finger`s that define how a file must be hashed. It is a
+        generic approach to not hashing parts of a file.
+
         :param file_obj: A file opened in bytes-mode
         :param block_size: The block size used to feed to the hashers.
         """

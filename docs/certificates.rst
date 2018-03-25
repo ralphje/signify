@@ -23,12 +23,51 @@ Certificate
 .. autoclass:: Certificate
    :members:
 
+   .. attribute:: data
+
+      The underlying ASN.1 data object
+
+   .. attribute:: signature_algorithm
+   .. attribute:: signature_value
+   .. attribute:: version
+   .. attribute:: serial_number
+   .. attribute:: issuer
+   .. attribute:: issuer_dn
+   .. attribute:: valid_from
+   .. attribute:: valid_to
+   .. attribute:: subject
+   .. attribute:: subject_dn
+   .. attribute:: subject_public_algorithm
+   .. attribute:: subject_public_key
+   .. attribute:: extensions
+
 SignerInfo
 ----------
 .. module:: signify.signerinfo
 
 .. autoclass:: SignerInfo
    :members:
+
+   .. attribute:: data
+
+      The underlying ASN.1 data object
+
+   .. attribute:: issuer
+   .. attribute:: issuer_dn
+   .. attribute:: serial_number
+   .. attribute:: digest_algorithm
+   .. attribute:: authenticated_attributes
+   .. attribute:: message_digest
+   .. attribute:: content_type
+   .. attribute:: signing_time
+   .. attribute:: digest_encryption_algorithm
+   .. attribute:: encrypted_digest
+   .. attribute:: unauthenticated_attributes
+   .. attribute:: countersigner
+
+      The :class:`CounterSignerInfo` object.
+
+
 .. autoclass:: CounterSignerInfo
    :members:
 

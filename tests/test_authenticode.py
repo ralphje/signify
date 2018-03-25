@@ -20,6 +20,7 @@
 
 
 import hashlib
+import io
 import unittest
 import pathlib
 
@@ -29,7 +30,7 @@ import datetime
 
 from signify.authenticode import CERTIFICATE_LOCATION
 from signify.context import VerificationContext, FileSystemCertificateStore, CertificateStore
-from signify.exceptions import VerificationError
+from signify.exceptions import VerificationError, AuthenticodeVerificationError, SignedPEParseError
 from signify.fingerprinter import AuthenticodeFingerprinter
 from signify.signed_pe import SignedPEFile
 
@@ -51,7 +52,7 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             pefile = SignedPEFile(f)
 
             # This should not raise any errors.
-            signed_datas = list(pefile.get_signed_datas())
+            signed_datas = list(pefile.signed_datas)
             # There may be multiple of these, if the windows binary was signed multiple
             # times, e.g. by different entities. Each of them adds a complete SignedData
             # blob to the binary. For our sample, there is only one blob.
@@ -62,13 +63,34 @@ class AuthenticodeParserTestCase(unittest.TestCase):
 
             signed_data.verify()
 
+            # should work as well
+            pefile.verify()
+
     def test_pciide(self):
         with open(str(root_dir / "test_data" / "pciide.sys"), "rb") as f:
             pefile = SignedPEFile(f)
-            signed_datas = list(pefile.get_signed_datas())
+            signed_datas = list(pefile.signed_datas)
             self.assertEqual(len(signed_datas), 1)
             signed_data = signed_datas[0]
             signed_data.verify()
+            pefile.verify()
+
+    def test_modified_pciide_fails(self):
+        with open(str(root_dir / "test_data" / "pciide.sys"), "rb") as f:
+            data = bytearray(f.read())
+        data[1024] = 3
+        bt = io.BytesIO(data)
+        pefile = SignedPEFile(bt)
+        signed_datas = list(pefile.signed_datas)
+        self.assertEqual(len(signed_datas), 1)
+        self.assertRaises(AuthenticodeVerificationError, signed_datas[0].verify)
+        self.assertRaises(AuthenticodeVerificationError, pefile.verify)
+
+    def test_simple(self):
+        with open(str(root_dir / "test_data" / "simple"), "rb") as f:
+            pefile = SignedPEFile(f)
+            self.assertRaises(SignedPEParseError, list, pefile.signed_datas)
+            self.assertRaises(SignedPEParseError, pefile.verify)
 
 
 class CertificateTestCase(unittest.TestCase):

@@ -30,18 +30,17 @@ The actual parsing of this certificate is perfomed by :mod:`signify.authenticode
 """
 
 import collections
+import hashlib
 import logging
 import os
 import struct
 import sys
 
+from signify.exceptions import AuthenticodeVerificationError, SignedPEParseError
+
 logger = logging.getLogger(__name__)
 
 RelRange = collections.namedtuple('RelRange', 'start length')
-
-
-class SignedPEParseError(Exception):
-    pass
 
 
 class SignedPEFile(object):
@@ -172,8 +171,8 @@ class SignedPEFile(object):
     def _parse_cert_table(self):
         """Parses the Certificate Table, iterates over all certificates"""
 
-        locations = self._parse_pe_header_locations()
-        if 'certtable' not in locations:
+        locations = self.get_authenticode_omit_sections()
+        if not locations or 'certtable' not in locations:
             raise SignedPEParseError("The PE file does not contain a certificate table.")
 
         position = locations['certtable'].start
@@ -195,8 +194,9 @@ class SignedPEFile(object):
         from .fingerprinter import AuthenticodeFingerprinter
         return AuthenticodeFingerprinter(self.file)
 
-    def get_signed_datas(self):
-        """Returns a :class:`signify.authenticode_parser.SignedData` object relevant for this PE file.
+    @property
+    def signed_datas(self):
+        """Returns an iterator over :class:`signify.authenticode.SignedData` objects relevant for this PE file.
 
         :raises SignedPEParseError: For parse errors in the PEFile
         :raises signify.authenticode.AuthenticodeParseError: For parse errors in the SignedData
@@ -217,6 +217,48 @@ class SignedPEFile(object):
         if not found:
             raise SignedPEParseError("A SignedData structure was not found in the PE file's Certificate Table")
 
+    def verify(self, expected_hashes=None, *args, **kwargs):
+        """Verifies the SignedData structures. This is a little bit more efficient than calling all verify-methods
+        separately.
+
+        :param expected_hashes: When provided, should be a mapping of hash names to digests. This could speed-up the
+                                verification process.
+        :raises AuthenticodeVerificationError: when the verification failed
+        """
+
+        if expected_hashes is None:
+            expected_hashes = {}
+
+        signed_datas = list(self.signed_datas)
+
+        # Calculate which hashes we require for the signedinfos
+        digest_algorithms = set()
+        for signed_data in signed_datas:
+            digest_algorithms.add(signed_data.digest_algorithm)
+
+        # Calculate which hashes are needed
+        provided_hashes = {hashlib.new(t) for t in expected_hashes}
+        needed_hashes = digest_algorithms - provided_hashes
+
+        # Calculate the needed hashes
+        if needed_hashes:
+            fingerprinter = self.get_fingerprinter()
+            fingerprinter.add_authenticode_hashers(*needed_hashes)
+            expected_hashes.update(fingerprinter.hashes()['authentihash'])
+
+        # Now iterate over all SignedDatas
+        last_error = None
+        for signed_data in signed_datas:
+            try:
+                signed_data.verify(expected_hash=expected_hashes[signed_data.digest_algorithm().name], *args, **kwargs)
+            except Exception as e:
+                last_error = e
+            else:
+                return
+        if last_error is None:
+            raise AuthenticodeVerificationError("No valid SignedData structure was found.")
+        raise last_error
+
 
 def main(*filenames):
     for filename in filenames:
@@ -224,7 +266,7 @@ def main(*filenames):
         with open(filename, "rb") as file_obj:
             try:
                 pe = SignedPEFile(file_obj)
-                for signed_data in pe.get_signed_datas():
+                for signed_data in pe.signed_datas:
                     print("    Included certificates:")
                     for cert in signed_data.certificates:
                         print("      - Subject: {}".format(cert.subject_dn))
