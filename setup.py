@@ -5,7 +5,7 @@ from setuptools import setup
 
 base_dir = os.path.dirname(__file__)
 about = {}
-with open(os.path.join(base_dir, "pesigcheck", "__init__.py")) as f:
+with open(os.path.join(base_dir, "signify", "__init__.py")) as f:
     exec(f.read(), about)
 
 try:
@@ -15,12 +15,12 @@ except Exception:
 
 
 setup(
-    name='pesigcheck',
+    name='signify',
     version=about['__version__'],
-    packages=['pesigcheck', 'pesigcheck.asn1'],
+    packages=['signify', 'signify.asn1'],
     data_files=[('certificates/authenticode', glob.glob(os.path.join(base_dir, "certificates/authenticode", "**"))), ],
-    url='https://github.com/ralphje/pesigcheck',
-    download_url='https://github.com/ralphje/pesigcheck/tarball/v' + about['__version__'],
+    url='https://github.com/ralphje/signify',
+    download_url='https://github.com/ralphje/signify/tarball/v' + about['__version__'],
     license='MIT',
     author='Ralph Broenink',
     author_email='ralph@ralphbroenink.net',

@@ -201,9 +201,9 @@ class VerificationContext(object):
         """Finds all certificates given by the specified properties. A property can be omitted by specifying
         :const:`None`. Calling this function without arguments is the same as using :meth:`certificates`
 
-        :param pesigcheck.asn1.x509.Name subject: Certificate subject to look for.
+        :param signify.asn1.x509.Name subject: Certificate subject to look for.
         :param int serial_number: Serial number to look for.
-        :param pesigcheck.asn1.x509.Name issuer: Certificate issuer to look for.
+        :param signify.asn1.x509.Name issuer: Certificate issuer to look for.
         :rtype: Iterable[Certificate]
         """
 

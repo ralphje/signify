@@ -24,7 +24,7 @@
 PE structure.
 
 It is also capable of listing all the certificates in the Certificate Table and find the certificate with type 0x2.
-The actual parsing of this certificate is perfomed by :mod:`pesigcheck.authenticode`.
+The actual parsing of this certificate is perfomed by :mod:`signify.authenticode`.
 
 .. _PECOFF: http://www.microsoft.com/whdc/system/platform/firmware/PECOFF.mspx
 """
@@ -190,20 +190,20 @@ class SignedPEFile(object):
     def get_fingerprinter(self):
         """Returns a fingerprinter object for this file.
 
-        :rtype: pesigcheck.fingerprinter.AuthenticodeFingerprinter
+        :rtype: signify.fingerprinter.AuthenticodeFingerprinter
         """
-        from pesigcheck.fingerprinter import AuthenticodeFingerprinter
+        from .fingerprinter import AuthenticodeFingerprinter
         return AuthenticodeFingerprinter(self.file)
 
     def get_signed_datas(self):
-        """Returns a :class:`pesigcheck.authenticode_parser.SignedData` object relevant for this PE file.
+        """Returns a :class:`signify.authenticode_parser.SignedData` object relevant for this PE file.
 
         :raises SignedPEParseError: For parse errors in the PEFile
-        :raises pesigcheck.authenticode.AuthenticodeParseError: For parse errors in the SignedData
-        :return: iterator of pesigcheck.authenticode.SignedData
+        :raises signify.authenticode.AuthenticodeParseError: For parse errors in the SignedData
+        :return: iterator of signify.authenticode.SignedData
         """
 
-        from pesigcheck.authenticode import SignedData
+        from .authenticode import SignedData
 
         found = False
         for certificate in self._parse_cert_table():

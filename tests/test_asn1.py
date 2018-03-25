@@ -23,7 +23,7 @@ import unittest
 import datetime
 from pyasn1.type import useful
 
-from pesigcheck.asn1.x509_time import Time
+from signify.asn1.x509_time import Time
 
 
 class TimeTest(unittest.TestCase):

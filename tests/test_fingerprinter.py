@@ -25,7 +25,7 @@ import pickle
 import unittest
 import pathlib
 
-from pesigcheck.fingerprinter import AuthenticodeFingerprinter, Fingerprinter, Finger, Range
+from signify.fingerprinter import AuthenticodeFingerprinter, Fingerprinter, Finger, Range
 
 root_dir = pathlib.Path(__file__).parent
 

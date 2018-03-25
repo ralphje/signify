@@ -27,9 +27,9 @@ import binascii
 
 import datetime
 
-from pesigcheck.fingerprinter import AuthenticodeFingerprinter
-from pesigcheck.signed_pe import SignedPEFile
-from pesigcheck.authenticode import Certificate, trusted_certificate_store, VerificationContext, \
+from signify.fingerprinter import AuthenticodeFingerprinter
+from signify.signed_pe import SignedPEFile
+from signify.authenticode import Certificate, trusted_certificate_store, VerificationContext, \
     AuthenticodeVerificationError, CertificateStore
 
 root_dir = pathlib.Path(__file__).parent

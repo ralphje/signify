@@ -23,7 +23,7 @@ import hashlib
 import pathlib
 import pickle
 
-from pesigcheck.fingerprinter import AuthenticodeFingerprinter
+from signify.fingerprinter import AuthenticodeFingerprinter
 
 
 def main():

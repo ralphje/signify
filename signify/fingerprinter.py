@@ -27,7 +27,7 @@ import sys
 import logging
 import binascii
 
-from pesigcheck.signed_pe import SignedPEFile
+from .signed_pe import SignedPEFile
 
 logger = logging.getLogger(__name__)
 

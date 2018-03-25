@@ -59,7 +59,7 @@ author = 'Ralph Broenink'
 # The short X.Y version.
 base_dir = os.path.join(os.path.dirname(__file__), os.pardir)
 about = {}
-with open(os.path.join(base_dir, "pesigcheck", "__init__.py")) as f:
+with open(os.path.join(base_dir, "signify", "__init__.py")) as f:
     exec(f.read(), about)
 
 version = release = about["__version__"]
@@ -259,7 +259,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'pesigcheck', 'PESigCheck Documentation',
+    (master_doc, 'signify', 'Signify Documentation',
      [author], 1)
 ]
 
