@@ -166,17 +166,12 @@ class SignerInfo(object):
         try:
             issuer.verify_signature(self.encrypted_digest,
                                     self._encoded_authenticated_attributes,
-                                    self.digest_algorithm)
+                                    self.digest_algorithm,
+                                    allow_legacy=context.allow_legacy)
         except VerificationError as e:
-            if not context.allow_legacy:
-                raise SignerInfoVerificationError("Could not verify {cert} as the signer of the authenticated "
-                                                  "attributes in {cls}, and legacy checking is disallowed: {exc}"
-                                                  .format(cert=issuer, cls=type(self).__name__, exc=e))
-            elif not issuer._legacy_verify_signature(self.encrypted_digest, self._encoded_authenticated_attributes,
-                                                     self.digest_algorithm):
-                raise SignerInfoVerificationError("Could not verify {cert} as the signer of the authenticated "
-                                                  "attributes in {cls}, and legacy checking was not possible: {exc}"
-                                                  .format(cert=issuer, cls=type(self).__name__, exc=e))
+            raise SignerInfoVerificationError("Could not verify {cert} as the signer of the authenticated "
+                                              "attributes in {cls}: {exc}"
+                                              .format(cert=issuer, cls=type(self).__name__, exc=e))
 
     def _build_chain(self, context):
         """Given a context, builds a chain up to a trusted certificate. This is a generator function, generating all

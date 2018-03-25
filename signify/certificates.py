@@ -84,30 +84,7 @@ class Certificate(object):
         """Retrieves the :mod:`asn1crypto` x509 Certificate object."""
         return asn1crypto.x509.Certificate.load(self.to_der)
 
-    def _legacy_verify_signature(self, signature, data, algorithm):
-        """Performs a legacy signature verification. This method is intended for the case where the encryptedDigest
-        does not contain an ASN.1 structure, but a raw hash value instead.
-
-        This case is described in more detail on
-        https://mta.openssl.org/pipermail/openssl-users/2015-September/002053.html
-
-        The arguments are identical to those of :meth:`verify_signature`.
-        """
-
-        public_key = asymmetric.load_public_key(self.to_asn1crypto.public_key)
-
-        if public_key.algorithm != 'rsa':
-            logger.warning("Legacy signature verification only available in RSA mode")
-            return False
-
-        try:
-            asymmetric.rsa_pkcs1v15_verify(public_key, signature, algorithm(data).digest(), 'raw')
-        except Exception as e:
-            raise CertificateVerificationError("Invalid signature for %s: %s" % (self, e))
-
-        return True
-
-    def verify_signature(self, signature, data, algorithm):
+    def verify_signature(self, signature, data, algorithm, allow_legacy=False):
         """Verifies whether the signature bytes match the data using the hashing algorithm. Supports RSA and EC keys.
         Note that not all hashing algorithms are supported by the cryptography module.
 
@@ -115,6 +92,12 @@ class Certificate(object):
         :param bytes data: The data that must be verified
         :type algorithm: cryptography.hazmat.primitives.hashes.HashAlgorithm or hashlib.function
         :param algorithm: The hashing algorithm to use
+        :param bool allow_legacy: If True, allows a legacy signature verification. This method is intended for the case
+            where the encryptedDigest does not contain an ASN.1 structure, but a raw hash value instead. It is attempted
+            automatically when verification of the RSA signature fails.
+
+            This case is described in more detail on
+            https://mta.openssl.org/pipermail/openssl-users/2015-September/002053.html
         """
 
         public_key = asymmetric.load_public_key(self.to_asn1crypto.public_key)
@@ -131,15 +114,17 @@ class Certificate(object):
         try:
             verify_func(public_key, signature, data, algorithm().name)
         except Exception as e:
-            raise CertificateVerificationError("Invalid signature for %s: %s" % (self, e))
+            if not allow_legacy or public_key.algorithm != 'rsa':
+                raise CertificateVerificationError("Invalid signature for %s: %s" % (self, e))
+        else:
+            return
+
+        try:
+            asymmetric.rsa_pkcs1v15_verify(public_key, signature, algorithm(data).digest(), 'raw')
+        except Exception as e:
+            raise CertificateVerificationError("Invalid signature for %s (legacy attempted): %s" % (self, e))
 
     def verify(self, context):
-        """Verifies the certificate, and its chain.
-
-        :param VerificationContext context: The context for verifying the certificate.
-        :return: A list of valid certificate chains for this certificate.
-        :rtype: Iterable[Certificate]
-        :raises AuthenticodeVerificationError: When the certificate could not be verified.
-        """
+        """Alias for :meth:`VerificationContext.verify`"""
 
         return context.verify(self)

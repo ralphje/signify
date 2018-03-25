@@ -109,10 +109,12 @@ class VerificationContext(object):
             yield certificate
 
     def verify(self, certificate):
-        """Verifies the provided certificate up to a trusted root, and returns the certificate's chain.
+        """Verifies the certificate, and its chain.
 
-        :param Certificate certificate: The certificate to verify
-        :raises VerificationError: when the verification fails.
+        :param Certificiate certificate: The certificate to verify
+        :return: A list of valid certificate chains for this certificate.
+        :rtype: Iterable[Certificate]
+        :raises AuthenticodeVerificationError: When the certificate could not be verified.
         """
 
         # we keep track of our asn1 objects to make sure we return Certificate objects when we're done
