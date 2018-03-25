@@ -182,12 +182,7 @@ class SignerInfo(object):
         """Given a context, builds a chain up to a trusted certificate. This is a generator function, generating all
         valid chains.
 
-        This method will call :meth:`Certificate._build_chain` for all possible candidates, which has some interesting
-        semantics:
-
-        .. warning::
-           No error is raised when :meth:`_verify_issuer` never fails, but no chain is found either. This may happen
-           when somewhere in the chain, no valid parent was found. Always check whether this method returns a chain.
+        This method will call :meth:`VerificationContext.verify` for all possible candidates.
 
         :param VerificationContext context: The context for building the chain. Most importantly, contains
             all certificates to build the chain from, but also their properties are relevant.
@@ -195,7 +190,7 @@ class SignerInfo(object):
             Note that this may be an empty iteration if no candidate parent certificate was found.
         :rtype: Iterable[Iterable[Certificate]]
         :raises AuthenticodeVerificationError: When :meth:`_verify_issuer` fails or any of the underlying calls to
-            :meth:`Certificate._build_chain` fails. See the semantics of :meth:`Certificate._build_chain` for when
+            :meth:`VerificationContext.verify` fails. See the semantics of :meth:`VerificationContext.verify` for when
             that may happen. If any error occurs, it is silently swallowed unless no valid chain is found. In that case
             the first error that occurred is raised. If no error occurs, no error is raised.
         """
@@ -209,7 +204,7 @@ class SignerInfo(object):
                 self._verify_issuer(issuer, context)
 
                 # _build_chain may fail when anywhere up its chain an error occurs
-                yield from issuer._build_chain(context)
+                yield context.verify(issuer)
             except VerificationError as e:
                 if first_error is None:
                     first_error = e

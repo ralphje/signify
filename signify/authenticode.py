@@ -218,12 +218,12 @@ class SignedData(object):
 
         if verification_context is None:
             verification_context = VerificationContext(trusted_certificate_store, self.certificates,
-                                                       extended_key_usage=asn1.oids.EKU_CODE_SIGNING)
+                                                       extended_key_usages=['code_signing'])
 
         if self.signer_info.countersigner:
             if cs_verification_context is None:
                 cs_verification_context = VerificationContext(trusted_certificate_store, self.certificates,
-                                                              extended_key_usage=asn1.oids.EKU_TIME_STAMPING)
+                                                              extended_key_usages=['time_stamping'])
             cs_verification_context.timestamp = self.signer_info.countersigner.signing_time
 
             self.signer_info.countersigner.verify(cs_verification_context)

@@ -1,7 +1,10 @@
 import datetime
 import logging
 
+from certvalidator import ValidationContext, CertificateValidator
+
 from signify.certificates import Certificate
+from signify.exceptions import VerificationError
 
 logger = logging.getLogger(__name__)
 
@@ -49,14 +52,18 @@ class FileSystemCertificateStore(CertificateStore):
 
 
 class VerificationContext(object):
-    def __init__(self, *stores, timestamp=None, extended_key_usage=None, allow_legacy=True):
+    def __init__(self, *stores, timestamp=None, key_usages=None, extended_key_usages=None, optional_eku=True,
+                 allow_legacy=True):
         """A context holding properties about the verification of a signature or certificate.
 
         :param Iterable[CertificateStore] stores: A list of CertificateStore objects that contain certificates
         :param datetime.datetime timestamp: The timestamp to verify with. If None, the current time is used.
             Must be a timezone-aware timestamp.
-        :param tuple extended_key_usage: A tuple with the OID of an EKU to check for. Typical values are
-            asn1.oids.EKU_CODE_SIGNING and asn1.oids.EKU_TIME_STAMPING
+        :param Iterable[str] key_usages: An iterable with the keyUsages to check for. For valid options, see
+            :meth:`certvalidator.CertificateValidator.validate_usage`
+        :param Iterable[str] extended_key_usages: An iterable with the EKU's to check for. See
+            :meth:`certvalidator.CertificateValidator.validate_usage`
+        :param bool optional_eku: If True, sets the extended_key_usages as optionally present in the certificates.
         :param bool allow_legacy: If True, allows chain verification using pyOpenSSL if the signature hash algorithm
             is too old to be supported by cryptography (e.g. MD2). Additionally, allows the SignedInfo encryptedDigest
             to contain an encrypted hash instead of an encrypted DigestInfo ASN.1 structure. Both are found in the wild,
@@ -68,7 +75,9 @@ class VerificationContext(object):
         if timestamp is None:
             timestamp = datetime.datetime.now(datetime.timezone.utc)
         self.timestamp = timestamp
-        self.extended_key_usage = extended_key_usage
+        self.key_usages = key_usages
+        self.extended_key_usages = extended_key_usages
+        self.optional_eku = optional_eku
         self.allow_legacy = allow_legacy
 
     @property
@@ -98,6 +107,44 @@ class VerificationContext(object):
             if issuer is not None and certificate.issuer != issuer:
                 continue
             yield certificate
+
+    def verify(self, certificate):
+        """Verifies the provided certificate up to a trusted root, and returns the certificate's chain.
+
+        :param Certificate certificate: The certificate to verify
+        :raises VerificationError: when the verification fails.
+        """
+
+        # we keep track of our asn1 objects to make sure we return Certificate objects when we're done
+        to_check_asn1cert = certificate.asn1crypto_certificate
+        all_certs = {to_check_asn1cert: certificate}
+
+        # we need to get lists of our intermediates and trusted certificates
+        intermediates, trust_roots = [], []
+        for store in self.stores:
+            for cert in store:
+                asn1cert = certificate.asn1crypto_certificate
+                (trust_roots if store.trusted else intermediates).append(asn1cert)
+                all_certs[asn1cert] = cert
+
+        # construct the context and validator for certvalidator
+        context = ValidationContext(trust_roots=list(trust_roots),
+                                    moment=self.timestamp,
+                                    weak_hash_algos=set() if self.allow_legacy else None)
+        validator = CertificateValidator(end_entity_cert=to_check_asn1cert,
+                                         intermediate_certs=list(intermediates),
+                                         validation_context=context)
+
+        # verify the chain
+        try:
+            chain = validator.validate_usage(key_usage=set(self.key_usages) if self.key_usages else set(),
+                                             extended_key_usage=set(self.extended_key_usages)
+                                                                if self.extended_key_usages else set(),
+                                             extended_optional=self.optional_eku)
+        except Exception as e:
+            raise VerificationError("Chain verification from %s failed: %s" % (certificate, e))
+        else:
+            return [all_certs[x] for x in chain]
 
     def is_trusted(self, certificate):
         """Determines whether the given certificate is in a trusted certificate store.

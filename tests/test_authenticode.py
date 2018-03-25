@@ -77,16 +77,8 @@ class CertificateTestCase(unittest.TestCase):
         for certificate in trusted_certificate_store:
             # Trust depends on the timestamp
             context.timestamp = certificate.valid_to
-            self.assertListEqual(certificate.verify(context), [[certificate]])
-
-    def test_all_trusted_certificates_are_only_trusted_within_their_validity(self):
-        context = VerificationContext(trusted_certificate_store)
-        for certificate in trusted_certificate_store:
-            # Trust depends on the timestamp
-            context.timestamp = certificate.valid_to + datetime.timedelta(seconds=1)
-            self.assertRaises(VerificationError, certificate.verify, context)
-            context.timestamp = certificate.valid_from - datetime.timedelta(seconds=1)
-            self.assertRaises(VerificationError, certificate.verify, context)
+            chain = certificate.verify(context)
+            self.assertListEqual(chain, [certificate])
 
     def test_trust_fails(self):
         # we get a certificate we currently trust

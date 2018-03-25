@@ -1,2 +1,4 @@
 pyasn1
 cryptography
+certvalidator
+asn1crypto
