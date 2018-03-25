@@ -1,32 +1,15 @@
-import hashlib
 import logging
 
 import asn1crypto.pem
 import asn1crypto.x509
-from cryptography import x509
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import rsa, padding, ec
+from oscrypto import asymmetric
 from pyasn1.codec.der import encoder as der_encoder
 from pyasn1.codec.der import decoder as der_decoder
 
 from . import asn1
-from ._legacy import rsa_public_decrypt
 from .exceptions import CertificateVerificationError
 
 logger = logging.getLogger(__name__)
-
-
-def _from_hashlib_to_crypto(algorithm):
-    return {
-        hashlib.md5: hashes.MD5(),
-        hashlib.sha1: hashes.SHA1(),
-        hashlib.sha224: hashes.SHA224(),
-        hashlib.sha256: hashes.SHA256(),
-        hashlib.sha384: hashes.SHA384(),
-        hashlib.sha512: hashes.SHA512(),
-    }.get(algorithm, algorithm)
 
 
 class Certificate(object):
@@ -38,7 +21,6 @@ class Certificate(object):
         """
 
         self.data = data
-        self._cryptography_x509 = None
         self._parse()
 
     def _parse(self):
@@ -81,35 +63,26 @@ class Certificate(object):
     def __str__(self):
         return "{}(serial:{})".format(self.subject_dn, self.serial_number)
 
-    @property
-    def _der_bytes(self):
-        return der_encoder.encode(self.data)
-
-    @property
-    def cryptography_x509(self):
-        """Retrieves the :mod:`cryptography` x509 object."""
-
-        if self._cryptography_x509 is None:
-            self._cryptography_x509 = x509.load_der_x509_certificate(self._der_bytes, default_backend())
-        return self._cryptography_x509
-
-    @property
-    def asn1crypto_certificate(self):
-        return asn1crypto.x509.Certificate.load(self._der_bytes)
-
     @classmethod
     def from_der(cls, content):
+        """Load the Certificate object from DER-encoded data"""
         return cls(der_decoder.decode(content, asn1Spec=asn1.x509.Certificate())[0])
 
     @classmethod
     def from_pem(cls, content):
-        """Reads a Certificate from a PEM formatted file.
-
-        :param content: The PEM-encoded certificate
-        :return: A Certificate object.
-        """
+        """Reads a Certificate from a PEM formatted file."""
         type_name, headers, der_bytes = asn1crypto.pem.unarmor(content)
         return cls.from_der(der_bytes)
+
+    @property
+    def to_der(self):
+        """Returns the DER-encoded data from this certificate."""
+        return der_encoder.encode(self.data)
+
+    @property
+    def to_asn1crypto(self):
+        """Retrieves the :mod:`asn1crypto` x509 Certificate object."""
+        return asn1crypto.x509.Certificate.load(self.to_der)
 
     def _legacy_verify_signature(self, signature, data, algorithm):
         """Performs a legacy signature verification. This method is intended for the case where the encryptedDigest
@@ -118,31 +91,19 @@ class Certificate(object):
         This case is described in more detail on
         https://mta.openssl.org/pipermail/openssl-users/2015-September/002053.html
 
-        As there is no module in Python that allows us to do this (M2Crypto is not Python 3 compatible at this time),
-        we use direct calls to the CFFI module of OpenSSL. That ugly *barf* is put in _legacy.
-
         The arguments are identical to those of :meth:`verify_signature`.
         """
 
-        public_key = self.cryptography_x509.public_key()
-        if not isinstance(public_key, rsa.RSAPublicKey):
-            logger.info("Legacy signature verification only allowed for RSA public keys.")
+        public_key = asymmetric.load_public_key(self.to_asn1crypto.public_key)
+
+        if public_key.algorithm != 'rsa':
+            logger.warning("Legacy signature verification only available in RSA mode")
             return False
 
-        crypto_algorithm = _from_hashlib_to_crypto(algorithm)
-        expected_hash = rsa_public_decrypt(public_key, signature, padding.PKCS1v15(), crypto_algorithm)
-
-        if isinstance(crypto_algorithm, hashes.MD5):
-            hash_algorithm = hashlib.md5
-        elif isinstance(crypto_algorithm, hashes.SHA1):
-            hash_algorithm = hashlib.sha1
-        else:
-            logger.info("Legacy signature verification only allowed for MD5 and SHA1 signatures.")
-            return False
-
-        actual_hash = hash_algorithm(data).digest()
-        if expected_hash != actual_hash:
-            raise CertificateVerificationError("Invalid legacy RSA signature for %s" % self)
+        try:
+            asymmetric.rsa_pkcs1v15_verify(public_key, signature, algorithm(data).digest(), 'raw')
+        except Exception as e:
+            raise CertificateVerificationError("Invalid signature for %s: %s" % (self, e))
 
         return True
 
@@ -156,23 +117,21 @@ class Certificate(object):
         :param algorithm: The hashing algorithm to use
         """
 
-        # Given a hashlib.sha1 object, convert it to the appropritate value
-        crypto_algorithm = _from_hashlib_to_crypto(algorithm)
-        public_key = self.cryptography_x509.public_key()
-
-        if isinstance(public_key, rsa.RSAPublicKey):
-            try:
-                public_key.verify(signature, data, padding.PKCS1v15(), crypto_algorithm)
-            except InvalidSignature:
-                raise CertificateVerificationError("Invalid RSA signature for %s" % self)
-
-        elif isinstance(public_key, ec.EllipticCurvePublicKey):
-            try:
-                public_key.verify(signature, data, ec.ECDSA(crypto_algorithm))
-            except InvalidSignature:
-                raise CertificateVerificationError("Invalid EC signature for %s" % self)
+        public_key = asymmetric.load_public_key(self.to_asn1crypto.public_key)
+        if public_key.algorithm == 'rsa':
+            verify_func = asymmetric.rsa_pkcs1v15_verify
+        elif public_key.algorithm == 'dsa':
+            verify_func = asymmetric.dsa_verify
+        elif public_key.algorithm == 'ec':
+            verify_func = asymmetric.ecdsa_verify
         else:
-            raise CertificateVerificationError("Unknown public key type for certificate %s" % self)
+            raise CertificateVerificationError("Signature algorithm %s is unsupported for %s" %
+                                               (public_key.algorithm, self))
+
+        try:
+            verify_func(public_key, signature, data, algorithm().name)
+        except Exception as e:
+            raise CertificateVerificationError("Invalid signature for %s: %s" % (self, e))
 
     def verify(self, context):
         """Verifies the certificate, and its chain.
