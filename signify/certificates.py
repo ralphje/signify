@@ -86,7 +86,7 @@ class Certificate(object):
 
     def verify_signature(self, signature, data, algorithm, allow_legacy=False):
         """Verifies whether the signature bytes match the data using the hashing algorithm. Supports RSA and EC keys.
-        Note that not all hashing algorithms are supported by the cryptography module.
+        Note that not all hashing algorithms are supported.
 
         :param bytes signature: The signature to verify
         :param bytes data: The data that must be verified

@@ -64,8 +64,8 @@ class VerificationContext(object):
         :param Iterable[str] extended_key_usages: An iterable with the EKU's to check for. See
             :meth:`certvalidator.CertificateValidator.validate_usage`
         :param bool optional_eku: If True, sets the extended_key_usages as optionally present in the certificates.
-        :param bool allow_legacy: If True, allows chain verification using pyOpenSSL if the signature hash algorithm
-            is too old to be supported by cryptography (e.g. MD2). Additionally, allows the SignedInfo encryptedDigest
+        :param bool allow_legacy: If True, allows chain verification if the signature hash algorithm
+            is very old (e.g. MD2). Additionally, allows the SignedInfo encryptedDigest
             to contain an encrypted hash instead of an encrypted DigestInfo ASN.1 structure. Both are found in the wild,
             but setting to True does reduce the reliability of the verification.
         """
