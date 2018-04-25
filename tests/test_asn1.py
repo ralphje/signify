@@ -44,7 +44,7 @@ class TimeTest(unittest.TestCase):
 
 class RDNSequenceTest(unittest.TestCase):
     def test_to_string(self):
-        with open(CERTIFICATE_LOCATION / "Microsoft Root Certificate Authority 2010.pem", "rb") as f:
+        with open(str(CERTIFICATE_LOCATION / "Microsoft Root Certificate Authority 2010.pem"), "rb") as f:
             certificate = Certificate.from_pem(f.read())
 
         self.assertEqual(certificate.issuer.to_string(),
@@ -52,7 +52,7 @@ class RDNSequenceTest(unittest.TestCase):
                          "L=Redmond, ST=Washington, C=US")
 
     def test_to_string_with_commas(self):
-        with open(CERTIFICATE_LOCATION / "Verisign Time Stamping Service Root.pem", "rb") as f:
+        with open(str(CERTIFICATE_LOCATION / "Verisign Time Stamping Service Root.pem"), "rb") as f:
             certificate = Certificate.from_pem(f.read())
 
         self.assertEqual(certificate.issuer.to_string(),
@@ -60,7 +60,7 @@ class RDNSequenceTest(unittest.TestCase):
                          r"OU=VeriSign\, Inc., O=VeriSign Trust Network")
 
     def test_get_components(self):
-        with open(CERTIFICATE_LOCATION / "Verisign Time Stamping Service Root.pem", "rb") as f:
+        with open(str(CERTIFICATE_LOCATION / "Verisign Time Stamping Service Root.pem"), "rb") as f:
             certificate = Certificate.from_pem(f.read())
 
         result = list(certificate.issuer.get_components("OU"))
@@ -70,7 +70,7 @@ class RDNSequenceTest(unittest.TestCase):
         self.assertEqual(list(certificate.issuer.get_components("CN")), [])
 
     def test_get_components_none(self):
-        with open(CERTIFICATE_LOCATION / "Verisign Time Stamping Service Root.pem", "rb") as f:
+        with open(str(CERTIFICATE_LOCATION / "Verisign Time Stamping Service Root.pem"), "rb") as f:
             certificate = Certificate.from_pem(f.read())
 
         result = list(certificate.issuer.get_components())
