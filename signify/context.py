@@ -125,7 +125,7 @@ class VerificationContext(object):
         intermediates, trust_roots = [], []
         for store in self.stores:
             for cert in store:
-                asn1cert = certificate.to_asn1crypto
+                asn1cert = cert.to_asn1crypto
                 (trust_roots if store.trusted else intermediates).append(asn1cert)
                 all_certs[asn1cert] = cert
 

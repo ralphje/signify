@@ -92,6 +92,11 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             self.assertRaises(SignedPEParseError, list, pefile.signed_datas)
             self.assertRaises(SignedPEParseError, pefile.verify)
 
+    def test_2A6E(self):
+        with open(str(root_dir / "test_data" / "___2A6E.tmp"), "rb") as f:
+            pefile = SignedPEFile(f)
+            self.assertRaises(VerificationError, pefile.verify)
+
 
 class CertificateTestCase(unittest.TestCase):
     def test_all_trusted_certificates_are_trusted(self):
