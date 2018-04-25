@@ -226,6 +226,17 @@ class SignerInfo(object):
 
         return chains
 
+    def potential_chains(self, context):
+        """Retrieves all potential chains from this SignerInfo instance.
+
+        :param VerificationContext context: The context
+        :return: A list of potential certificate chains for this SignerInfo.
+        :rtype: Iterable[Iterable[Certificate]]
+        """
+
+        for certificate in context.find_certificates(issuer=self.issuer, serial_number=self.serial_number):
+            yield from context.potential_chains(certificate)
+
 
 class CounterSignerInfo(SignerInfo):
     _required_authenticated_attributes = (asn1.pkcs7.ContentType, asn1.pkcs7.SigningTime, asn1.pkcs7.Digest)

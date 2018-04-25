@@ -63,6 +63,14 @@ class Certificate(object):
     def __str__(self):
         return "{}(serial:{})".format(self.subject_dn, self.serial_number)
 
+    def __eq__(self, other):
+        return isinstance(other, Certificate) and \
+               self.issuer == other.issuer and \
+               self.serial_number == other.serial_number and \
+               self.subject == other.subject and \
+               self.subject_public_algorithm == other.subject_public_algorithm and \
+               self.subject_public_key == other.subject_public_key
+
     @classmethod
     def from_der(cls, content):
         """Load the Certificate object from DER-encoded data"""
@@ -123,6 +131,11 @@ class Certificate(object):
             asymmetric.rsa_pkcs1v15_verify(public_key, signature, algorithm(data).digest(), 'raw')
         except Exception as e:
             raise CertificateVerificationError("Invalid signature for %s (legacy attempted): %s" % (self, e))
+
+    def potential_chains(self, context):
+        """Alias for :meth:`VerificationContext.potential_chains`"""
+
+        return context.potential_chains(self)
 
     def verify(self, context):
         """Alias for :meth:`VerificationContext.verify`"""

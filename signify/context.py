@@ -112,11 +112,41 @@ class VerificationContext(object):
                 continue
             yield certificate
 
+    def potential_chains(self, certificate, depth=10):
+        """Returns all possible chains from the provided certificate, solely based on issuer/subject matching.
+
+        THIS METHOD DOES NOT VERIFY WHETHER A CHAIN IS ACTUALLY VALID. Use :meth:`verify` for that.
+
+        :param Certificate certificate: The certificate to build a potential chain for
+        :param int depth: The maximum depth, used for recursion
+        :rtype: Iterable[Iterable[Certificate]]
+        :return: A iterable of all possible certificate chains
+        """
+
+        # TODO:
+        # Info from the authority key identifier extension can be used to
+        # eliminate possible options when multiple keys with the same
+        # subject exist, such as during a transition, or with cross-signing.
+
+        if self.is_trusted(certificate):
+            yield [certificate]
+            return
+        elif depth <= 0:
+            return
+
+        for candidate in self.find_certificates(subject=certificate.issuer):
+            for chain in self.potential_chains(candidate, depth=depth-1):
+                # prevent recursion on itself
+                if certificate in chain:
+                    continue
+                else:
+                    yield chain + [certificate]
+
     def verify(self, certificate):
         """Verifies the certificate, and its chain.
 
         :param Certificate certificate: The certificate to verify
-        :return: A list of valid certificate chains for this certificate.
+        :return: A valid certificate chain for this certificate.
         :rtype: Iterable[Certificate]
         :raises AuthenticodeVerificationError: When the certificate could not be verified.
         """
