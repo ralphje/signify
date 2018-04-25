@@ -18,7 +18,9 @@ setup(
     name='signify',
     version=about['__version__'],
     packages=['signify', 'signify.asn1'],
-    data_files=[('certificates/authenticode', glob.glob(os.path.join(base_dir, "certificates/authenticode", "**"))), ],
+    package_data={'signify': ['*.pem']},
+    include_package_data=True,
+
     url='https://github.com/ralphje/signify',
     download_url='https://github.com/ralphje/signify/tarball/v' + about['__version__'],
     license='MIT',

@@ -33,7 +33,7 @@ root_dir = pathlib.Path(__file__).parent
 class FingerPrinterTestCase(unittest.TestCase):
     def test_entire_blobs(self):
         for filename in (root_dir / "test_data").iterdir():
-            if str(filename).endswith(".res"):
+            if str(filename).endswith(".res") or str(filename).endswith("README.rst"):
                 continue
             with self.subTest(filename):
                 with open(str(filename), "rb") as file_obj:

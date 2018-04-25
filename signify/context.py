@@ -41,6 +41,10 @@ class FileSystemCertificateStore(CertificateStore):
         self._load()  # TODO: load whenever needed.
         return super().__iter__()
 
+    def __len__(self):
+        self._load()
+        return super().__len__()
+
     def _load(self):
         if self._loaded:
             return

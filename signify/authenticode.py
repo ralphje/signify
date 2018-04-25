@@ -41,7 +41,8 @@ from . import asn1
 logger = logging.getLogger(__name__)
 
 ACCEPTED_DIGEST_ALGORITHMS = (hashlib.md5, hashlib.sha1)
-CERTIFICATE_LOCATION = pathlib.Path(__file__).resolve().parent.parent / "certificates" / "authenticode"
+CERTIFICATE_LOCATION = pathlib.Path(__file__).resolve().parent / "certs" / "authenticode"
+TRUSTED_CERTIFICATE_STORE = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True)
 
 
 class AuthenticodeCounterSignerInfo(CounterSignerInfo):
@@ -180,8 +181,6 @@ class SignedData(object):
         :return: :const:`None`
         """
 
-        trusted_certificate_store = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True)
-
         # Check that the digest algorithms match
         if self.digest_algorithm != self.spc_info.digest_algorithm:
             raise AuthenticodeVerificationError("SignedData.digestAlgorithm must equal SpcInfo.digestAlgorithm")
@@ -221,12 +220,12 @@ class SignedData(object):
                                                     'countersigner\'s SignerInfo')
 
         if verification_context is None:
-            verification_context = VerificationContext(trusted_certificate_store, self.certificates,
+            verification_context = VerificationContext(TRUSTED_CERTIFICATE_STORE, self.certificates,
                                                        extended_key_usages=['code_signing'])
 
         if self.signer_info.countersigner:
             if cs_verification_context is None:
-                cs_verification_context = VerificationContext(trusted_certificate_store, self.certificates,
+                cs_verification_context = VerificationContext(TRUSTED_CERTIFICATE_STORE, self.certificates,
                                                               extended_key_usages=['time_stamping'])
             cs_verification_context.timestamp = self.signer_info.countersigner.signing_time
 
