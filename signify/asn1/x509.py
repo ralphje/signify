@@ -78,6 +78,27 @@ class RDNSequence(univ.SequenceOf):
             result.append("{type}={value}".format(type=type, value=value))
         return ", ".join(result)
 
+    def get_components(self, component_type=None):
+        """Get individual components of this RDNSequence
+
+        :param component_type: if provided, yields only values of this type,
+            if not provided, yields tuples of (type, value)
+        """
+
+        from . import oids
+        from pyasn1.codec.ber import decoder
+
+        for n in self[::-1]:
+            type_value = n[0]  # get the AttributeTypeAndValue object
+            type = oids.OID_TO_RDN.get(type_value['type'], ".".join(map(str, type_value['type'])))
+            value = str(decoder.decode(type_value['value'])[0])
+
+            if component_type is not None:
+                if component_type in (type_value['type'], ".".join(map(str, type_value['type'])), type):
+                    yield value
+            else:
+                yield (type, value)
+
 
 class Name(univ.Choice):
     componentType = namedtype.NamedTypes(
