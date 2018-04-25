@@ -68,7 +68,7 @@ class AuthenticodeSignerInfo(SignerInfo):
                 raise AuthenticodeParseError("Only one SpcSpOpusInfo expected in SignerInfo.authenticatedAttributes")
 
             self.program_name = self.authenticated_attributes[asn1.spc.SpcSpOpusInfo][0]['programName'].to_python()
-            self.more_info = str(self.authenticated_attributes[asn1.spc.SpcSpOpusInfo][0]['moreInfo']['url'])
+            self.more_info = self.authenticated_attributes[asn1.spc.SpcSpOpusInfo][0]['moreInfo'].to_python()
 
 
 class SpcInfo(object):

@@ -64,7 +64,7 @@ class SpcString(univ.Choice):
     def to_python(self):
         if 'unicode' in self:
             return str(self['unicode'])
-        else:
+        elif 'ascii' in self:
             return str(self['ascii'])
 
 
@@ -81,6 +81,14 @@ class SpcLink(univ.Choice):
             explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatConstructed, 2)
         ))
     )
+
+    def to_python(self):
+        if 'url' in self:
+            return str(self['url'])
+        elif 'moniker' in self:
+            return None  # TODO
+        elif 'file' in self:
+            return self['file'].to_python()
 
 
 class SpcSpOpusInfo(univ.Sequence):
