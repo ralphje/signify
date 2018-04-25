@@ -21,7 +21,7 @@
 
 import hashlib
 import io
-import pickle
+import json
 import unittest
 import pathlib
 
@@ -41,8 +41,14 @@ class FingerPrinterTestCase(unittest.TestCase):
                     fingerprinter.add_hashers(hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha512)
                     fingerprinter.add_authenticode_hashers(hashlib.md5, hashlib.sha1, hashlib.sha256)
                     results = fingerprinter.hashes()
-                with open(str(filename) + ".res", "rb") as res_obj:
-                    expected_results = pickle.load(res_obj)
+
+                # convert to hex
+                for v in results.values():
+                    for k, b in v.items():
+                        v[k] = b.hex()
+
+                with open(str(filename) + ".res", "r") as res_obj:
+                    expected_results = json.load(res_obj)
 
                 self.assertEqual(results, expected_results)
 
