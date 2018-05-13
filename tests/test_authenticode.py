@@ -28,7 +28,7 @@ import binascii
 
 import datetime
 
-from signify.authenticode import CERTIFICATE_LOCATION
+from signify.authenticode import CERTIFICATE_LOCATION, TRUSTED_CERTIFICATE_STORE
 from signify.context import VerificationContext, FileSystemCertificateStore, CertificateStore
 from signify.exceptions import VerificationError, AuthenticodeVerificationError, SignedPEParseError
 from signify.fingerprinter import AuthenticodeFingerprinter
@@ -96,6 +96,22 @@ class AuthenticodeParserTestCase(unittest.TestCase):
         with open(str(root_dir / "test_data" / "___2A6E.tmp"), "rb") as f:
             pefile = SignedPEFile(f)
             self.assertRaises(VerificationError, pefile.verify)
+
+    def test_0d8c_valid(self):
+        with open(str(root_dir / "test_data" / "0d8c2bcb575378f6a88d17b5f6ce70e794a264cdc8556c8e812f0b5f9c709198"), "rb") as f:
+            pefile = SignedPEFile(f)
+            pefile.verify()
+
+    def test_19e8_expired(self):
+        with open(str(root_dir / "test_data" / "19e818d0da361c4feedd456fca63d68d4b024fbbd3d9265f606076c7ee72e8f8.ViR"), "rb") as f:
+            pefile = SignedPEFile(f)
+            self.assertRaises(VerificationError, pefile.verify)
+
+    def test_19e8_valid_within_period(self):
+        with open(str(root_dir / "test_data" / "19e818d0da361c4feedd456fca63d68d4b024fbbd3d9265f606076c7ee72e8f8.ViR"), "rb") as f:
+            pefile = SignedPEFile(f)
+            pefile.verify(verification_context_kwargs=
+                          {'timestamp': datetime.datetime(2013, 1, 1, tzinfo=datetime.timezone.utc)})
 
 
 class CertificateTestCase(unittest.TestCase):

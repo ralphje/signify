@@ -31,6 +31,8 @@ root_dir = pathlib.Path(__file__).parent
 
 
 class FingerPrinterTestCase(unittest.TestCase):
+    maxDiff = None
+
     def test_entire_blobs(self):
         for filename in (root_dir / "test_data").iterdir():
             if str(filename).endswith(".res") or str(filename).endswith("README.rst"):
@@ -50,7 +52,7 @@ class FingerPrinterTestCase(unittest.TestCase):
                 with open(str(filename) + ".res", "r") as res_obj:
                     expected_results = json.load(res_obj)
 
-                self.assertEqual(results, expected_results)
+                self.assertDictEqual(expected_results, results)
 
     def test_reasonable_interval(self):
         # Check if the limit on maximum blocksize for processing still holds.

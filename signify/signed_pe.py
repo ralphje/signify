@@ -134,7 +134,7 @@ class SignedPEFile(object):
         location['checksum'] = RelRange(optional_header_offset + 64, 4)
 
         # Read the RVA
-        if optional_header_size + optional_header_size < rva_base + 4:
+        if optional_header_offset + optional_header_size < rva_base + 4:
             logger.debug("The PE Optional Header size can not accommodate for the NumberOfRvaAndSizes field")
             return location
         self.file.seek(rva_base, os.SEEK_SET)
@@ -261,6 +261,7 @@ class SignedPEFile(object):
 
 
 def main(*filenames):
+    logging.basicConfig(level=logging.DEBUG)
     for filename in filenames:
         print("{}:".format(filename))
         with open(filename, "rb") as file_obj:

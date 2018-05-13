@@ -155,7 +155,8 @@ class SignedData(object):
         if 'crls' in self.data and self.data['crls'].isValue:
             raise AuthenticodeParseError("SignedData.crls is present, but that is unexpected.")
 
-    def verify(self, expected_hash=None, verification_context=None, cs_verification_context=None):
+    def verify(self, expected_hash=None, verification_context=None, cs_verification_context=None,
+               verification_context_kwargs={}):
         """Verifies the SignedData structure:
 
         * Verifies that the digest algorithms match across the structure
@@ -174,9 +175,13 @@ class SignedData(object):
 
         :param bytes expected_hash: The expected hash digest of the :class:`SignedPEFile`.
         :param VerificationContext verification_context: The VerificationContext for verifying the chain of the
-            :class:`SignerInfo`. The timestamp is overridden in the case of a countersigner.
+            :class:`SignerInfo`. The timestamp is overridden in the case of a countersigner. Default stores are
+            TRUSTED_CERTIFICATE_STORE and the certificates of this :class:`SignedData` object. EKU is code_signing
         :param VerificationContext cs_verification_context: The VerificationContext for verifying the chain of the
-            :class:`CounterSignerInfo`. The timestamp is overridden in the case of a countersigner.
+            :class:`CounterSignerInfo`. The timestamp is overridden in the case of a countersigner. Default stores are
+            TRUSTED_CERTIFICATE_STORE and the certificates of this :class:`SignedData` object. EKU is time_stamping
+        :param dict verification_context_kwargs: If provided, keyword arguments that are passed to the instantiation of
+            :class:`VerificationContext`s created in this function. Used for e.g. providing a timestamp.
         :raises AuthenticodeVerificationError: when the verification failed
         :return: :const:`None`
         """
@@ -221,12 +226,14 @@ class SignedData(object):
 
         if verification_context is None:
             verification_context = VerificationContext(TRUSTED_CERTIFICATE_STORE, self.certificates,
-                                                       extended_key_usages=['code_signing'])
+                                                       extended_key_usages=['code_signing'],
+                                                       **verification_context_kwargs)
 
         if self.signer_info.countersigner:
             if cs_verification_context is None:
                 cs_verification_context = VerificationContext(TRUSTED_CERTIFICATE_STORE, self.certificates,
-                                                              extended_key_usages=['time_stamping'])
+                                                              extended_key_usages=['time_stamping'],
+                                                              **verification_context_kwargs)
             cs_verification_context.timestamp = self.signer_info.countersigner.signing_time
 
             self.signer_info.countersigner.verify(cs_verification_context)

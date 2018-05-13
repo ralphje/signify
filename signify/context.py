@@ -74,7 +74,7 @@ class VerificationContext(object):
             but setting to True does reduce the reliability of the verification.
         """
 
-        self.stores = stores
+        self.stores = list(stores)
 
         if timestamp is None:
             timestamp = datetime.datetime.now(datetime.timezone.utc)
