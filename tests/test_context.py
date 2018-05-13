@@ -20,7 +20,7 @@ class ContextTestCase(unittest.TestCase):
             for signed_data in pefile.signed_datas:
                 context = VerificationContext(TRUSTED_CERTIFICATE_STORE, signed_data.certificates)
                 potential_chains = list(signed_data.signer_info.potential_chains(context))
-                self.assertEqual(len(potential_chains), 3)  # TODO: should be two, since there is one duplicate
+                self.assertEqual(len(potential_chains), 2)
                 # for chain in potential_chains:
                 #    print("xxxx")
                 #    for cert in chain:

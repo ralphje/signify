@@ -103,6 +103,7 @@ class VerificationContext(object):
         :rtype: Iterable[Certificate]
         """
 
+        seen_certs = []
         for certificate in self.certificates:
             if subject is not None and certificate.subject != subject:
                 continue
@@ -110,6 +111,9 @@ class VerificationContext(object):
                 continue
             if issuer is not None and certificate.issuer != issuer:
                 continue
+            if certificate in seen_certs:
+                continue
+            seen_certs.append(certificate)
             yield certificate
 
     def potential_chains(self, certificate, depth=10):
@@ -190,6 +194,6 @@ class VerificationContext(object):
         """
 
         for store in self.stores:
-            if certificate in store and store.trusted:
+            if store.trusted and certificate in store:
                 return True
         return False
