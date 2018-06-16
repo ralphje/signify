@@ -40,7 +40,7 @@ from . import asn1
 
 logger = logging.getLogger(__name__)
 
-ACCEPTED_DIGEST_ALGORITHMS = (hashlib.md5, hashlib.sha1)
+ACCEPTED_DIGEST_ALGORITHMS = (hashlib.md5, hashlib.sha1, hashlib.sha256)
 CERTIFICATE_LOCATION = pathlib.Path(__file__).resolve().parent / "certs" / "authenticode"
 TRUSTED_CERTIFICATE_STORE = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True)
 

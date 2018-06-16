@@ -30,6 +30,7 @@ OID_TO_CLASS = {
     (1, 2, 840, 113549, 1, 7, 2): pkcs7.SignedData,
     (1, 2, 840, 113549, 2, 5): hashlib.md5,
     (1, 3, 14, 3, 2, 26): hashlib.sha1,
+    (2, 16, 840, 1, 101, 3, 4, 2, 1): hashlib.sha256,
     (1, 3, 6, 1, 4, 1, 311, 2, 1, 4): spc.SpcIndirectDataContent,
     (1, 2, 840, 113549, 1, 9, 3): pkcs7.ContentType,
     (1, 2, 840, 113549, 1, 9, 4): pkcs7.Digest,
