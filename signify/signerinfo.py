@@ -19,11 +19,13 @@ def _verify_empty_algorithm_parameters(algorithm, location):
             raise ParseError("%s has parameters set, which is unexpected" % (location,))
 
 
-def _get_digest_algorithm(algorithm, location):
+def _get_digest_algorithm(algorithm, location, acceptable=ACCEPTED_DIGEST_ALGORITHMS):
     result = asn1.oids.get(algorithm['algorithm'])
-    if result not in ACCEPTED_DIGEST_ALGORITHMS:
-        raise ParseError("%s must be one of %s, not %s" %
-                         (location, [x().name for x in ACCEPTED_DIGEST_ALGORITHMS], result().name))
+    if result not in acceptable:
+        if not callable(result) or not hasattr(result(), 'name'):
+            raise ParseError("%s must be one of %s, not %s" % (location, [x().name for x in acceptable], result))
+        else:
+            raise ParseError("%s must be one of %s, not %s" % (location, [x().name for x in acceptable], result().name))
 
     _verify_empty_algorithm_parameters(algorithm, location)
     return result
