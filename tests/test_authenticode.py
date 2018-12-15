@@ -113,6 +113,19 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             pefile.verify(verification_context_kwargs=
                           {'timestamp': datetime.datetime(2013, 1, 1, tzinfo=datetime.timezone.utc)})
 
+    def test_sw_reporter(self):
+        """
+        Test for SHA256 hashes used in sig
+        :return:
+        """
+        with open(str(root_dir / "test_data" / "software_reporter_tool.exe"), "rb") as f:
+            pefile = SignedPEFile(f)
+            signed_datas = list(pefile.signed_datas)
+            self.assertEqual(len(signed_datas), 1)
+            signed_data = signed_datas[0]
+            signed_data.verify()
+            pefile.verify()
+
 
 class CertificateTestCase(unittest.TestCase):
     def test_all_trusted_certificates_are_trusted(self):

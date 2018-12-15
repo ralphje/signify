@@ -25,7 +25,6 @@
 .. _Authenticode_PE: http://download.microsoft.com/download/9/c/5/9c5b2167-8017-4bae-9fde-d599bac8184a/Authenticode_PE.docx
 """
 
-import hashlib
 import logging
 import pathlib
 
@@ -35,12 +34,11 @@ from signify.asn1 import guarded_ber_decode
 from signify.certificates import Certificate
 from signify.context import CertificateStore, VerificationContext, FileSystemCertificateStore
 from signify.exceptions import AuthenticodeParseError, AuthenticodeVerificationError
-from signify.signerinfo import _get_digest_algorithm, SignerInfo, CounterSignerInfo
+from signify.signerinfo import _get_digest_algorithm, SignerInfo, CounterSignerInfo, ACCEPTED_DIGEST_ALGORITHMS
 from . import asn1
 
 logger = logging.getLogger(__name__)
 
-ACCEPTED_DIGEST_ALGORITHMS = (hashlib.md5, hashlib.sha1, hashlib.sha256)
 CERTIFICATE_LOCATION = pathlib.Path(__file__).resolve().parent / "certs" / "authenticode"
 TRUSTED_CERTIFICATE_STORE = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True)
 

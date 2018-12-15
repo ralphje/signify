@@ -9,7 +9,7 @@ from signify.exceptions import VerificationError, SignerInfoParseError, \
     SignerInfoVerificationError, ParseError
 from . import asn1, _print_type
 
-ACCEPTED_DIGEST_ALGORITHMS = (hashlib.md5, hashlib.sha1)
+ACCEPTED_DIGEST_ALGORITHMS = (hashlib.md5, hashlib.sha1, hashlib.sha256)
 
 
 def _verify_empty_algorithm_parameters(algorithm, location):
