@@ -22,10 +22,8 @@ def _verify_empty_algorithm_parameters(algorithm, location):
 def _get_digest_algorithm(algorithm, location, acceptable=ACCEPTED_DIGEST_ALGORITHMS):
     result = asn1.oids.get(algorithm['algorithm'])
     if result not in acceptable:
-        if not callable(result) or not hasattr(result(), 'name'):
-            raise ParseError("%s must be one of %s, not %s" % (location, [x().name for x in acceptable], result))
-        else:
-            raise ParseError("%s must be one of %s, not %s" % (location, [x().name for x in acceptable], result().name))
+        raise ParseError("%s must be one of %s, not %s" % (location, [x().name for x in acceptable],
+                                                           _print_type(result)))
 
     _verify_empty_algorithm_parameters(algorithm, location)
     return result
