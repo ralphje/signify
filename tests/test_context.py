@@ -10,7 +10,7 @@ root_dir = pathlib.Path(__file__).parent
 
 class TrustedStoreTestCase(unittest.TestCase):
     def test_amount_of_certificates(self):
-        self.assertEqual(len(TRUSTED_CERTIFICATE_STORE), 13)
+        self.assertGreaterEqual(len(TRUSTED_CERTIFICATE_STORE), 40)
 
 
 class ContextTestCase(unittest.TestCase):
@@ -25,7 +25,3 @@ class ContextTestCase(unittest.TestCase):
                 #    print("xxxx")
                 #    for cert in chain:
                 #        print(cert)
-
-
-
-

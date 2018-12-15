@@ -35,7 +35,7 @@ from signify.certificates import Certificate
 from signify.context import CertificateStore, VerificationContext, FileSystemCertificateStore
 from signify.exceptions import AuthenticodeParseError, AuthenticodeVerificationError
 from signify.signerinfo import _get_digest_algorithm, SignerInfo, CounterSignerInfo, ACCEPTED_DIGEST_ALGORITHMS
-from . import asn1
+from signify import asn1
 
 logger = logging.getLogger(__name__)
 
@@ -242,3 +242,9 @@ class SignedData(object):
             verification_context.timestamp = self.signer_info.countersigner.signing_time
 
         self.signer_info.verify(verification_context)
+
+
+if __name__ == "__main__":
+    print("This is a list of all certificates in the Authenticode trust store, ordered by expiration date")
+    for i, certificate in enumerate(sorted(TRUSTED_CERTIFICATE_STORE, key=lambda x: x.valid_to), start=1):
+        print(i, certificate.valid_to, certificate)
