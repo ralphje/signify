@@ -6,7 +6,10 @@ def guarded_ber_decode(data, asn1_spec=None):
     from signify.exceptions import ParseError
     from signify import _print_type
 
-    result, rest = ber_decoder.decode(data, asn1Spec=asn1_spec)
+    try:
+        result, rest = ber_decoder.decode(data, asn1Spec=asn1_spec)
+    except Exception as e:
+        raise ParseError("Error while parsing %s BER: %s" % (_print_type(asn1_spec), e))
     if rest:
         raise ParseError("Extra information after parsing %s BER" % _print_type(asn1_spec))
     return result

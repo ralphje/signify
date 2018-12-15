@@ -21,11 +21,13 @@
 import unittest
 
 import datetime
-from pyasn1.type import useful
+from pyasn1.type import useful, univ
 
+from signify.asn1 import guarded_ber_decode
 from signify.asn1.x509_time import Time
 from signify.authenticode import CERTIFICATE_LOCATION
 from signify.certificates import Certificate
+from signify.exceptions import ParseError
 
 
 class TimeTest(unittest.TestCase):
@@ -79,3 +81,15 @@ class RDNSequenceTest(unittest.TestCase):
                                   ('OU', 'VeriSign, Inc.'),
                                   ('O', 'VeriSign Trust Network')])
 
+
+class GuardedBerDecodeTest(unittest.TestCase):
+    def test_normal_read(self):
+        self.assertTrue(guarded_ber_decode(univ.Any("\x01\x01\xff")))  # true
+        self.assertFalse(guarded_ber_decode(univ.Any("\x01\x01\x00")))  # false
+        self.assertIsInstance(guarded_ber_decode(univ.Any("\x05\x00")), univ.Null)  # null
+
+    def test_extra_read(self):
+        self.assertRaises(ParseError, guarded_ber_decode, univ.Any("\x05\x00\x01"))
+
+    def test_read_error(self):
+        self.assertRaises(ParseError, guarded_ber_decode, univ.Any("\x05"))
