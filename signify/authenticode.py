@@ -217,7 +217,8 @@ class SignedData(object):
 
         # 3. Check the countersigner hash.
         if self.signer_info.countersigner:
-            auth_attr_hash = self.digest_algorithm(self.signer_info.encrypted_digest).digest()
+            # Make sure to use the same digest_algorithm that the countersigner used
+            auth_attr_hash = self.signer_info.countersigner.digest_algorithm(self.signer_info.encrypted_digest).digest()
             if auth_attr_hash != self.signer_info.countersigner.message_digest:
                 raise AuthenticodeVerificationError('The expected hash of the encryptedDigest does not match '
                                                     'countersigner\'s SignerInfo')
