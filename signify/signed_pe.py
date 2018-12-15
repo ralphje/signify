@@ -177,10 +177,17 @@ class SignedPEFile(object):
 
         position = locations['certtable'].start
         while position < sum(locations['certtable']):
+            # check if this position is viable, we need at least 8 bytes for our header
+            if position + 8 > self._filelength:
+                continue
             self.file.seek(position, os.SEEK_SET)
             length = struct.unpack('<I', self.file.read(4))[0]
             revision = struct.unpack('<H', self.file.read(2))[0]
             certificate_type = struct.unpack('<H', self.file.read(2))[0]
+
+            # check if we are not going to perform a negative read (and 0 bytes is weird as well)
+            if length <= 8:
+                continue
             certificate = self.file.read(length - 8)
 
             yield {'revision': revision, 'type': certificate_type, 'certificate': certificate}
