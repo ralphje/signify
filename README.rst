@@ -7,7 +7,7 @@ Signify
 .. image:: https://readthedocs.org/projects/signify/badge/?version=latest
     :target: http://signify.readthedocs.io/en/latest/?badge=latest
 
-Signify, a portmanteau of *signature* and *verify*, is a Python module that computers and validates signatures.
+Signify, a portmanteau of *signature* and *verify*, is a Python module that computes and validates signatures.
 At this point it is mostly a library that verifies PE Authenticode-signed binaries.
 
 This module is a forked from Google's ``verify_sigs`` module, updated to fit
