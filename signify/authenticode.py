@@ -55,7 +55,7 @@ class AuthenticodeSignerInfo(SignerInfo):
 
     _countersigner_class = AuthenticodeCounterSignerInfo
     _expected_content_type = asn1.spc.SpcIndirectDataContent
-    _required_authenticated_attributes = (asn1.pkcs7.ContentType, asn1.pkcs7.Digest, asn1.spc.SpcSpOpusInfo)
+    _required_authenticated_attributes = (asn1.pkcs7.ContentType, asn1.pkcs7.Digest)
 
     def _parse(self):
         super()._parse()
