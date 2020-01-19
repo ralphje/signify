@@ -89,8 +89,8 @@ class SignerInfo(object):
 
             if self._expected_content_type is not None and self.content_type is not self._expected_content_type:
                 raise SignerInfoParseError("Unexpected content type for SignerInfo, expected %s, got %s" %
-                                            (_print_type(self.content_type),
-                                             _print_type(self._expected_content_type)))
+                                            (_print_type(self._expected_content_type),
+                                             _print_type(self.content_type)))
 
         # - The signingTime (used by countersigner)
         self.signing_time = None
