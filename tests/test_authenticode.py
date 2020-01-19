@@ -126,6 +126,12 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             signed_data.verify()
             pefile.verify()
 
+    def test_7z1900_invalid(self):
+        # This tests against CVE-2020-0601
+        with open(str(root_dir / "test_data" / "7z1900-x64_signed.exe"), "rb") as f:
+            pefile = SignedPEFile(f)
+            self.assertRaises(VerificationError, pefile.verify)
+
 
 class CertificateTestCase(unittest.TestCase):
     def test_all_trusted_certificates_are_trusted(self):
