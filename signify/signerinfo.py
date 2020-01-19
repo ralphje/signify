@@ -41,6 +41,7 @@ def _get_encryption_algorithm(algorithm, location):
 class SignerInfo(object):
     _countersigner_class = "CounterSignerInfo"
     _required_authenticated_attributes = (asn1.pkcs7.ContentType, asn1.pkcs7.Digest)
+    _expected_content_type = None
 
     def __init__(self, data):
         """The Authenticode's SignerInfo structure.
@@ -240,5 +241,3 @@ class SignerInfo(object):
 
 class CounterSignerInfo(SignerInfo):
     _required_authenticated_attributes = (asn1.pkcs7.ContentType, asn1.pkcs7.SigningTime, asn1.pkcs7.Digest)
-    _expected_content_type = asn1.pkcs7.Data
-

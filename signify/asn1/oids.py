@@ -34,7 +34,7 @@ OID_TO_CLASS = {
     (1, 3, 6, 1, 4, 1, 311, 2, 1, 4): spc.SpcIndirectDataContent,
     (1, 2, 840, 113549, 1, 9, 3): pkcs7.ContentType,
     (1, 2, 840, 113549, 1, 9, 4): pkcs7.Digest,
-    (1, 3, 6, 1, 4, 1, 311, 2, 1, 11): spc.SpcStatementType,  # TODO: test and verify
+    # (1, 3, 6, 1, 4, 1, 311, 2, 1, 11): spc.SpcStatementType,  # TODO: test and verify
     (1, 3, 6, 1, 4, 1, 311, 2, 1, 12): spc.SpcSpOpusInfo,
     (1, 2, 840, 113549, 1, 9, 6): pkcs7.CountersignInfo,  # 'RSA_counterSign'
     (1, 2, 840, 113549, 1, 9, 5): pkcs7.SigningTime,
