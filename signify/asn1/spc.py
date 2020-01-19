@@ -100,3 +100,7 @@ class SpcSpOpusInfo(univ.Sequence):
             explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatConstructed, 1)
         ))
     )
+
+
+class SpcStatementType(univ.Sequence):
+    componentType = univ.ObjectIdentifier()

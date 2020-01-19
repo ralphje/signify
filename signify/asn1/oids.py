@@ -34,6 +34,7 @@ OID_TO_CLASS = {
     (1, 3, 6, 1, 4, 1, 311, 2, 1, 4): spc.SpcIndirectDataContent,
     (1, 2, 840, 113549, 1, 9, 3): pkcs7.ContentType,
     (1, 2, 840, 113549, 1, 9, 4): pkcs7.Digest,
+    (1, 3, 6, 1, 4, 1, 311, 2, 1, 11): spc.SpcStatementType,  # TODO: test and verify
     (1, 3, 6, 1, 4, 1, 311, 2, 1, 12): spc.SpcSpOpusInfo,
     (1, 2, 840, 113549, 1, 9, 6): pkcs7.CountersignInfo,  # 'RSA_counterSign'
     (1, 2, 840, 113549, 1, 9, 5): pkcs7.SigningTime,
@@ -43,7 +44,12 @@ OID_TO_PUBKEY = {
     (1, 2, 840, 113549, 1, 1, 1): 'rsa',
     (1, 2, 840, 113549, 1, 1, 5): 'rsa-sha1',
     (1, 2, 840, 10040, 4, 1): 'dsa',
+    (1, 2, 840, 10040, 4, 3): 'dsa-sha1',
     (1, 2, 840, 10045, 4, 1): 'ecdsa-sha1',
+    (1, 2, 840, 10045, 4, 3, 1): 'ecdsa-sha224',
+    (1, 2, 840, 10045, 4, 3, 2): 'ecdsa-sha256',
+    (1, 2, 840, 10045, 4, 3, 3): 'ecdsa-sha384',
+    (1, 2, 840, 10045, 4, 3, 4): 'ecdsa-sha512',
 }
 
 OID_TO_RDN = {
