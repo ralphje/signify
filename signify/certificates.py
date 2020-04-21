@@ -68,7 +68,7 @@ class Certificate(object):
         self.valid_to = time_to_python(tbs_certificate['validity']['notAfter'])
         self.subject = tbs_certificate['subject'][0]
         self.subject_dn = rdn_to_string(tbs_certificate['subject'][0])
-        self.subject_rdns = list(rdn_get_components(tbs_certificate['issuer'][0]))
+        self.subject_rdns = list(rdn_get_components(tbs_certificate['subject'][0]))
 
         self.subject_public_algorithm = tbs_certificate['subjectPublicKeyInfo']['algorithm']
         self.subject_public_key = tbs_certificate['subjectPublicKeyInfo']['subjectPublicKey']
