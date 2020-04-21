@@ -29,13 +29,15 @@ import logging
 import pathlib
 
 from pyasn1.codec.ber import decoder as ber_decoder
+from pyasn1.codec.der import decoder as der_decoder
 from pyasn1_modules import rfc3161, rfc2315, rfc5652
 
 from signify.asn1 import guarded_ber_decode, guarded_der_decode, pkcs7
+from signify.asn1.helpers import accuracy_to_python, rdn_to_string
 from signify.certificates import Certificate
 from signify.context import CertificateStore, VerificationContext, FileSystemCertificateStore
 from signify.exceptions import AuthenticodeParseError, AuthenticodeVerificationError
-from signify.signerinfo import _get_digest_algorithm, SignerInfo, CounterSignerInfo, ACCEPTED_DIGEST_ALGORITHMS
+from signify.signerinfo import _get_digest_algorithm, SignerInfo, CounterSignerInfo
 from signify import asn1
 
 logger = logging.getLogger(__name__)
@@ -48,7 +50,6 @@ class AuthenticodeCounterSignerInfo(CounterSignerInfo):
     """Subclass of CounterSignerInfo that is used to contain the countersignerinfo for Authenticode."""
 
     _required_authenticated_attributes = (rfc2315.ContentType, rfc5652.SigningTime, rfc2315.Digest)
-    _expected_content_type = asn1.pkcs7.Data
 
 
 class AuthenticodeSignerInfo(SignerInfo):
@@ -69,6 +70,26 @@ class AuthenticodeSignerInfo(SignerInfo):
 
             self.program_name = self.authenticated_attributes[asn1.spc.SpcSpOpusInfo][0]['programName'].to_python()
             self.more_info = self.authenticated_attributes[asn1.spc.SpcSpOpusInfo][0]['moreInfo'].to_python()
+
+        # - Authenticode can be signed using a RFC-3161 timestamp, so we discover this possibility here
+        if pkcs7.Countersignature in self.unauthenticated_attributes \
+                and asn1.spc.SpcRfc3161Timestamp in self.unauthenticated_attributes:
+            raise AuthenticodeParseError("Countersignature and RFC-3161 timestamp present in "
+                                         "SignerInfo.unauthenticatedAttributes")
+
+        if asn1.spc.SpcRfc3161Timestamp in self.unauthenticated_attributes:
+            if len(self.unauthenticated_attributes[asn1.spc.SpcRfc3161Timestamp]) != 1:
+                raise AuthenticodeParseError("Only one RFC-3161 timestamp expected in "
+                                             "SignerInfo.unauthenticatedAttributes")
+
+            ts_data = self.unauthenticated_attributes[asn1.spc.SpcRfc3161Timestamp][0]
+            content_type = asn1.oids.get(ts_data['contentType'])
+            if content_type is not rfc2315.SignedData:
+                raise AuthenticodeParseError("RFC-3161 Timestamp does not contain SignedData structure")
+            # Note that we expect rfc5652 compatible data here
+            signed_data = guarded_ber_decode(ts_data['content'],
+                                             asn1_spec=rfc5652.SignedData())
+            self.countersigner = RFC3161SignedData(signed_data)
 
 
 class SpcInfo(object):
@@ -231,7 +252,11 @@ class SignedData(object):
 
         if self.signer_info.countersigner:
             if cs_verification_context is None:
-                cs_verification_context = VerificationContext(TRUSTED_CERTIFICATE_STORE, self.certificates,
+                stores = (TRUSTED_CERTIFICATE_STORE, self.certificates)
+                # Add the local certificate store for the countersignature
+                if hasattr(self.signer_info.countersigner, 'certificates'):
+                    stores += (self.signer_info.countersigner.certificates, )
+                cs_verification_context = VerificationContext(*stores,
                                                               extended_key_usages=['time_stamping'],
                                                               **verification_context_kwargs)
             cs_verification_context.timestamp = self.signer_info.countersigner.signing_time
@@ -243,6 +268,88 @@ class SignedData(object):
             verification_context.timestamp = self.signer_info.countersigner.signing_time
 
         self.signer_info.verify(verification_context)
+
+
+class RFC3161SignedData:
+    def __init__(self, data):
+        """Some samples have shown to include a RFC-3161 countersignature in the unauthenticated attributes
+        (as OID 1.3.6.1.4.1.311.3.3.1, which is in the Microsoft private namespace). This attribute contains its own
+        signed data structure.
+
+        :param asn1.pkcs7.SignedData data: The ASN.1 structure of the SignedData object
+        """
+
+        self.data = data
+        self._parse()
+
+    def _parse(self):
+        # digestAlgorithms
+        if len(self.data['digestAlgorithms']) != 1:
+            raise AuthenticodeParseError("RFC3161 SignedData.digestAlgorithms must contain exactly 1 algorithm, not "
+                                         "%d" % len(self.data['digestAlgorithms']))
+        self.digest_algorithm = _get_digest_algorithm(self.data['digestAlgorithms'][0], "SignedData.digestAlgorithm")
+
+        # Get the tst_info
+        self.content_type = asn1.oids.get(self.data['encapContentInfo']['eContentType'])
+        if self.content_type is not rfc3161.TSTInfo:
+            raise AuthenticodeParseError("RFC3161 SignedData.contentInfo does not contain TSTInfo")
+
+        self.tst_info = guarded_der_decode(self.data['encapContentInfo']['eContent'], asn1_spec=rfc3161.TSTInfo())
+
+        if self.tst_info['version'] != 1:
+            raise AuthenticodeParseError("TSTInfo.version must be 1, not %d" % self.data['version'])
+
+        self.policy = self.tst_info['policy']  # TODO
+        self.hash_algorithm = _get_digest_algorithm(self.tst_info['messageImprint']['hashAlgorithm'],
+                                                    location="TSTInfo.messageImprint.hashAlgorithm")
+        self.message_digest = bytes(self.tst_info['messageImprint']['hashedMessage'])
+        self.serial_number = self.tst_info['serialNumber']
+        self.signing_time = self.tst_info['genTime'].asDateTime
+        self.signing_time_accuracy = accuracy_to_python(self.tst_info['accuracy'])
+        self.signing_authority = self.tst_info['tsa']['directoryName']['rdnSequence']
+        self.signing_authority_dn = rdn_to_string(self.tst_info['tsa']['directoryName']['rdnSequence'])
+
+        # Certificates
+        self.certificates = CertificateStore([Certificate(cert) for cert in self.data['certificates']])
+
+        # signerInfos
+        if len(self.data['signerInfos']) != 1:
+            raise AuthenticodeParseError("RFC3161 SignedData.signerInfos must contain exactly 1 signer, not %d" %
+                                         len(self.data['signerInfos']))
+
+        self.signer_info = RFC3161SignerInfo(self.data['signerInfos'][0])
+
+    def verify(self, context=None):
+        """Verifies the RFC3161 SignedData object. The context that is passed in must account for the certificate
+        store of this object, or be left None.
+        """
+
+        # Verify that the two digest algorithms are identical
+        if self.digest_algorithm != self.hash_algorithm:
+            raise AuthenticodeVerificationError("SignedData.digestAlgorithm must equal "
+                                                "TstInfo.messageImprint.hashAlgorithm")
+
+        # We should ensure that the hash in the SignerInfo matches the hash of the content
+        # This is similar to the normal verification process, where the SpcInfo is verified
+        # Note that the mapping between the RFC3161 SignedData object is ensured by the verifier in SignedData
+        blob_hash = self.digest_algorithm(bytes(self.data['encapContentInfo']['eContent'])).digest()
+        if blob_hash != self.signer_info.message_digest:
+            raise AuthenticodeVerificationError('The expected hash of the TstInfo does not match SignerInfo')
+
+        if context is None:
+            context = VerificationContext(TRUSTED_CERTIFICATE_STORE, self.certificates,
+                                          extended_key_usages=['time_stamping'])
+
+        # The context is set correctly by the 'verify' function, including the current certificate store
+        self.signer_info.verify(context)
+
+
+class RFC3161SignerInfo(SignerInfo):
+    """Subclass of SignerInfo that is used to contain the signerinfo for the RFC3161SignedData option."""
+
+    _expected_content_type = rfc3161.TSTInfo
+    _required_authenticated_attributes = (rfc2315.ContentType, rfc2315.Digest)
+    _countersigner_class = None  # prevent countersigners in here
 
 
 if __name__ == "__main__":

@@ -97,19 +97,19 @@ class VerificationContext(object):
         """Finds all certificates given by the specified properties. A property can be omitted by specifying
         :const:`None`. Calling this function without arguments is the same as using :meth:`certificates`
 
-        :param signify.asn1.x509.Name subject: Certificate subject to look for.
+        :param list subject: Certificate subject to look for, as a list of RDNs
         :param int serial_number: Serial number to look for.
-        :param signify.asn1.x509.Name issuer: Certificate issuer to look for.
+        :param list issuer: Certificate issuer to look for, as a list of RDNs
         :rtype: Iterable[Certificate]
         """
 
         seen_certs = []
         for certificate in self.certificates:
-            if subject is not None and certificate.subject != subject:
+            if subject is not None and certificate.subject_rdns != subject:
                 continue
             if serial_number is not None and certificate.serial_number != serial_number:
                 continue
-            if issuer is not None and certificate.issuer != issuer:
+            if issuer is not None and certificate.issuer_rdns != issuer:
                 continue
             if certificate in seen_certs:
                 continue
@@ -138,7 +138,7 @@ class VerificationContext(object):
         elif depth <= 0:
             return
 
-        for candidate in self.find_certificates(subject=certificate.issuer):
+        for candidate in self.find_certificates(subject=certificate.issuer_rdns):
             for chain in self.potential_chains(candidate, depth=depth-1):
                 # prevent recursion on itself
                 if certificate in chain:

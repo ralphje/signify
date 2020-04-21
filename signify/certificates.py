@@ -8,7 +8,7 @@ from pyasn1.codec.der import decoder as der_decoder
 from pyasn1_modules import rfc5652, rfc5280, rfc2315
 
 from . import asn1
-from .asn1.helpers import rdn_to_string, time_to_python
+from .asn1.helpers import rdn_to_string, time_to_python, rdn_get_components
 from .exceptions import CertificateVerificationError
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,6 @@ class Certificate(object):
         self._parse()
 
     def _parse(self):
-        print(type(self.data))
         if isinstance(self.data, rfc5652.CertificateChoices):
             if 'certificate' not in self.data:
                 # TODO: Not sure if needed.
@@ -64,10 +63,12 @@ class Certificate(object):
         self.serial_number = int(tbs_certificate['serialNumber'])
         self.issuer = tbs_certificate['issuer'][0]
         self.issuer_dn = rdn_to_string(tbs_certificate['issuer'][0])
+        self.issuer_rdns = list(rdn_get_components(tbs_certificate['issuer'][0]))
         self.valid_from = time_to_python(tbs_certificate['validity']['notBefore'])
         self.valid_to = time_to_python(tbs_certificate['validity']['notAfter'])
         self.subject = tbs_certificate['subject'][0]
         self.subject_dn = rdn_to_string(tbs_certificate['subject'][0])
+        self.subject_rdns = list(rdn_get_components(tbs_certificate['issuer'][0]))
 
         self.subject_public_algorithm = tbs_certificate['subjectPublicKeyInfo']['algorithm']
         self.subject_public_key = tbs_certificate['subjectPublicKeyInfo']['subjectPublicKey']
@@ -82,9 +83,9 @@ class Certificate(object):
 
     def __eq__(self, other):
         return isinstance(other, Certificate) and \
-               self.issuer == other.issuer and \
+               self.issuer_rdns == other.issuer_rdns and \
                self.serial_number == other.serial_number and \
-               self.subject == other.subject and \
+               self.subject_rdns == other.subject_rdns and \
                self.subject_public_algorithm == other.subject_public_algorithm and \
                self.subject_public_key == other.subject_public_key
 

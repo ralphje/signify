@@ -137,6 +137,11 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             pefile = SignedPEFile(f)
             pefile.verify()
 
+    def test_solwarwinds_valid(self):
+        with open(str(root_dir / "test_data" / "SolarWinds.exe"), "rb") as f:
+            pefile = SignedPEFile(f)
+            pefile.verify()
+
 
 class CertificateTestCase(unittest.TestCase):
     def test_all_trusted_certificates_are_trusted(self):
