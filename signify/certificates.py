@@ -5,8 +5,10 @@ import asn1crypto.x509
 from oscrypto import asymmetric
 from pyasn1.codec.der import encoder as der_encoder
 from pyasn1.codec.der import decoder as der_decoder
+from pyasn1_modules import rfc5652, rfc5280, rfc2315
 
 from . import asn1
+from .asn1.helpers import rdn_to_string, time_to_python
 from .exceptions import CertificateVerificationError
 
 logger = logging.getLogger(__name__)
@@ -24,20 +26,35 @@ class Certificate(object):
         self._parse()
 
     def _parse(self):
-        if isinstance(self.data, asn1.pkcs7.ExtendedCertificateOrCertificate):
+        print(type(self.data))
+        if isinstance(self.data, rfc5652.CertificateChoices):
+            if 'certificate' not in self.data:
+                # TODO: Not sure if needed.
+                raise NotImplementedError("Support for certificate is not implemented")
+
+            certificate = self.data['certificate']
+            self.signature_algorithm = certificate['signatureAlgorithm']
+            self.signature_value = certificate['signatureValue'] \
+                if 'signatureValue' in certificate else certificate['signature']
+            tbs_certificate = certificate['tbsCertificate']
+
+        elif isinstance(self.data, (rfc2315.ExtendedCertificateOrCertificate,
+                                    rfc5652.ExtendedCertificateOrCertificate)):
             if 'extendedCertificate' in self.data:
                 # TODO: Not sure if needed.
                 raise NotImplementedError("Support for extendedCertificate is not implemented")
 
             certificate = self.data['certificate']
             self.signature_algorithm = certificate['signatureAlgorithm']
-            self.signature_value = certificate['signatureValue']
+            self.signature_value = certificate['signatureValue'] \
+                if 'signatureValue' in certificate else certificate['signature']
             tbs_certificate = certificate['tbsCertificate']
 
-        elif isinstance(self.data, asn1.x509.Certificate):
+        elif isinstance(self.data, (rfc2315.Certificate, rfc5280.Certificate)):
             certificate = self.data
             self.signature_algorithm = certificate['signatureAlgorithm']
-            self.signature_value = certificate['signatureValue']
+            self.signature_value = certificate['signatureValue'] \
+                if 'signatureValue' in certificate else certificate['signature']
             tbs_certificate = certificate['tbsCertificate']
 
         else:
@@ -46,11 +63,11 @@ class Certificate(object):
         self.version = int(tbs_certificate['version']) + 1
         self.serial_number = int(tbs_certificate['serialNumber'])
         self.issuer = tbs_certificate['issuer'][0]
-        self.issuer_dn = tbs_certificate['issuer'][0].to_string()
-        self.valid_from = tbs_certificate['validity']['notBefore'].to_python_time()
-        self.valid_to = tbs_certificate['validity']['notAfter'].to_python_time()
+        self.issuer_dn = rdn_to_string(tbs_certificate['issuer'][0])
+        self.valid_from = time_to_python(tbs_certificate['validity']['notBefore'])
+        self.valid_to = time_to_python(tbs_certificate['validity']['notAfter'])
         self.subject = tbs_certificate['subject'][0]
-        self.subject_dn = tbs_certificate['subject'][0].to_string()
+        self.subject_dn = rdn_to_string(tbs_certificate['subject'][0])
 
         self.subject_public_algorithm = tbs_certificate['subjectPublicKeyInfo']['algorithm']
         self.subject_public_key = tbs_certificate['subjectPublicKeyInfo']['subjectPublicKey']
@@ -74,7 +91,7 @@ class Certificate(object):
     @classmethod
     def from_der(cls, content):
         """Load the Certificate object from DER-encoded data"""
-        return cls(der_decoder.decode(content, asn1Spec=asn1.x509.Certificate())[0])
+        return cls(der_decoder.decode(content, asn1Spec=rfc5280.Certificate())[0])
 
     @classmethod
     def from_pem(cls, content):

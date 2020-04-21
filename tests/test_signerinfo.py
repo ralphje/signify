@@ -1,7 +1,8 @@
 import hashlib
 import unittest
 
-from signify.asn1.pkcs7 import DigestAlgorithmIdentifier
+from pyasn1_modules.rfc2315 import DigestAlgorithmIdentifier
+
 from signify.exceptions import ParseError
 from signify.signerinfo import _get_digest_algorithm
 

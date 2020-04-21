@@ -22,22 +22,25 @@
 
 import hashlib
 
-from . import pkcs7, spc
+from pyasn1_modules import rfc3161, rfc5652, rfc2315
 
+from . import pkcs7, spc
 
 OID_TO_CLASS = {
     (1, 2, 840, 113549, 1, 7, 1): pkcs7.Data,
-    (1, 2, 840, 113549, 1, 7, 2): pkcs7.SignedData,
+    (1, 2, 840, 113549, 1, 7, 2): rfc2315.SignedData,
     (1, 2, 840, 113549, 2, 5): hashlib.md5,
     (1, 3, 14, 3, 2, 26): hashlib.sha1,
     (2, 16, 840, 1, 101, 3, 4, 2, 1): hashlib.sha256,
     (1, 3, 6, 1, 4, 1, 311, 2, 1, 4): spc.SpcIndirectDataContent,
-    (1, 2, 840, 113549, 1, 9, 3): pkcs7.ContentType,
-    (1, 2, 840, 113549, 1, 9, 4): pkcs7.Digest,
+    (1, 2, 840, 113549, 1, 9, 3): rfc2315.ContentType,
+    (1, 2, 840, 113549, 1, 9, 4): rfc2315.Digest,
     # (1, 3, 6, 1, 4, 1, 311, 2, 1, 11): spc.SpcStatementType,  # TODO: test and verify
     (1, 3, 6, 1, 4, 1, 311, 2, 1, 12): spc.SpcSpOpusInfo,
-    (1, 2, 840, 113549, 1, 9, 6): pkcs7.CountersignInfo,  # 'RSA_counterSign'
-    (1, 2, 840, 113549, 1, 9, 5): pkcs7.SigningTime,
+    (1, 2, 840, 113549, 1, 9, 6): pkcs7.Countersignature,  # 'RSA_counterSign'
+    (1, 2, 840, 113549, 1, 9, 5): rfc5652.SigningTime,
+    (1, 3, 6, 1, 4, 1, 311, 3, 3, 1): spc.SpcRfc3161Timestamp,
+    (1, 2, 840, 113549, 1, 9, 16, 1, 4): rfc3161.TSTInfo,
 }
 
 OID_TO_PUBKEY = {

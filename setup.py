@@ -28,7 +28,7 @@ setup(
     author_email='ralph@ralphbroenink.net',
     description='Module to generate and verify PE signatures',
     long_description=long_description,
-    install_requires=['pyasn1>=0.4.0', 'certvalidator>=0.11', 'asn1crypto', 'oscrypto'],
+    install_requires=['pyasn1>=0.4.0', 'certvalidator>=0.11', 'asn1crypto', 'oscrypto', 'pyasn1-modules'],
     keywords=['authenticode', 'authentihash', 'fingerprinter', 'pe'],
     classifiers=[
         'Development Status :: 3 - Alpha',

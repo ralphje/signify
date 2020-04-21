@@ -3,11 +3,13 @@ import hashlib
 from pyasn1.codec.ber import decoder as ber_decoder
 from pyasn1.codec.der import encoder as der_encoder
 from pyasn1.type import univ
+from pyasn1_modules import rfc5652, rfc2315
 
-from signify.asn1 import guarded_ber_decode
+from signify.asn1 import guarded_ber_decode, pkcs7
 from signify.exceptions import VerificationError, SignerInfoParseError, \
     SignerInfoVerificationError, ParseError
 from . import asn1, _print_type
+from .asn1.helpers import rdn_to_string, time_to_python
 
 ACCEPTED_DIGEST_ALGORITHMS = (hashlib.md5, hashlib.sha1, hashlib.sha256)
 
@@ -40,7 +42,7 @@ def _get_encryption_algorithm(algorithm, location):
 
 class SignerInfo(object):
     _countersigner_class = "CounterSignerInfo"
-    _required_authenticated_attributes = (asn1.pkcs7.ContentType, asn1.pkcs7.Digest)
+    _required_authenticated_attributes = (rfc2315.ContentType, rfc2315.Digest)
     _expected_content_type = None
 
     def __init__(self, data):
@@ -58,8 +60,10 @@ class SignerInfo(object):
         if self.data['version'] != 1:
             raise SignerInfoParseError("SignerInfo.version must be 1, not %d" % self.data['version'])
 
+        print(type(self.data))
+
         self.issuer = self.data['issuerAndSerialNumber']['issuer']
-        self.issuer_dn = self.data['issuerAndSerialNumber']['issuer'][0].to_string()
+        self.issuer_dn = rdn_to_string(self.data['issuerAndSerialNumber']['issuer'][0])
         self.serial_number = self.data['issuerAndSerialNumber']['serialNumber']
 
         self.digest_algorithm = _get_digest_algorithm(self.data['digestAlgorithm'],
@@ -74,19 +78,19 @@ class SignerInfo(object):
         # Parse the content of the authenticated attributes
         # - The messageDigest
         self.message_digest = None
-        if asn1.pkcs7.Digest in self.authenticated_attributes:
-            if len(self.authenticated_attributes[asn1.pkcs7.Digest]) != 1:
+        if rfc2315.Digest in self.authenticated_attributes:
+            if len(self.authenticated_attributes[rfc2315.Digest]) != 1:
                 raise SignerInfoParseError("Only one Digest expected in SignerInfo.authenticatedAttributes")
 
-            self.message_digest = bytes(self.authenticated_attributes[asn1.pkcs7.Digest][0])
+            self.message_digest = bytes(self.authenticated_attributes[rfc2315.Digest][0])
 
         # - The contentType
         self.content_type = None
-        if asn1.pkcs7.ContentType in self.authenticated_attributes:
-            if len(self.authenticated_attributes[asn1.pkcs7.ContentType]) != 1:
+        if rfc2315.ContentType in self.authenticated_attributes:
+            if len(self.authenticated_attributes[rfc2315.ContentType]) != 1:
                 raise SignerInfoParseError("Only one ContentType expected in SignerInfo.authenticatedAttributes")
 
-            self.content_type = asn1.oids.get(self.authenticated_attributes[asn1.pkcs7.ContentType][0])
+            self.content_type = asn1.oids.get(self.authenticated_attributes[rfc2315.ContentType][0])
 
             if self._expected_content_type is not None and self.content_type is not self._expected_content_type:
                 raise SignerInfoParseError("Unexpected content type for SignerInfo, expected %s, got %s" %
@@ -95,11 +99,11 @@ class SignerInfo(object):
 
         # - The signingTime (used by countersigner)
         self.signing_time = None
-        if asn1.pkcs7.SigningTime in self.authenticated_attributes:
-            if len(self.authenticated_attributes[asn1.pkcs7.SigningTime]) != 1:
+        if rfc5652.SigningTime in self.authenticated_attributes:
+            if len(self.authenticated_attributes[rfc5652.SigningTime]) != 1:
                 raise SignerInfoParseError("Only one SigningTime expected in SignerInfo.authenticatedAttributes")
 
-            self.signing_time = self.authenticated_attributes[asn1.pkcs7.SigningTime][0].to_python_time()
+            self.signing_time = time_to_python(self.authenticated_attributes[rfc5652.SigningTime][0])
 
         # Continue with the other attributes of the SignerInfo object
         self.digest_encryption_algorithm = _get_encryption_algorithm(self.data['digestEncryptionAlgorithm'],
@@ -111,11 +115,11 @@ class SignerInfo(object):
 
         # - The countersigner
         self.countersigner = None
-        if asn1.pkcs7.CountersignInfo in self.unauthenticated_attributes:
-            if len(self.unauthenticated_attributes[asn1.pkcs7.CountersignInfo]) != 1:
+        if pkcs7.Countersignature in self.unauthenticated_attributes:
+            if len(self.unauthenticated_attributes[pkcs7.Countersignature]) != 1:
                 raise SignerInfoParseError("Only one CountersignInfo expected in SignerInfo.unauthenticatedAttributes")
 
-            self.countersigner = CounterSignerInfo(self.unauthenticated_attributes[asn1.pkcs7.CountersignInfo][0])
+            self.countersigner = CounterSignerInfo(self.unauthenticated_attributes[pkcs7.Countersignature][0])
 
     @classmethod
     def _parse_attributes(cls, data, required=()):
@@ -148,9 +152,9 @@ class SignerInfo(object):
         :param data: The authenticatedAttributes or unauthenticatedAttributes to encode
         """
         sorted_data = sorted([der_encoder.encode(i) for i in data])
-        new_attrs = asn1.pkcs7.Attributes()
+        new_attrs = rfc2315.Attributes()
         for i, attribute in enumerate(sorted_data):
-            d, _ = ber_decoder.decode(attribute, asn1Spec=asn1.pkcs7.Attribute())
+            d, _ = ber_decoder.decode(attribute, asn1Spec=rfc2315.Attribute())
             new_attrs.setComponentByPosition(i, d)
         return der_encoder.encode(new_attrs)
 
@@ -240,4 +244,4 @@ class SignerInfo(object):
 
 
 class CounterSignerInfo(SignerInfo):
-    _required_authenticated_attributes = (asn1.pkcs7.ContentType, asn1.pkcs7.SigningTime, asn1.pkcs7.Digest)
+    _required_authenticated_attributes = (rfc2315.ContentType, rfc5652.SigningTime, rfc2315.Digest)

@@ -20,25 +20,24 @@
 
 """Authenticode-specific ASN.1 data structures."""
 
-from .pkcs7 import DigestInfo
 from pyasn1.type import char
 from pyasn1.type import namedtype
 from pyasn1.type import tag
 from pyasn1.type import univ
-from . import x509
+from pyasn1_modules import rfc2459, rfc2315
 
 
 class SpcAttributeTypeAndOptionalValue(univ.Sequence):
     componentType = namedtype.NamedTypes(
-        namedtype.NamedType('type', x509.AttributeType()),
-        namedtype.OptionalNamedType('value', x509.AttributeValue())
+        namedtype.NamedType('type', rfc2459.AttributeType()),
+        namedtype.OptionalNamedType('value', rfc2459.AttributeValue())
     )
 
 
 class SpcIndirectDataContent(univ.Sequence):
     componentType = namedtype.NamedTypes(
         namedtype.NamedType('data', SpcAttributeTypeAndOptionalValue()),
-        namedtype.NamedType('messageDigest', DigestInfo()))
+        namedtype.NamedType('messageDigest', rfc2315.DigestInfo()))
 
 
 class SpcUuid(univ.OctetString):
@@ -104,3 +103,7 @@ class SpcSpOpusInfo(univ.Sequence):
 
 class SpcStatementType(univ.Sequence):
     componentType = univ.ObjectIdentifier()
+
+
+class SpcRfc3161Timestamp(rfc2315.ContentInfo):
+    pass

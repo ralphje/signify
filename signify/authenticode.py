@@ -29,8 +29,9 @@ import logging
 import pathlib
 
 from pyasn1.codec.ber import decoder as ber_decoder
+from pyasn1_modules import rfc3161, rfc2315, rfc5652
 
-from signify.asn1 import guarded_ber_decode
+from signify.asn1 import guarded_ber_decode, guarded_der_decode, pkcs7
 from signify.certificates import Certificate
 from signify.context import CertificateStore, VerificationContext, FileSystemCertificateStore
 from signify.exceptions import AuthenticodeParseError, AuthenticodeVerificationError
@@ -46,7 +47,7 @@ TRUSTED_CERTIFICATE_STORE = FileSystemCertificateStore(location=CERTIFICATE_LOCA
 class AuthenticodeCounterSignerInfo(CounterSignerInfo):
     """Subclass of CounterSignerInfo that is used to contain the countersignerinfo for Authenticode."""
 
-    _required_authenticated_attributes = (asn1.pkcs7.ContentType, asn1.pkcs7.SigningTime, asn1.pkcs7.Digest)
+    _required_authenticated_attributes = (rfc2315.ContentType, rfc5652.SigningTime, rfc2315.Digest)
     _expected_content_type = asn1.pkcs7.Data
 
 
@@ -55,7 +56,7 @@ class AuthenticodeSignerInfo(SignerInfo):
 
     _countersigner_class = AuthenticodeCounterSignerInfo
     _expected_content_type = asn1.spc.SpcIndirectDataContent
-    _required_authenticated_attributes = (asn1.pkcs7.ContentType, asn1.pkcs7.Digest)
+    _required_authenticated_attributes = (rfc2315.ContentType, rfc2315.Digest)
 
     def _parse(self):
         super()._parse()
@@ -111,11 +112,11 @@ class SignedData(object):
         :param bytes data: The bytes to parse
         """
         # This one is not guarded, which is intentional
-        content, rest = ber_decoder.decode(data, asn1Spec=asn1.pkcs7.ContentInfo())
-        if asn1.oids.get(content['contentType']) is not asn1.pkcs7.SignedData:
+        content, rest = ber_decoder.decode(data, asn1Spec=rfc2315.ContentInfo())
+        if asn1.oids.get(content['contentType']) is not rfc2315.SignedData:
             raise AuthenticodeParseError("ContentInfo does not contain SignedData")
 
-        data = guarded_ber_decode(content['content'], asn1_spec=asn1.pkcs7.SignedData())
+        data = guarded_ber_decode(content['content'], asn1_spec=rfc2315.SignedData())
 
         signed_data = SignedData(data, *args, **kwargs)
         signed_data._rest_data = rest
