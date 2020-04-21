@@ -25,7 +25,7 @@ from pyasn1.type import useful, univ
 from pyasn1_modules.rfc5652 import Time
 
 from signify.asn1 import guarded_ber_decode
-from signify.asn1.helpers import time_to_python, rdn_to_string, rdn_get_components
+from signify.asn1.helpers import time_to_python
 from signify.authenticode import CERTIFICATE_LOCATION
 from signify.certificates import Certificate
 from signify.exceptions import ParseError
@@ -50,7 +50,7 @@ class RDNSequenceTest(unittest.TestCase):
         with open(str(CERTIFICATE_LOCATION / "Microsoft Root Certificate Authority 2010.pem"), "rb") as f:
             certificate = Certificate.from_pem(f.read())
 
-        self.assertEqual(rdn_to_string(certificate.issuer),
+        self.assertEqual(certificate.issuer.dn,
                          "CN=Microsoft Root Certificate Authority 2010, O=Microsoft Corporation, "
                          "L=Redmond, ST=Washington, C=US")
 
@@ -58,7 +58,7 @@ class RDNSequenceTest(unittest.TestCase):
         with open(str(CERTIFICATE_LOCATION / "Verisign Time Stamping Service Root.pem"), "rb") as f:
             certificate = Certificate.from_pem(f.read())
 
-        self.assertEqual(rdn_to_string(certificate.issuer),
+        self.assertEqual(certificate.issuer.dn,
                          r"OU=NO LIABILITY ACCEPTED\, (c)97 VeriSign\, Inc., OU=VeriSign Time Stamping Service Root, "
                          r"OU=VeriSign\, Inc., O=VeriSign Trust Network")
 
@@ -66,17 +66,17 @@ class RDNSequenceTest(unittest.TestCase):
         with open(str(CERTIFICATE_LOCATION / "Verisign Time Stamping Service Root.pem"), "rb") as f:
             certificate = Certificate.from_pem(f.read())
 
-        result = list(rdn_get_components(certificate.issuer, "OU"))
+        result = list(certificate.issuer.get_components("OU"))
         self.assertEqual(result, ["NO LIABILITY ACCEPTED, (c)97 VeriSign, Inc.",
                                   "VeriSign Time Stamping Service Root",
                                   "VeriSign, Inc."])
-        self.assertEqual(list(rdn_get_components(certificate.issuer, "CN")), [])
+        self.assertEqual(list(certificate.issuer.get_components("CN")), [])
 
     def test_get_components_none(self):
         with open(str(CERTIFICATE_LOCATION / "Verisign Time Stamping Service Root.pem"), "rb") as f:
             certificate = Certificate.from_pem(f.read())
 
-        result = list(rdn_get_components(certificate.issuer))
+        result = certificate.issuer.rdns
         self.assertEqual(result, [('OU', 'NO LIABILITY ACCEPTED, (c)97 VeriSign, Inc.'),
                                   ('OU', 'VeriSign Time Stamping Service Root'),
                                   ('OU', 'VeriSign, Inc.'),

@@ -1,14 +1,17 @@
 import logging
+import re
 
 import asn1crypto.pem
 import asn1crypto.x509
 from oscrypto import asymmetric
 from pyasn1.codec.der import encoder as der_encoder
 from pyasn1.codec.der import decoder as der_decoder
+from pyasn1.codec.ber import decoder as ber_decoder
 from pyasn1_modules import rfc5652, rfc5280, rfc2315
 
 from . import asn1
-from .asn1.helpers import rdn_to_string, time_to_python, rdn_get_components
+from .asn1 import oids
+from .asn1.helpers import time_to_python
 from .exceptions import CertificateVerificationError
 
 logger = logging.getLogger(__name__)
@@ -61,14 +64,10 @@ class Certificate(object):
 
         self.version = int(tbs_certificate['version']) + 1
         self.serial_number = int(tbs_certificate['serialNumber'])
-        self.issuer = tbs_certificate['issuer'][0]
-        self.issuer_dn = rdn_to_string(tbs_certificate['issuer'][0])
-        self.issuer_rdns = list(rdn_get_components(tbs_certificate['issuer'][0]))
+        self.issuer = CertificateName(tbs_certificate['issuer'][0])
         self.valid_from = time_to_python(tbs_certificate['validity']['notBefore'])
         self.valid_to = time_to_python(tbs_certificate['validity']['notAfter'])
-        self.subject = tbs_certificate['subject'][0]
-        self.subject_dn = rdn_to_string(tbs_certificate['subject'][0])
-        self.subject_rdns = list(rdn_get_components(tbs_certificate['subject'][0]))
+        self.subject = CertificateName(tbs_certificate['subject'][0])
 
         self.subject_public_algorithm = tbs_certificate['subjectPublicKeyInfo']['algorithm']
         self.subject_public_key = tbs_certificate['subjectPublicKeyInfo']['subjectPublicKey']
@@ -79,13 +78,13 @@ class Certificate(object):
                 self.extensions[asn1.oids.get(extension['extnID'])] = extension['extnValue']
 
     def __str__(self):
-        return "{}(serial:{})".format(self.subject_dn, self.serial_number)
+        return "{}(serial:{})".format(self.subject.dn, self.serial_number)
 
     def __eq__(self, other):
         return isinstance(other, Certificate) and \
-               self.issuer_rdns == other.issuer_rdns and \
+               self.issuer == other.issuer and \
                self.serial_number == other.serial_number and \
-               self.subject_rdns == other.subject_rdns and \
+               self.subject == other.subject and \
                self.subject_public_algorithm == other.subject_public_algorithm and \
                self.subject_public_key == other.subject_public_key
 
@@ -159,3 +158,57 @@ class Certificate(object):
         """Alias for :meth:`VerificationContext.verify`"""
 
         return context.verify(self)
+
+
+class CertificateName:
+    def __init__(self, data):
+        self.data = data
+
+    def __eq__(self, other):
+        return self.rdns == other.rdns
+
+    @property
+    def dn(self):
+        """Returns an (almost) rfc2253 compatible string given a RDNSequence"""
+
+        result = []
+        for n in self.data[::-1]:
+            type_value = n[0]  # get the AttributeTypeAndValue object
+
+            #   If the AttributeType is in a published table of attribute types
+            #   associated with LDAP [4], then the type name string from that table
+            #   is used, otherwise it is encoded as the dotted-decimal encoding of
+            #   the AttributeType's OBJECT IDENTIFIER.
+            type = oids.OID_TO_RDN.get(type_value['type'], ".".join(map(str, type_value['type'])))
+            value = str(ber_decoder.decode(type_value['value'])[0])
+
+            # Escaping according to RFC2253
+            value = re.sub("([,+\"<>;\\\\])", r"\\\1", value)
+            if value.startswith("#"):
+                value = "\\" + value
+            if value.endswith(" "):
+                value = value[:-1] + "\\ "
+            result.append("{type}={value}".format(type=type, value=value))
+        return ", ".join(result)
+
+    @property
+    def rdns(self):
+        return list(self.get_components())
+
+    def get_components(self, component_type=None):
+        """Get individual components of this CertificateName
+
+        :param component_type: if provided, yields only values of this type,
+            if not provided, yields tuples of (type, value)
+        """
+
+        for n in self.data[::-1]:
+            type_value = n[0]  # get the AttributeTypeAndValue object
+            type = oids.OID_TO_RDN.get(type_value['type'], ".".join(map(str, type_value['type'])))
+            value = str(ber_decoder.decode(type_value['value'])[0])
+
+            if component_type is not None:
+                if component_type in (type_value['type'], ".".join(map(str, type_value['type'])), type):
+                    yield value
+            else:
+                yield type, value

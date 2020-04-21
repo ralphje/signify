@@ -9,7 +9,8 @@ from signify.asn1 import guarded_ber_decode, pkcs7
 from signify.exceptions import VerificationError, SignerInfoParseError, \
     SignerInfoVerificationError, ParseError
 from . import asn1, _print_type
-from .asn1.helpers import rdn_to_string, time_to_python, rdn_get_components
+from .asn1.helpers import time_to_python
+from .certificates import CertificateName
 
 ACCEPTED_DIGEST_ALGORITHMS = (hashlib.md5, hashlib.sha1, hashlib.sha256)
 
@@ -62,9 +63,7 @@ class SignerInfo(object):
 
         # We can handle several different rfc types here
         if isinstance(self.data, rfc2315.SignerInfo):
-            self.issuer = self.data['issuerAndSerialNumber']['issuer']
-            self.issuer_dn = rdn_to_string(self.data['issuerAndSerialNumber']['issuer'][0])
-            self.issuer_rdns = list(rdn_get_components(self.data['issuerAndSerialNumber']['issuer'][0]))
+            self.issuer = CertificateName(self.data['issuerAndSerialNumber']['issuer'][0])
             self.serial_number = self.data['issuerAndSerialNumber']['serialNumber']
 
             self.authenticated_attributes = self._parse_attributes(
@@ -81,9 +80,7 @@ class SignerInfo(object):
 
         elif isinstance(self.data, rfc5652.SignerInfo):
             # TODO: handle case where sid contains key identifier
-            self.issuer = self.data['sid']['issuerAndSerialNumber']['issuer']
-            self.issuer_dn = rdn_to_string(self.data['sid']['issuerAndSerialNumber']['issuer'][0])
-            self.issuer_rdns = list(rdn_get_components(self.data['sid']['issuerAndSerialNumber']['issuer'][0]))
+            self.issuer = CertificateName(self.data['sid']['issuerAndSerialNumber']['issuer'][0])
             self.serial_number = self.data['sid']['issuerAndSerialNumber']['serialNumber']
 
             self.authenticated_attributes = self._parse_attributes(
@@ -225,7 +222,7 @@ class SignerInfo(object):
         # this loop was designed in the same way that Certificate._build_chain was built
         # first_error is None until the first iteration. When it becomes False, we do not need to raise anything.
         first_error = None
-        for issuer in context.find_certificates(issuer=self.issuer_rdns, serial_number=self.serial_number):
+        for issuer in context.find_certificates(issuer=self.issuer, serial_number=self.serial_number):
             try:
                 # _verify_issuer may fail when it is not a valid issuer for this SignedInfo
                 self._verify_issuer(issuer, context)
@@ -266,7 +263,7 @@ class SignerInfo(object):
         :rtype: Iterable[Iterable[Certificate]]
         """
 
-        for certificate in context.find_certificates(issuer=self.issuer_rdns, serial_number=self.serial_number):
+        for certificate in context.find_certificates(issuer=self.issuer, serial_number=self.serial_number):
             yield from context.potential_chains(certificate)
 
 

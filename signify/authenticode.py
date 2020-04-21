@@ -33,8 +33,8 @@ from pyasn1.codec.der import decoder as der_decoder
 from pyasn1_modules import rfc3161, rfc2315, rfc5652
 
 from signify.asn1 import guarded_ber_decode, guarded_der_decode, pkcs7
-from signify.asn1.helpers import accuracy_to_python, rdn_to_string
-from signify.certificates import Certificate
+from signify.asn1.helpers import accuracy_to_python
+from signify.certificates import Certificate, CertificateName
 from signify.context import CertificateStore, VerificationContext, FileSystemCertificateStore
 from signify.exceptions import AuthenticodeParseError, AuthenticodeVerificationError
 from signify.signerinfo import _get_digest_algorithm, SignerInfo, CounterSignerInfo
@@ -306,8 +306,8 @@ class RFC3161SignedData:
         self.serial_number = self.tst_info['serialNumber']
         self.signing_time = self.tst_info['genTime'].asDateTime
         self.signing_time_accuracy = accuracy_to_python(self.tst_info['accuracy'])
-        self.signing_authority = self.tst_info['tsa']['directoryName']['rdnSequence']
-        self.signing_authority_dn = rdn_to_string(self.tst_info['tsa']['directoryName']['rdnSequence'])
+        # TODO handle case where directoryName is not a rdnSequence
+        self.signing_authority = CertificateName(self.tst_info['tsa']['directoryName']['rdnSequence'])
 
         # Certificates
         self.certificates = CertificateStore([Certificate(cert) for cert in self.data['certificates']])
