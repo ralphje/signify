@@ -28,18 +28,37 @@ Certificate
       The underlying ASN.1 data object
 
    .. attribute:: signature_algorithm
-   .. attribute:: signature_value
+                  signature_value
+                  subject_public_algorithm
+                  subject_public_key
+
+      These values are considered part of the certificate, but not
+      fully parsed.
+
    .. attribute:: version
+
+      This is the version of the certificate
+
    .. attribute:: serial_number
+
+      The full integer serial number of the certificate
+
    .. attribute:: issuer
-   .. attribute:: issuer_dn
+                  subject
+
+      The :class:`CertificateName` for the issuer and subject.
+
    .. attribute:: valid_from
-   .. attribute:: valid_to
-   .. attribute:: subject
-   .. attribute:: subject_dn
-   .. attribute:: subject_public_algorithm
-   .. attribute:: subject_public_key
+                  valid_to
+
+      The datetime objects between which the certificate is valid.
+
    .. attribute:: extensions
+
+      This is a list of extension objects.
+
+.. autoclass:: CertificateName
+   :members:
 
 SignerInfo
 ----------

@@ -193,6 +193,7 @@ class CertificateName:
 
     @property
     def rdns(self):
+        """A list of all components of the object."""
         return list(self.get_components())
 
     def get_components(self, component_type=None):

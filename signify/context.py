@@ -82,10 +82,10 @@ class VerificationContext(object):
         :param bool allow_fetching: If True, allows the underlying verification module to obtain CRL and OSCP responses
             when needed.
         :param int fetch_timeout: The timeout used when fetching CRL/OSCP responses
-        :param Iterable[asn1crypto.crl.CertificateList] crls: List of :cls:`asn1crypto.crl.CertificateList` objects to
+        :param Iterable[asn1crypto.crl.CertificateList] crls: List of :class:`asn1crypto.crl.CertificateList` objects to
             aid in verifying revocation statuses.
-        :param Iterable[asn1crypto.ocsp.OCSPResponse] ocsps: List of :cls:`asn1crypto.ocsp.OCSPResponse` objects to aid
-            in verifying revocation statuses.
+        :param Iterable[asn1crypto.ocsp.OCSPResponse] ocsps: List of :class:`asn1crypto.ocsp.OCSPResponse` objects to
+            aid in verifying revocation statuses.
         """
 
         self.stores = list(stores)
