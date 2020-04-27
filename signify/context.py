@@ -30,7 +30,7 @@ class FileSystemCertificateStore(CertificateStore):
 
     def __init__(self, location, *args, **kwargs):
         """
-        :param str location: The file system location for the certificates.
+        :param pathlib.Path location: The file system location for the certificates.
         :param bool trusted: If true, all certificates that are appended to this structure are set to trusted.
         """
 
@@ -50,14 +50,19 @@ class FileSystemCertificateStore(CertificateStore):
             return
         self._loaded = True
 
-        for file in self.location.glob("*"):
-            with open(str(file), "rb") as f:
+        if self.location.is_dir():
+            for file in self.location.glob("*"):
+                with open(str(file), "rb") as f:
+                    self.append(Certificate.from_pem(f.read()))
+        else:
+            with open(str(self.location), "rb") as f:
                 self.append(Certificate.from_pem(f.read()))
 
 
 class VerificationContext(object):
     def __init__(self, *stores, timestamp=None, key_usages=None, extended_key_usages=None, optional_eku=True,
-                 allow_legacy=True):
+                 allow_legacy=True, revocation_mode='soft-fail', allow_fetching=False, fetch_timeout=30,
+                 crls=None, ocsps=None):
         """A context holding properties about the verification of a signature or certificate.
 
         :param Iterable[CertificateStore] stores: A list of CertificateStore objects that contain certificates
@@ -72,17 +77,28 @@ class VerificationContext(object):
             is very old (e.g. MD2). Additionally, allows the SignedInfo encryptedDigest
             to contain an encrypted hash instead of an encrypted DigestInfo ASN.1 structure. Both are found in the wild,
             but setting to True does reduce the reliability of the verification.
+        :param str revocation_mode: Can be either soft-fail, hard-fail or require. See the documentation of
+            :meth:`certvalidator.ValidationContext` for the full definition
+        :param bool allow_fetching: If True, allows the underlying verification module to obtain CRL and OSCP responses
+            when needed.
+        :param int fetch_timeout: The timeout used when fetching CRL/OSCP responses
+        :param Iterable[asn1crypto.crl.CertificateList] crls: List of :cls:`asn1crypto.crl.CertificateList` objects to
+            aid in verifying revocation statuses.
+        :param Iterable[asn1crypto.ocsp.OCSPResponse] ocsps: List of :cls:`asn1crypto.ocsp.OCSPResponse` objects to aid
+            in verifying revocation statuses.
         """
 
         self.stores = list(stores)
-
-        if timestamp is None:
-            timestamp = datetime.datetime.now(datetime.timezone.utc)
         self.timestamp = timestamp
         self.key_usages = key_usages
         self.extended_key_usages = extended_key_usages
         self.optional_eku = optional_eku
         self.allow_legacy = allow_legacy
+        self.revocation_mode = revocation_mode
+        self.allow_fetching = allow_fetching
+        self.fetch_timeout = fetch_timeout
+        self.crls = crls
+        self.ocsps = ocsps
 
     @property
     def certificates(self):
@@ -119,7 +135,7 @@ class VerificationContext(object):
     def potential_chains(self, certificate, depth=10):
         """Returns all possible chains from the provided certificate, solely based on issuer/subject matching.
 
-        THIS METHOD DOES NOT VERIFY WHETHER A CHAIN IS ACTUALLY VALID. Use :meth:`verify` for that.
+        **THIS METHOD DOES NOT VERIFY WHETHER A CHAIN IS ACTUALLY VALID**. Use :meth:`verify` for that.
 
         :param Certificate certificate: The certificate to build a potential chain for
         :param int depth: The maximum depth, used for recursion
@@ -168,19 +184,31 @@ class VerificationContext(object):
                 all_certs[asn1cert] = cert
 
         # construct the context and validator for certvalidator
-        context = ValidationContext(trust_roots=list(trust_roots),
-                                    moment=self.timestamp,
-                                    weak_hash_algos=set() if self.allow_legacy else None)
-        validator = CertificateValidator(end_entity_cert=to_check_asn1cert,
-                                         intermediate_certs=list(intermediates),
-                                         validation_context=context)
+        timestamp = self.timestamp
+        context = ValidationContext(
+            trust_roots=list(trust_roots),
+            moment=timestamp,
+            weak_hash_algos=set() if self.allow_legacy else None,
+            revocation_mode=self.revocation_mode,
+            allow_fetching=self.allow_fetching,
+            crl_fetch_params={'timeout': self.fetch_timeout},
+            ocsp_fetch_params={'timeout': self.fetch_timeout},
+            crls=self.crls,
+            ocsps=self.ocsps
+        )
+        validator = CertificateValidator(
+            end_entity_cert=to_check_asn1cert,
+            intermediate_certs=list(intermediates),
+            validation_context=context
+        )
 
         # verify the chain
         try:
-            chain = validator.validate_usage(key_usage=set(self.key_usages) if self.key_usages else set(),
-                                             extended_key_usage=set(self.extended_key_usages)
-                                                                if self.extended_key_usages else set(),
-                                             extended_optional=self.optional_eku)
+            chain = validator.validate_usage(
+                key_usage=set(self.key_usages) if self.key_usages else set(),
+                extended_key_usage=set(self.extended_key_usages) if self.extended_key_usages else set(),
+                extended_optional=self.optional_eku
+            )
         except Exception as e:
             raise VerificationError("Chain verification from %s failed: %s" % (certificate, e))
         else:

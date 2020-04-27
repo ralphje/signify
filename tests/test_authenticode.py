@@ -126,21 +126,36 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             signed_data.verify()
             pefile.verify()
 
-    def test_7z1900_invalid(self):
+    def test_7z1900_invalid_cve2020_0601(self):
         # This tests against CVE-2020-0601
         with open(str(root_dir / "test_data" / "7z1900-x64_signed.exe"), "rb") as f:
             pefile = SignedPEFile(f)
             self.assertRaises(VerificationError, pefile.verify)
 
-    def test_3a7de393a36ca8911cd0842a9a25b058_valid(self):
+    def test_3a7de393a36ca8911cd0842a9a25b058_valid_different_contenttype(self):
+        # uses a different contenttype, 1.2.840.113549.1.9.16.1.4 instead of Data
         with open(str(root_dir / "test_data" / "3a7de393a36ca8911cd0842a9a25b058"), "rb") as f:
             pefile = SignedPEFile(f)
             pefile.verify()
 
-    def test_solwarwinds_valid(self):
+    def test_solwarwinds_valid_countersignature_rfc3161(self):
+        # Solarwinds includes a 1.3.6.1.4.1.311.3.3.1 type countersignature
         with open(str(root_dir / "test_data" / "SolarWinds.exe"), "rb") as f:
             pefile = SignedPEFile(f)
             pefile.verify()
+
+    def test_jameslth_valid_when_revocation_not_checked(self):
+        # this certificate is revoked
+        with open(str(root_dir / "test_data" / "jameslth"), "rb") as f:
+            pefile = SignedPEFile(f)
+            pefile.verify()
+
+    def test_jameslth_revoked(self):
+        # this certificate is revoked
+        with open(str(root_dir / "test_data" / "jameslth"), "rb") as f:
+            pefile = SignedPEFile(f)
+            with self.assertRaises(VerificationError):
+                pefile.verify(verification_context_kwargs={'allow_fetching': True, 'revocation_mode': 'hard-fail'})
 
 
 class CertificateTestCase(unittest.TestCase):

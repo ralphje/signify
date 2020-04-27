@@ -1,8 +1,11 @@
+import datetime
 import pathlib
 import unittest
 
 from signify.authenticode import TRUSTED_CERTIFICATE_STORE
-from signify.context import VerificationContext
+from signify.certificates import Certificate
+from signify.context import VerificationContext, FileSystemCertificateStore
+from signify.exceptions import VerificationError
 from signify.signed_pe import SignedPEFile
 
 root_dir = pathlib.Path(__file__).parent
@@ -25,3 +28,19 @@ class ContextTestCase(unittest.TestCase):
                 #    print("xxxx")
                 #    for cert in chain:
                 #        print(cert)
+
+
+class ValidationTestCase(unittest.TestCase):
+    def test_revoked_certificate(self):
+        root = FileSystemCertificateStore(root_dir / "certs" / 'digicert-global-root-ca.pem', trusted=True)
+        intermediate = FileSystemCertificateStore(root_dir / "certs" / 'digicert-sha2-secure-server-ca.pem')
+        with open(str(root_dir / "certs" / 'revoked.badssl.com.pem'), "rb") as f:
+            cert = Certificate.from_pem(f.read())
+
+        # check that when we do not verify the CRL it does not fail
+        context = VerificationContext(root, intermediate)
+        context.verify(cert)
+
+        context = VerificationContext(root, intermediate, allow_fetching=True, revocation_mode='hard-fail')
+        with self.assertRaises(VerificationError):
+            context.verify(cert)
