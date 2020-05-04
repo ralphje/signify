@@ -176,7 +176,7 @@ class SignedData(object):
             raise AuthenticodeParseError("SignedData.crls is present, but that is unexpected.")
 
     def verify(self, expected_hash=None, verification_context=None, cs_verification_context=None,
-               verification_context_kwargs={}):
+               trusted_certificate_store=TRUSTED_CERTIFICATE_STORE, verification_context_kwargs={}):
         """Verifies the SignedData structure:
 
         * Verifies that the digest algorithms match across the structure
@@ -200,6 +200,9 @@ class SignedData(object):
         :param VerificationContext cs_verification_context: The VerificationContext for verifying the chain of the
             :class:`CounterSignerInfo`. The timestamp is overridden in the case of a countersigner. Default stores are
             TRUSTED_CERTIFICATE_STORE and the certificates of this :class:`SignedData` object. EKU is time_stamping
+        :param CertificateStore trusted_certificate_store: A :class:`CertificateStore` object that contains a list of
+            trusted certificates to be used when :const:`None` is passed to either :param:`verification_context` or
+            :param:`cs_verification_context` and a :class:`VerificationContext` is created.
         :param dict verification_context_kwargs: If provided, keyword arguments that are passed to the instantiation of
             :class:`VerificationContext`s created in this function. Used for e.g. providing a timestamp.
         :raises AuthenticodeVerificationError: when the verification failed
@@ -246,14 +249,14 @@ class SignedData(object):
                                                     'countersigner\'s SignerInfo')
 
         if verification_context is None:
-            verification_context = VerificationContext(TRUSTED_CERTIFICATE_STORE, self.certificates,
+            verification_context = VerificationContext(trusted_certificate_store, self.certificates,
                                                        extended_key_usages=['code_signing'],
                                                        **verification_context_kwargs)
 
         if self.signer_info.countersigner:
             if cs_verification_context is None:
-                stores = (TRUSTED_CERTIFICATE_STORE, self.certificates)
-                # Add the local certificate store for the countersignature
+                stores = (trusted_certificate_store, self.certificates)
+                # Add the local certificate store for the countersignature (in the case of RFC3161SignedData)
                 if hasattr(self.signer_info.countersigner, 'certificates'):
                     stores += (self.signer_info.countersigner.certificates, )
                 cs_verification_context = VerificationContext(*stores,
@@ -261,6 +264,9 @@ class SignedData(object):
                                                               **verification_context_kwargs)
             cs_verification_context.timestamp = self.signer_info.countersigner.signing_time
 
+            # We could be calling SignerInfo.verify or RFC3161SignedData.verify here, but those have identical
+            # signatures. Note that RFC3161SignedData accepts a trusted_certificate_store argument, but we pass in
+            # an explicit context anyway
             self.signer_info.countersigner.verify(cs_verification_context)
 
             # TODO: What to do when the verification fails? Check it as if the countersignature is not present?
@@ -319,7 +325,7 @@ class RFC3161SignedData:
 
         self.signer_info = RFC3161SignerInfo(self.data['signerInfos'][0])
 
-    def verify(self, context=None):
+    def verify(self, context=None, trusted_certificate_store=TRUSTED_CERTIFICATE_STORE):
         """Verifies the RFC3161 SignedData object. The context that is passed in must account for the certificate
         store of this object, or be left None.
         """
@@ -337,7 +343,7 @@ class RFC3161SignedData:
             raise AuthenticodeVerificationError('The expected hash of the TstInfo does not match SignerInfo')
 
         if context is None:
-            context = VerificationContext(TRUSTED_CERTIFICATE_STORE, self.certificates,
+            context = VerificationContext(trusted_certificate_store, self.certificates,
                                           extended_key_usages=['time_stamping'])
 
         # The context is set correctly by the 'verify' function, including the current certificate store
