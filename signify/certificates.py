@@ -28,11 +28,19 @@ class Certificate(object):
         self.data = data
         self._parse()
 
+    @classmethod
+    def is_certificate(cls, data):
+        if isinstance(data, rfc5652.CertificateChoices) and 'certificate' not in data:
+            return False
+        return True
+
     def _parse(self):
         if isinstance(self.data, rfc5652.CertificateChoices):
+            if 'extendedCertificate' in self.data:
+                raise NotImplementedError("Support for extendedCertificate is not implemented")
             if 'certificate' not in self.data:
-                # TODO: Not sure if needed.
-                raise NotImplementedError("Support for certificate is not implemented")
+                raise NotImplementedError("This is not a certificate, probably an attribute certificate "
+                                          "(containing no public key)")
 
             certificate = self.data['certificate']
             self.signature_algorithm = certificate['signatureAlgorithm']

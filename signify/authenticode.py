@@ -29,14 +29,13 @@ import logging
 import pathlib
 
 from pyasn1.codec.ber import decoder as ber_decoder
-from pyasn1.codec.der import decoder as der_decoder
 from pyasn1_modules import rfc3161, rfc2315, rfc5652
 
 from signify.asn1 import guarded_ber_decode, guarded_der_decode, pkcs7
-from signify.asn1.helpers import accuracy_to_python
+from signify.asn1.helpers import accuracy_to_python, patch_rfc5652_signeddata
 from signify.certificates import Certificate, CertificateName
 from signify.context import CertificateStore, VerificationContext, FileSystemCertificateStore
-from signify.exceptions import AuthenticodeParseError, AuthenticodeVerificationError
+from signify.exceptions import AuthenticodeParseError, AuthenticodeVerificationError, ParseError
 from signify.signerinfo import _get_digest_algorithm, SignerInfo, CounterSignerInfo
 from signify import asn1
 
@@ -87,8 +86,13 @@ class AuthenticodeSignerInfo(SignerInfo):
             if content_type is not rfc2315.SignedData:
                 raise AuthenticodeParseError("RFC-3161 Timestamp does not contain SignedData structure")
             # Note that we expect rfc5652 compatible data here
-            signed_data = guarded_ber_decode(ts_data['content'],
-                                             asn1_spec=rfc5652.SignedData())
+            # This is a work-around for incorrectly tagged v2AttrCerts in the BER-encoded blob,
+            # see the docstring for patch_rfc5652_signeddata for more details
+            try:
+                signed_data = guarded_ber_decode(ts_data['content'], asn1_spec=rfc5652.SignedData())
+            except ParseError:
+                with patch_rfc5652_signeddata() as asn1_spec:
+                    signed_data = guarded_ber_decode(ts_data['content'], asn1_spec=asn1_spec)
             self.countersigner = RFC3161SignedData(signed_data)
 
 
@@ -324,7 +328,9 @@ class RFC3161SignedData:
         self.signing_authority = CertificateName(self.tst_info['tsa']['directoryName']['rdnSequence'])
 
         # Certificates
-        self.certificates = CertificateStore([Certificate(cert) for cert in self.data['certificates']])
+        self.certificates = CertificateStore(
+            [Certificate(cert) for cert in self.data['certificates'] if Certificate.is_certificate(cert)]
+        )
 
         # signerInfos
         if len(self.data['signerInfos']) != 1:

@@ -144,6 +144,12 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             pefile = SignedPEFile(f)
             pefile.verify()
 
+    def test_whois_valid_countersignature_rfc3161(self):
+        # whois includes a 1.3.6.1.4.1.311.3.3.1 type countersignature
+        with open(str(root_dir / "test_data" / "whois.exe"), "rb") as f:
+            pefile = SignedPEFile(f)
+            pefile.verify()
+
     def test_jameslth_valid_when_revocation_not_checked(self):
         # this certificate is revoked
         with open(str(root_dir / "test_data" / "jameslth"), "rb") as f:

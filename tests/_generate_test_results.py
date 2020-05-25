@@ -28,7 +28,7 @@ from signify.fingerprinter import AuthenticodeFingerprinter
 
 def main():
     for filename in pathlib.Path("tests/test_data").iterdir():
-        if str(filename).endswith(".res"):
+        if str(filename).endswith(".res") or str(filename).endswith(".rst"):
             continue
         print("Updating {}...".format(filename))
         with open(str(filename), "rb") as file_obj:
