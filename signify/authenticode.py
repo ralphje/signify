@@ -176,7 +176,8 @@ class SignedData(object):
             raise AuthenticodeParseError("SignedData.crls is present, but that is unexpected.")
 
     def verify(self, expected_hash=None, verification_context=None, cs_verification_context=None,
-               trusted_certificate_store=TRUSTED_CERTIFICATE_STORE, verification_context_kwargs={}):
+               trusted_certificate_store=TRUSTED_CERTIFICATE_STORE, verification_context_kwargs={},
+               allow_countersignature_errors=False):
         """Verifies the SignedData structure:
 
         * Verifies that the digest algorithms match across the structure
@@ -205,9 +206,24 @@ class SignedData(object):
             :param:`cs_verification_context` and a :class:`VerificationContext` is created.
         :param dict verification_context_kwargs: If provided, keyword arguments that are passed to the instantiation of
             :class:`VerificationContext`s created in this function. Used for e.g. providing a timestamp.
+        :param bool allow_countersignature_errors: If this is set to True, errors in the countersignature cause the
+            binary to be verified as if it was never countersigned
         :raises AuthenticodeVerificationError: when the verification failed
         :return: :const:`None`
         """
+
+        if verification_context is None:
+            verification_context = VerificationContext(trusted_certificate_store, self.certificates,
+                                                       extended_key_usages=['code_signing'],
+                                                       **verification_context_kwargs)
+
+        if cs_verification_context is None and self.signer_info.countersigner:
+            cs_verification_context = VerificationContext(trusted_certificate_store, self.certificates,
+                                                          extended_key_usages=['time_stamping'],
+                                                          **verification_context_kwargs)
+            # Add the local certificate store for the countersignature (in the case of RFC3161SignedData)
+            if hasattr(self.signer_info.countersigner, 'certificates'):
+                cs_verification_context.add_store(self.signer_info.countersigner.certificates)
 
         # Check that the digest algorithms match
         if self.digest_algorithm != self.spc_info.digest_algorithm:
@@ -240,38 +256,30 @@ class SignedData(object):
         # Can't check authAttr hash against encrypted hash, done implicitly in
         # M2's pubkey.verify.
 
-        # 3. Check the countersigner hash.
         if self.signer_info.countersigner:
-            # Make sure to use the same digest_algorithm that the countersigner used
-            auth_attr_hash = self.signer_info.countersigner.digest_algorithm(self.signer_info.encrypted_digest).digest()
-            if auth_attr_hash != self.signer_info.countersigner.message_digest:
-                raise AuthenticodeVerificationError('The expected hash of the encryptedDigest does not match '
-                                                    'countersigner\'s SignerInfo')
+            try:
+                # 3. Check the countersigner hash.
+                # Make sure to use the same digest_algorithm that the countersigner used
+                auth_attr_hash = \
+                    self.signer_info.countersigner.digest_algorithm(self.signer_info.encrypted_digest).digest()
+                if auth_attr_hash != self.signer_info.countersigner.message_digest:
+                    raise AuthenticodeVerificationError('The expected hash of the encryptedDigest does not match '
+                                                        'countersigner\'s SignerInfo')
 
-        if verification_context is None:
-            verification_context = VerificationContext(trusted_certificate_store, self.certificates,
-                                                       extended_key_usages=['code_signing'],
-                                                       **verification_context_kwargs)
+                cs_verification_context.timestamp = self.signer_info.countersigner.signing_time
 
-        if self.signer_info.countersigner:
-            if cs_verification_context is None:
-                stores = (trusted_certificate_store, self.certificates)
-                # Add the local certificate store for the countersignature (in the case of RFC3161SignedData)
-                if hasattr(self.signer_info.countersigner, 'certificates'):
-                    stores += (self.signer_info.countersigner.certificates, )
-                cs_verification_context = VerificationContext(*stores,
-                                                              extended_key_usages=['time_stamping'],
-                                                              **verification_context_kwargs)
-            cs_verification_context.timestamp = self.signer_info.countersigner.signing_time
-
-            # We could be calling SignerInfo.verify or RFC3161SignedData.verify here, but those have identical
-            # signatures. Note that RFC3161SignedData accepts a trusted_certificate_store argument, but we pass in
-            # an explicit context anyway
-            self.signer_info.countersigner.verify(cs_verification_context)
-
-            # TODO: What to do when the verification fails? Check it as if the countersignature is not present?
-            # Or fail all together? (Which is done now)
-            verification_context.timestamp = self.signer_info.countersigner.signing_time
+                # We could be calling SignerInfo.verify or RFC3161SignedData.verify here, but those have identical
+                # signatures. Note that RFC3161SignedData accepts a trusted_certificate_store argument, but we pass in
+                # an explicit context anyway
+                self.signer_info.countersigner.verify(cs_verification_context)
+            except Exception:
+                if allow_countersignature_errors:
+                    pass
+                else:
+                    raise AuthenticodeVerificationError("An error occurred while validating the countersignature.")
+            else:
+                # If no errors occur, we should be fine setting the timestamp to the countersignature's timestamp
+                verification_context.timestamp = self.signer_info.countersigner.signing_time
 
         self.signer_info.verify(verification_context)
 

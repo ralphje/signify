@@ -100,6 +100,10 @@ class VerificationContext(object):
         self.crls = crls
         self.ocsps = ocsps
 
+    def add_store(self, store):
+        """Adds a certificate store to the VerificationContext"""
+        self.stores.append(store)
+
     @property
     def certificates(self):
         """Iterates over all certificates in the associated stores.
