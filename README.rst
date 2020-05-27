@@ -1,7 +1,7 @@
 Signify
 =======
-.. image:: https://travis-ci.org/ralphje/signify.svg?branch=master
-    :target: https://travis-ci.org/ralphje/signify
+.. image:: https://travis-ci.com/ralphje/signify.svg?branch=master
+    :target: https://travis-ci.com/ralphje/signify
 .. image:: https://codecov.io/gh/ralphje/signify/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/ralphje/signify
 .. image:: https://readthedocs.org/projects/signify/badge/?version=latest
