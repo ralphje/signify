@@ -12,7 +12,7 @@ from . import asn1, _print_type
 from .asn1.helpers import time_to_python
 from .certificates import CertificateName
 
-ACCEPTED_DIGEST_ALGORITHMS = (hashlib.md5, hashlib.sha1, hashlib.sha256)
+ACCEPTED_DIGEST_ALGORITHMS = (hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha384, hashlib.sha512)
 
 
 def _verify_empty_algorithm_parameters(algorithm, location):
