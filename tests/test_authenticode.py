@@ -172,6 +172,9 @@ class CertificateTestCase(unittest.TestCase):
             chain = certificate.verify(context)
             self.assertListEqual(chain, [certificate])
 
+    def test_no_duplicates_in_default_store(self):
+        self.assertEqual(len(TRUSTED_CERTIFICATE_STORE), len(set(TRUSTED_CERTIFICATE_STORE)))
+
     def test_trust_fails(self):
         # we get a certificate we currently trust
         for certificate in trusted_certificate_store:

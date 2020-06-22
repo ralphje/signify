@@ -41,7 +41,7 @@ from signify import asn1
 
 logger = logging.getLogger(__name__)
 
-CERTIFICATE_LOCATION = pathlib.Path(__file__).resolve().parent / "certs" / "authenticode"
+CERTIFICATE_LOCATION = pathlib.Path(__file__).resolve().parent / "certs" / "authenticode-bundle.pem"
 TRUSTED_CERTIFICATE_STORE = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True)
 
 
