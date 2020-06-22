@@ -11,7 +11,11 @@ from pyasn1.codec.ber import decoder as ber_decoder
 from pyasn1_modules import rfc5652, rfc5280, rfc2315
 
 from . import asn1
-from ._compat import cached_property
+try:
+    from ._compat import cached_property
+except SyntaxError:
+    # For Python 3.5, where f-strings are not a thing
+    cached_property = property
 from .asn1 import oids
 from .asn1.helpers import time_to_python
 from .exceptions import CertificateVerificationError
