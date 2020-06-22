@@ -25,7 +25,7 @@ except ImportError:
             elif name != self.attrname:
                 raise TypeError(
                     "Cannot assign the same cached_property to two different names "
-                    f"({self.attrname!r} and {name!r})."
+                    "({!r} and {!r}).".format(self.attrname, name)
                 )
 
         def __get__(self, instance, owner=None):
@@ -38,8 +38,8 @@ except ImportError:
                 cache = instance.__dict__
             except AttributeError:  # not all objects have __dict__ (e.g. class defines slots)
                 msg = (
-                    f"No '__dict__' attribute on {type(instance).__name__!r} "
-                    f"instance to cache {self.attrname!r} property."
+                    "No '__dict__' attribute on {!r} "
+                    "instance to cache {!r} property.".format(type(instance).__name__, self.attrname)
                 )
                 raise TypeError(msg) from None
             val = cache.get(self.attrname, _NOT_FOUND)
@@ -53,8 +53,9 @@ except ImportError:
                             cache[self.attrname] = val
                         except TypeError:
                             msg = (
-                                f"The '__dict__' attribute on {type(instance).__name__!r} instance "
-                                f"does not support item assignment for caching {self.attrname!r} property."
+                                "The '__dict__' attribute on {!r} instance "
+                                "does not support item assignment for caching {!r} property."
+                                .format(type(instance).__name__, self.attrname)
                             )
                             raise TypeError(msg) from None
             return val
