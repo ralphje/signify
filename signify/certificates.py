@@ -1,5 +1,4 @@
 import collections
-import functools
 import logging
 import re
 
@@ -12,6 +11,7 @@ from pyasn1.codec.ber import decoder as ber_decoder
 from pyasn1_modules import rfc5652, rfc5280, rfc2315
 
 from . import asn1
+from ._compat import cached_property
 from .asn1 import oids
 from .asn1.helpers import time_to_python
 from .exceptions import CertificateVerificationError
@@ -124,17 +124,17 @@ class Certificate(object):
         for type_name, headers, der_bytes in asn1crypto.pem.unarmor(content, multiple=True):
             yield cls.from_der(der_bytes)
 
-    @functools.cached_property
+    @cached_property
     def to_der(self):
         """Returns the DER-encoded data from this certificate."""
         return der_encoder.encode(self.data)
 
-    @functools.cached_property
+    @cached_property
     def to_asn1crypto(self):
         """Retrieves the :mod:`asn1crypto` x509 Certificate object."""
         return asn1crypto.x509.Certificate.load(self.to_der)
 
-    @functools.cached_property
+    @cached_property
     def sha256_fingerprint(self):
         return self.to_asn1crypto.sha256_fingerprint
 
