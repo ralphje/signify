@@ -22,6 +22,47 @@ class CertificateStore(list):
     def append(self, elem):
         return super().append(elem)
 
+    def find_certificate(self, **kwargs):
+        """Finds the certificate as specified by the keyword arguments. See :meth:`find_certificates`
+        for all possible arguments. If there is not exactly 1 certificate matching the parameters, i.e. there are zero
+        or there are multiple, an error is raised.
+
+        :rtype: Certificate
+        :raises KeyError:
+        """
+
+        certificates = list(self.find_certificates(**kwargs))
+
+        if len(certificates) == 0:
+            raise KeyError("the specified certificate does not exist")
+        elif len(certificates) > 1:
+            raise KeyError("there are multiple certificates matching the query")
+
+        return certificates[0]
+
+    def find_certificates(self, *, subject=None, serial_number=None, issuer=None, sha256_fingerprint=None):
+        """Finds all certificates given by the specified properties. A property can be omitted by specifying
+        :const:`None`. Calling this function without arguments is the same as iterating over this store
+
+        :param CertificateName subject: Certificate subject to look for, as CertificateName
+        :param int serial_number: Serial number to look for.
+        :param CertificateName issuer: Certificate issuer to look for, as CertificateName
+        :param str sha256_fingerprint: The SHA-256 fingerprint to look for
+        :rtype: Iterable[Certificate]
+        """
+
+        for certificate in self:
+            if subject is not None and certificate.subject != subject:
+                continue
+            if serial_number is not None and certificate.serial_number != serial_number:
+                continue
+            if issuer is not None and certificate.issuer != issuer:
+                continue
+            if sha256_fingerprint is not None \
+                    and certificate.sha256_fingerprint.replace(" ", "").lower() != sha256_fingerprint.replace(" ", "").lower():
+                continue
+            yield certificate
+
 
 class FileSystemCertificateStore(CertificateStore):
     """A list of :class:`Certificate` objects loaded from the file system."""
@@ -113,28 +154,39 @@ class VerificationContext(object):
         for store in self.stores:
             yield from store
 
-    def find_certificates(self, *, subject=None, serial_number=None, issuer=None):
-        """Finds all certificates given by the specified properties. A property can be omitted by specifying
-        :const:`None`. Calling this function without arguments is the same as using :meth:`certificates`
+    def find_certificate(self, **kwargs):
+        """Finds the certificate as specified by the keyword arguments. See :meth:`find_certificates`
+        for all possible arguments. If there is not exactly 1 certificate matching the parameters, i.e. there are zero
+        or there are multiple, an error is raised.
 
-        :param CertificateName subject: Certificate subject to look for, as CertificateName
-        :param int serial_number: Serial number to look for.
-        :param CertificateName issuer: Certificate issuer to look for, as CertificateName
+        :rtype: Certificate
+        :raises KeyError:
+        """
+
+        certificates = list(self.find_certificates(**kwargs))
+
+        if len(certificates) == 0:
+            raise KeyError("the specified certificate does not exist")
+        elif len(certificates) > 1:
+            raise KeyError("there are multiple certificates matching the query")
+
+        return certificates[0]
+
+    def find_certificates(self, **kwargs):
+        """Finds all certificates given by the specified keyword arguments. See
+        :meth:`CertificateStore.find_certificates` for a list of all supported arguments.
+
         :rtype: Iterable[Certificate]
         """
 
         seen_certs = []
-        for certificate in self.certificates:
-            if subject is not None and certificate.subject != subject:
-                continue
-            if serial_number is not None and certificate.serial_number != serial_number:
-                continue
-            if issuer is not None and certificate.issuer != issuer:
-                continue
-            if certificate in seen_certs:
-                continue
-            seen_certs.append(certificate)
-            yield certificate
+
+        for store in self.stores:
+            for certificate in store.find_certificates(**kwargs):
+                if certificate in seen_certs:
+                    continue
+                seen_certs.append(certificate)
+                yield certificate
 
     def potential_chains(self, certificate, depth=10):
         """Returns all possible chains from the provided certificate, solely based on issuer/subject matching.
