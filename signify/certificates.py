@@ -1,3 +1,5 @@
+import collections
+import functools
 import logging
 import re
 
@@ -15,6 +17,9 @@ from .asn1.helpers import time_to_python
 from .exceptions import CertificateVerificationError
 
 logger = logging.getLogger(__name__)
+
+
+AlgorithmIdentifier = collections.namedtuple('AlgorithmIdentifier', 'algorithm parameters')
 
 
 class Certificate(object):
@@ -77,8 +82,11 @@ class Certificate(object):
         self.valid_to = time_to_python(tbs_certificate['validity']['notAfter'])
         self.subject = CertificateName(tbs_certificate['subject'][0])
 
-        self.subject_public_algorithm = tbs_certificate['subjectPublicKeyInfo']['algorithm']
-        self.subject_public_key = tbs_certificate['subjectPublicKeyInfo']['subjectPublicKey']
+        self.subject_public_algorithm = AlgorithmIdentifier(
+            algorithm=tbs_certificate['subjectPublicKeyInfo']['algorithm']['algorithm'],
+            parameters=bytes(tbs_certificate['subjectPublicKeyInfo']['algorithm']['parameters'])
+        )
+        self.subject_public_key = bytes(tbs_certificate['subjectPublicKeyInfo']['subjectPublicKey'])
 
         self.extensions = {}
         if 'extensions' in tbs_certificate and tbs_certificate['extensions'].isValue:
@@ -87,6 +95,10 @@ class Certificate(object):
 
     def __str__(self):
         return "{}(serial:{})".format(self.subject.dn, self.serial_number)
+
+    def __hash__(self):
+        return hash((self.issuer, self.serial_number, self.subject,
+                     self.subject_public_algorithm, self.subject_public_key))
 
     def __eq__(self, other):
         return isinstance(other, Certificate) and \
@@ -112,15 +124,19 @@ class Certificate(object):
         for type_name, headers, der_bytes in asn1crypto.pem.unarmor(content, multiple=True):
             yield cls.from_der(der_bytes)
 
-    @property
+    @functools.cached_property
     def to_der(self):
         """Returns the DER-encoded data from this certificate."""
         return der_encoder.encode(self.data)
 
-    @property
+    @functools.cached_property
     def to_asn1crypto(self):
         """Retrieves the :mod:`asn1crypto` x509 Certificate object."""
         return asn1crypto.x509.Certificate.load(self.to_der)
+
+    @functools.cached_property
+    def sha256_fingerprint(self):
+        return self.to_asn1crypto.sha256_fingerprint
 
     def verify_signature(self, signature, data, algorithm, allow_legacy=False):
         """Verifies whether the signature bytes match the data using the hashing algorithm. Supports RSA and EC keys.
@@ -180,6 +196,12 @@ class CertificateName:
     def __eq__(self, other):
         return self.rdns == other.rdns
 
+    def __hash__(self):
+        return hash(self.rdns)
+
+    def __str__(self):
+        return self.dn
+
     @property
     def dn(self):
         """Returns an (almost) rfc2253 compatible string given a RDNSequence"""
@@ -207,7 +229,7 @@ class CertificateName:
     @property
     def rdns(self):
         """A list of all components of the object."""
-        return list(self.get_components())
+        return tuple(self.get_components())
 
     def get_components(self, component_type=None):
         """Get individual components of this CertificateName
