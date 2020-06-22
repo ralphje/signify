@@ -103,21 +103,20 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             pefile.verify()
 
     def test_19e8_expired(self):
+        """this is an expired sample"""
         with open(str(root_dir / "test_data" / "19e818d0da361c4feedd456fca63d68d4b024fbbd3d9265f606076c7ee72e8f8.ViR"), "rb") as f:
             pefile = SignedPEFile(f)
             self.assertRaises(VerificationError, pefile.verify)
 
     def test_19e8_valid_within_period(self):
+        """test whether the timestamp can be set on expired samples"""
         with open(str(root_dir / "test_data" / "19e818d0da361c4feedd456fca63d68d4b024fbbd3d9265f606076c7ee72e8f8.ViR"), "rb") as f:
             pefile = SignedPEFile(f)
             pefile.verify(verification_context_kwargs=
                           {'timestamp': datetime.datetime(2013, 1, 1, tzinfo=datetime.timezone.utc)})
 
     def test_sw_reporter(self):
-        """
-        Test for SHA256 hashes used in sig
-        :return:
-        """
+        """Test for SHA256 hashes used in sig"""
         with open(str(root_dir / "test_data" / "software_reporter_tool.exe"), "rb") as f:
             pefile = SignedPEFile(f)
             signed_datas = list(pefile.signed_datas)
@@ -127,37 +126,37 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             pefile.verify()
 
     def test_7z1900_invalid_cve2020_0601(self):
-        # This tests against CVE-2020-0601
+        """This tests against CVE-2020-0601"""
         with open(str(root_dir / "test_data" / "7z1900-x64_signed.exe"), "rb") as f:
             pefile = SignedPEFile(f)
             self.assertRaises(VerificationError, pefile.verify)
 
     def test_3a7de393a36ca8911cd0842a9a25b058_valid_different_contenttype(self):
-        # uses a different contenttype, 1.2.840.113549.1.9.16.1.4 instead of Data
+        """uses a different contenttype, 1.2.840.113549.1.9.16.1.4 instead of Data"""
         with open(str(root_dir / "test_data" / "3a7de393a36ca8911cd0842a9a25b058"), "rb") as f:
             pefile = SignedPEFile(f)
             pefile.verify()
 
     def test_solwarwinds_valid_countersignature_rfc3161(self):
-        # Solarwinds includes a 1.3.6.1.4.1.311.3.3.1 type countersignature
+        """Solarwinds includes a 1.3.6.1.4.1.311.3.3.1 type countersignature"""
         with open(str(root_dir / "test_data" / "SolarWinds.exe"), "rb") as f:
             pefile = SignedPEFile(f)
             pefile.verify()
 
     def test_whois_valid_countersignature_rfc3161(self):
-        # whois includes a 1.3.6.1.4.1.311.3.3.1 type countersignature
+        """whois includes a 1.3.6.1.4.1.311.3.3.1 type countersignature"""
         with open(str(root_dir / "test_data" / "whois.exe"), "rb") as f:
             pefile = SignedPEFile(f)
             pefile.verify()
 
     def test_jameslth_valid_when_revocation_not_checked(self):
-        # this certificate is revoked
+        """this certificate is revoked"""
         with open(str(root_dir / "test_data" / "jameslth"), "rb") as f:
             pefile = SignedPEFile(f)
             pefile.verify()
 
     def test_jameslth_revoked(self):
-        # this certificate is revoked
+        """this certificate is revoked"""
         with open(str(root_dir / "test_data" / "jameslth"), "rb") as f:
             pefile = SignedPEFile(f)
             with self.assertRaises(VerificationError):

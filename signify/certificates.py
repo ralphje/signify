@@ -104,8 +104,13 @@ class Certificate(object):
     @classmethod
     def from_pem(cls, content):
         """Reads a Certificate from a PEM formatted file."""
-        type_name, headers, der_bytes = asn1crypto.pem.unarmor(content)
-        return cls.from_der(der_bytes)
+        return next(cls.from_pems(content))
+
+    @classmethod
+    def from_pems(cls, content):
+        """Reads a Certificate from a PEM formatted file."""
+        for type_name, headers, der_bytes in asn1crypto.pem.unarmor(content, multiple=True):
+            yield cls.from_der(der_bytes)
 
     @property
     def to_der(self):

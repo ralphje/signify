@@ -53,10 +53,10 @@ class FileSystemCertificateStore(CertificateStore):
         if self.location.is_dir():
             for file in self.location.glob("*"):
                 with open(str(file), "rb") as f:
-                    self.append(Certificate.from_pem(f.read()))
+                    self.extend(Certificate.from_pems(f.read()))
         else:
             with open(str(self.location), "rb") as f:
-                self.append(Certificate.from_pem(f.read()))
+                self.extend(Certificate.from_pems(f.read()))
 
 
 class VerificationContext(object):
