@@ -210,7 +210,7 @@ class SignedPEFile(object):
         :return: iterator of signify.authenticode.SignedData
         """
 
-        from .authenticode import SignedData
+        from .authenticode import AuthenticodeSignedData
 
         found = False
         for certificate in self._parse_cert_table():
@@ -218,7 +218,7 @@ class SignedPEFile(object):
                 raise SignedPEParseError("Unknown certificate revision %x" % certificate['revision'])
 
             if certificate['type'] == 2:
-                yield SignedData.from_certificate(certificate['certificate'], pefile=self)
+                yield AuthenticodeSignedData.from_envelope(certificate['certificate'], pefile=self)
                 found = True
 
         if not found:

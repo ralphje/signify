@@ -36,6 +36,7 @@ from signify.asn1.helpers import accuracy_to_python, patch_rfc5652_signeddata
 from signify.certificates import Certificate, CertificateName
 from signify.context import CertificateStore, VerificationContext, FileSystemCertificateStore
 from signify.exceptions import AuthenticodeParseError, AuthenticodeVerificationError, ParseError
+from signify.signeddata import SignedData
 from signify.signerinfo import _get_digest_algorithm, SignerInfo, CounterSignerInfo
 from signify import asn1
 
@@ -96,7 +97,7 @@ class AuthenticodeSignerInfo(SignerInfo):
             self.countersigner = RFC3161SignedData(signed_data)
 
 
-class SpcInfo(object):
+class SpcInfo:
     def __init__(self, data):
         """The Authenticode's SpcIndirectDataContent information, and their children. It is only partially parsed."""
 
@@ -118,62 +119,33 @@ class SpcInfo(object):
         self.digest = bytes(self.data['messageDigest']['digest'])
 
 
-class SignedData(object):
+class AuthenticodeSignedData(SignedData):
+    _expected_content_type = asn1.spc.SpcIndirectDataContent
+    _signerinfo_class = AuthenticodeSignerInfo
+
     def __init__(self, data, pefile=None):
         """The SignedData object of Authenticode. It is the root of all Authenticode related information.
 
         :param asn1.pkcs7.SignedData data: The ASN.1 structure of the SignedData object
         :param pefile: The related PEFile.
         """
-
-        self.data = data
         self.pefile = pefile
-        self._parse()
-
-    @classmethod
-    def from_certificate(cls, data, *args, **kwargs):
-        """Loads a :class:`SignedData` object from raw data that contains ContentInfo.
-
-        :param bytes data: The bytes to parse
-        """
-        # This one is not guarded, which is intentional
-        content, rest = ber_decoder.decode(data, asn1Spec=rfc2315.ContentInfo())
-        if asn1.oids.get(content['contentType']) is not rfc2315.SignedData:
-            raise AuthenticodeParseError("ContentInfo does not contain SignedData")
-
-        data = guarded_ber_decode(content['content'], asn1_spec=rfc2315.SignedData())
-
-        signed_data = SignedData(data, *args, **kwargs)
-        signed_data._rest_data = rest
-        return signed_data
+        super().__init__(data)
 
     def _parse(self):
         # Parse the fields of the SignedData structure
         if self.data['version'] != 1:
             raise AuthenticodeParseError("SignedData.version must be 1, not %d" % self.data['version'])
 
-        # digestAlgorithms
-        if len(self.data['digestAlgorithms']) != 1:
-            raise AuthenticodeParseError("SignedData.digestAlgorithms must contain exactly 1 algorithm, not %d" %
-                                         len(self.data['digestAlgorithms']))
-        self.digest_algorithm = _get_digest_algorithm(self.data['digestAlgorithms'][0], "SignedData.digestAlgorithm")
-
-        # SpcIndirectDataContent
-        self.content_type = asn1.oids.get(self.data['contentInfo']['contentType'])
-        if self.content_type is not asn1.spc.SpcIndirectDataContent:
-            raise AuthenticodeParseError("SignedData.contentInfo does not contain SpcIndirectDataContent")
-        spc_info = guarded_ber_decode(self.data['contentInfo']['content'], asn1_spec=asn1.spc.SpcIndirectDataContent())
-        self.spc_info = SpcInfo(spc_info)
-
-        # Certificates
-        self.certificates = CertificateStore([Certificate(cert) for cert in self.data['certificates']])
+        super()._parse()
+        self.spc_info = SpcInfo(self.content)
 
         # signerInfos
-        if len(self.data['signerInfos']) != 1:
+        if len(self.signer_infos) != 1:
             raise AuthenticodeParseError("SignedData.signerInfos must contain exactly 1 signer, not %d" %
-                                         len(self.data['signerInfos']))
+                                         len(self.signer_infos))
 
-        self.signer_info = AuthenticodeSignerInfo(self.data['signerInfos'][0])
+        self.signer_info = self.signer_infos[0]
 
         # CRLs
         if 'crls' in self.data and self.data['crls'].isValue:
@@ -288,7 +260,18 @@ class SignedData(object):
         self.signer_info.verify(verification_context)
 
 
-class RFC3161SignedData:
+class RFC3161SignerInfo(SignerInfo):
+    """Subclass of SignerInfo that is used to contain the signerinfo for the RFC3161SignedData option."""
+
+    _expected_content_type = rfc3161.TSTInfo
+    _required_authenticated_attributes = (rfc2315.ContentType, rfc2315.Digest)
+    _countersigner_class = None  # prevent countersigners in here
+
+
+class RFC3161SignedData(SignedData):
+    _expected_content_type = rfc3161.TSTInfo
+    _signerinfo_class = RFC3161SignerInfo
+
     def __init__(self, data):
         """Some samples have shown to include a RFC-3161 countersignature in the unauthenticated attributes
         (as OID 1.3.6.1.4.1.311.3.3.1, which is in the Microsoft private namespace). This attribute contains its own
@@ -296,22 +279,12 @@ class RFC3161SignedData:
 
         :param asn1.pkcs7.SignedData data: The ASN.1 structure of the SignedData object
         """
-
-        self.data = data
-        self._parse()
+        super().__init__(data)
 
     def _parse(self):
-        # digestAlgorithms
-        if len(self.data['digestAlgorithms']) != 1:
-            raise AuthenticodeParseError("RFC3161 SignedData.digestAlgorithms must contain exactly 1 algorithm, not "
-                                         "%d" % len(self.data['digestAlgorithms']))
-        self.digest_algorithm = _get_digest_algorithm(self.data['digestAlgorithms'][0], "SignedData.digestAlgorithm")
+        super()._parse()
 
         # Get the tst_info
-        self.content_type = asn1.oids.get(self.data['encapContentInfo']['eContentType'])
-        if self.content_type is not rfc3161.TSTInfo:
-            raise AuthenticodeParseError("RFC3161 SignedData.contentInfo does not contain TSTInfo")
-
         self.tst_info = guarded_der_decode(self.data['encapContentInfo']['eContent'], asn1_spec=rfc3161.TSTInfo())
 
         if self.tst_info['version'] != 1:
@@ -327,17 +300,12 @@ class RFC3161SignedData:
         # TODO handle case where directoryName is not a rdnSequence
         self.signing_authority = CertificateName(self.tst_info['tsa']['directoryName']['rdnSequence'])
 
-        # Certificates
-        self.certificates = CertificateStore(
-            [Certificate(cert) for cert in self.data['certificates'] if Certificate.is_certificate(cert)]
-        )
-
         # signerInfos
-        if len(self.data['signerInfos']) != 1:
+        if len(self.signer_infos) != 1:
             raise AuthenticodeParseError("RFC3161 SignedData.signerInfos must contain exactly 1 signer, not %d" %
-                                         len(self.data['signerInfos']))
+                                         len(self.signer_infos))
 
-        self.signer_info = RFC3161SignerInfo(self.data['signerInfos'][0])
+        self.signer_info = self.signer_infos[0]
 
     def verify(self, context=None, trusted_certificate_store=TRUSTED_CERTIFICATE_STORE):
         """Verifies the RFC3161 SignedData object. The context that is passed in must account for the certificate
@@ -362,14 +330,6 @@ class RFC3161SignedData:
 
         # The context is set correctly by the 'verify' function, including the current certificate store
         self.signer_info.verify(context)
-
-
-class RFC3161SignerInfo(SignerInfo):
-    """Subclass of SignerInfo that is used to contain the signerinfo for the RFC3161SignedData option."""
-
-    _expected_content_type = rfc3161.TSTInfo
-    _required_authenticated_attributes = (rfc2315.ContentType, rfc2315.Digest)
-    _countersigner_class = None  # prevent countersigners in here
 
 
 if __name__ == "__main__":
