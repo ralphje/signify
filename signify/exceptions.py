@@ -37,3 +37,11 @@ class SignerInfoVerificationError(VerificationError):
 class AuthenticodeVerificationError(VerificationError):
     """Raised when any exception regarding verifying Authenticode structures occurs."""
     pass
+
+
+class CertificateTrustListParseError(SignifyError):
+    pass
+
+
+class CTLCertificateVerificationError(CertificateVerificationError):
+    pass

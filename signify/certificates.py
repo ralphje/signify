@@ -142,6 +142,10 @@ class Certificate(object):
     def sha256_fingerprint(self):
         return self.to_asn1crypto.sha256_fingerprint
 
+    @cached_property
+    def sha1_fingerprint(self):
+        return self.to_asn1crypto.sha1_fingerprint
+
     def verify_signature(self, signature, data, algorithm, allow_legacy=False):
         """Verifies whether the signature bytes match the data using the hashing algorithm. Supports RSA and EC keys.
         Note that not all hashing algorithms are supported.

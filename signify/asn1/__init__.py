@@ -1,4 +1,4 @@
-from . import pkcs7, spc, oids
+from . import pkcs7, spc, oids, ctl
 
 
 def guarded_ber_decode(data, asn1_spec=None):

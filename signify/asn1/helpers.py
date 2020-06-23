@@ -7,8 +7,10 @@ from pyasn1_modules import rfc5652
 def time_to_python(time):
     if 'utcTime' in time:
         return time['utcTime'].asDateTime
-    else:
+    elif 'generalTime' in time:
         return time['generalTime'].asDateTime
+    else:
+        return None
 
 
 def accuracy_to_python(accuracy):

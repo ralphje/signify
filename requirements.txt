@@ -3,3 +3,4 @@ certvalidator
 asn1crypto
 oscrypto
 pyasn1-modules
+requests

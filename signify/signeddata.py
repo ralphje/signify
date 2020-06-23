@@ -31,6 +31,8 @@ class SignedData:
 
         :param bytes data: The bytes to parse
         """
+        with open("data", "wb") as f:
+            f.write(data)
         # This one is not guarded, which is intentional
         content, rest = ber_decoder.decode(data, asn1Spec=rfc2315.ContentInfo())
         if asn1.oids.get(content['contentType']) is not rfc2315.SignedData:
