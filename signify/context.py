@@ -243,7 +243,7 @@ class VerificationContext(object):
         timestamp = self.timestamp
         context = ValidationContext(
             trust_roots=list(trust_roots),
-            moment=timestamp,
+            moment=timestamp if not self.allow_fetching else None,
             weak_hash_algos=set() if self.allow_legacy else None,
             revocation_mode=self.revocation_mode,
             allow_fetching=self.allow_fetching,

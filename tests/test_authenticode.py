@@ -137,6 +137,14 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             pefile = SignedPEFile(f)
             pefile.verify()
 
+    def test_3a7de393a36ca8911cd0842a9a25b058_valid_with_crl_fetching(self):
+        """works when timestamp is defined and CRL fetching enabled"""
+        with open(str(root_dir / "test_data" / "3a7de393a36ca8911cd0842a9a25b058"), "rb") as f:
+            pefile = SignedPEFile(f)
+            pefile.verify(verification_context_kwargs=
+                          {'timestamp': datetime.datetime(2019, 1, 1, tzinfo=datetime.timezone.utc),
+                           'allow_fetching': True, 'revocation_mode': 'hard-fail'})
+
     def test_solwarwinds_valid_countersignature_rfc3161(self):
         """Solarwinds includes a 1.3.6.1.4.1.311.3.3.1 type countersignature"""
         with open(str(root_dir / "test_data" / "SolarWinds.exe"), "rb") as f:
