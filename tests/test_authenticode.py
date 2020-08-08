@@ -162,8 +162,8 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             with self.assertRaises(VerificationError):
                 pefile.verify(verification_context_kwargs={'allow_fetching': True, 'revocation_mode': 'hard-fail'})
 
-    def test_zonealarm_with_weird_countersignature(self):
-        """this certificate is revoked"""
+    def test_zonealarm_rfc3161_different_hash_and_digest_algorithms(self):
+        """this tests a RFC3161 sample that has distinct hash and digest algorithms"""
         with open(str(root_dir / "test_data" / "zonealarm.exe"), "rb") as f:
             pefile = SignedPEFile(f)
             pefile.verify()
