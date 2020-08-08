@@ -236,9 +236,7 @@ class AuthenticodeSignedData(SignedData):
             try:
                 # 3. Check the countersigner hash.
                 # Make sure to use the same digest_algorithm that the countersigner used
-                auth_attr_hash = \
-                    self.signer_info.countersigner.digest_algorithm(self.signer_info.encrypted_digest).digest()
-                if auth_attr_hash != self.signer_info.countersigner.message_digest:
+                if not self.signer_info.countersigner.check_message_digest(self.signer_info.encrypted_digest):
                     raise AuthenticodeVerificationError('The expected hash of the encryptedDigest does not match '
                                                         'countersigner\'s SignerInfo')
 
@@ -307,15 +305,16 @@ class RFC3161SignedData(SignedData):
 
         self.signer_info = self.signer_infos[0]
 
+    def check_message_digest(self, data):
+        """Given the data, returns whether the hash_algorithm and message_digest match the data provided."""
+
+        auth_attr_hash = self.hash_algorithm(data).digest()
+        return auth_attr_hash == self.message_digest
+
     def verify(self, context=None, trusted_certificate_store=TRUSTED_CERTIFICATE_STORE):
         """Verifies the RFC3161 SignedData object. The context that is passed in must account for the certificate
         store of this object, or be left None.
         """
-
-        # Verify that the two digest algorithms are identical
-        if self.digest_algorithm != self.hash_algorithm:
-            raise AuthenticodeVerificationError("SignedData.digestAlgorithm must equal "
-                                                "TstInfo.messageImprint.hashAlgorithm")
 
         # We should ensure that the hash in the SignerInfo matches the hash of the content
         # This is similar to the normal verification process, where the SpcInfo is verified

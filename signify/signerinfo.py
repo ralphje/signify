@@ -139,6 +139,12 @@ class SignerInfo(object):
 
             self.countersigner = self._countersigner_class(self.unauthenticated_attributes[pkcs7.Countersignature][0])
 
+    def check_message_digest(self, data):
+        """Given the data, returns whether the hash_algorithm and message_digest match the data provided."""
+
+        auth_attr_hash = self.digest_algorithm(data).digest()
+        return auth_attr_hash == self.message_digest
+
     @classmethod
     def _parse_attributes(cls, data, required=()):
         """Given a set of Attributes, parses them and returns them as a dict
