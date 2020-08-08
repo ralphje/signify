@@ -28,7 +28,7 @@ import binascii
 
 import datetime
 
-from signify.authenticode import CERTIFICATE_LOCATION, TRUSTED_CERTIFICATE_STORE
+from signify.authenticode import CERTIFICATE_LOCATION, TRUSTED_CERTIFICATE_STORE, TRUSTED_CERTIFICATE_STORE_NO_CTL
 from signify.context import VerificationContext, FileSystemCertificateStore, CertificateStore
 from signify.exceptions import VerificationError, AuthenticodeVerificationError, SignedPEParseError
 from signify.fingerprinter import AuthenticodeFingerprinter
@@ -100,7 +100,7 @@ class AuthenticodeParserTestCase(unittest.TestCase):
     def test_0d8c_valid(self):
         with open(str(root_dir / "test_data" / "0d8c2bcb575378f6a88d17b5f6ce70e794a264cdc8556c8e812f0b5f9c709198"), "rb") as f:
             pefile = SignedPEFile(f)
-            pefile.verify()
+            pefile.verify(trusted_certificate_store=TRUSTED_CERTIFICATE_STORE_NO_CTL)
 
     def test_19e8_expired(self):
         """this is an expired sample"""

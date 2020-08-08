@@ -2,7 +2,7 @@ import datetime
 import pathlib
 import unittest
 
-from signify.authenticode import TRUSTED_CERTIFICATE_STORE
+from signify.authenticode import TRUSTED_CERTIFICATE_STORE, TRUSTED_CERTIFICATE_STORE_NO_CTL
 from signify.certificates import Certificate
 from signify.context import VerificationContext, FileSystemCertificateStore
 from signify.exceptions import VerificationError
@@ -21,7 +21,8 @@ class ContextTestCase(unittest.TestCase):
         with open(str(root_dir / "test_data" / "19e818d0da361c4feedd456fca63d68d4b024fbbd3d9265f606076c7ee72e8f8.ViR"), "rb") as f:
             pefile = SignedPEFile(f)
             for signed_data in pefile.signed_datas:
-                context = VerificationContext(TRUSTED_CERTIFICATE_STORE, signed_data.certificates)
+
+                context = VerificationContext(TRUSTED_CERTIFICATE_STORE_NO_CTL, signed_data.certificates)
                 potential_chains = list(signed_data.signer_info.potential_chains(context))
                 self.assertEqual(len(potential_chains), 2)
                 # for chain in potential_chains:

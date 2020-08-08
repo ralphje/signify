@@ -4,7 +4,7 @@ import logging
 from certvalidator import ValidationContext, CertificateValidator
 
 from signify.certificates import Certificate
-from signify.exceptions import VerificationError
+from signify.exceptions import VerificationError, CTLCertificateVerificationError, CertificateVerificationError
 
 logger = logging.getLogger(__name__)
 
@@ -12,15 +12,31 @@ logger = logging.getLogger(__name__)
 class CertificateStore(list):
     """A list of :class:`Certificate` objects."""
 
-    def __init__(self, *args, trusted=False, **kwargs):
+    def __init__(self, *args, trusted=False, ctl=None, **kwargs):
         """
         :param bool trusted: If true, all certificates that are appended to this structure are set to trusted.
         """
         super().__init__(*args, **kwargs)
         self.trusted = trusted
+        self.ctl = ctl
 
     def append(self, elem):
         return super().append(elem)
+
+    def verify_trust(self, certificate, timestamp=None, extended_key_usages=None):
+        if not self.trusted or certificate not in self:
+            return False
+
+        if self.ctl is not None:
+            self.ctl.verify_trust(certificate, timestamp=timestamp, extended_key_usages=extended_key_usages)
+
+        return True
+
+    def is_trusted(self, certificate, timestamp=None, extended_key_usages=None):
+        try:
+            return self.verify_trust(certificate, timestamp=timestamp, extended_key_usages=extended_key_usages)
+        except CTLCertificateVerificationError:
+            return False
 
     def find_certificate(self, **kwargs):
         """Finds the certificate as specified by the keyword arguments. See :meth:`find_certificates`
@@ -236,6 +252,7 @@ class VerificationContext(object):
         for store in self.stores:
             for cert in store:
                 asn1cert = cert.to_asn1crypto
+                # we short-circuit the check here to ensure we do not check too much possibilities
                 (trust_roots if store.trusted else intermediates).append(asn1cert)
                 all_certs[asn1cert] = cert
 
@@ -267,8 +284,10 @@ class VerificationContext(object):
             )
         except Exception as e:
             raise VerificationError("Chain verification from %s failed: %s" % (certificate, e))
-        else:
-            return [all_certs[x] for x in chain]
+
+        signify_chain = [all_certs[x] for x in chain]
+        self.verify_trust(signify_chain[0])
+        return signify_chain
 
     def is_trusted(self, certificate):
         """Determines whether the given certificate is in a trusted certificate store.
@@ -277,7 +296,30 @@ class VerificationContext(object):
         :return: True if the certificate is in a trusted certificate store.
         """
 
+        try:
+            return self.verify_trust(certificate)
+        except VerificationError:
+            return False
+
+    def verify_trust(self, certificate):
+        """Determines whether the given certificate is in a trusted certificate store.
+
+        :param Certificate certificate: The certificate to verify trust for.
+        :return: True if the certificate is in a trusted certificate store.
+        """
+
+        exc = None
+
         for store in self.stores:
-            if store.trusted and certificate in store:
-                return True
-        return False
+            try:
+                if store.verify_trust(certificate,
+                                      timestamp=self.timestamp, extended_key_usages=self.extended_key_usages):
+                    return True
+            except VerificationError as e:
+                exc = e
+
+        if exc:
+            raise exc
+
+        raise VerificationError("The trust for %s could not be verified, as it is not trusted by any store"
+                                % certificate)

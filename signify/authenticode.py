@@ -33,6 +33,7 @@ from pyasn1_modules import rfc3161, rfc2315, rfc5652
 
 from signify.asn1 import guarded_ber_decode, guarded_der_decode, pkcs7
 from signify.asn1.helpers import accuracy_to_python, patch_rfc5652_signeddata
+from signify.authroot import CertificateTrustList
 from signify.certificates import Certificate, CertificateName
 from signify.context import CertificateStore, VerificationContext, FileSystemCertificateStore
 from signify.exceptions import AuthenticodeParseError, AuthenticodeVerificationError, ParseError
@@ -43,7 +44,12 @@ from signify import asn1
 logger = logging.getLogger(__name__)
 
 CERTIFICATE_LOCATION = pathlib.Path(__file__).resolve().parent / "certs" / "authenticode-bundle.pem"
-TRUSTED_CERTIFICATE_STORE = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True)
+TRUSTED_CERTIFICATE_STORE_NO_CTL = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True)
+TRUSTED_CERTIFICATE_STORE = TRUSTED_CERTIFICATE_STORE_NO_CTL
+# TODO: We should verify this better, but for some reason several certificates are not trusted by our own interpretation
+# of the CTL, but Microsoft thinks they are.
+# TRUSTED_CERTIFICATE_STORE = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True,
+#                                                        ctl=CertificateTrustList.from_stl_file())
 
 
 class AuthenticodeCounterSignerInfo(CounterSignerInfo):

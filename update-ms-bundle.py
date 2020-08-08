@@ -7,59 +7,77 @@ import concurrent.futures
 import csv
 import pathlib
 import requests
+import asn1crypto.pem
 
+from signify.authroot import CertificateTrustList
 
-CCADB_URL = "https://ccadb-public.secure.force.com/microsoft/IncludedCACertificateReportForMSFTCSV"
-CERT_URL = "https://crt.sh/?d={}"
+CERT_URL = "http://ctldl.windowsupdate.com/msdownload/update/v3/static/trustedr/en/{}.crt"
 BUNDLE_PATH = pathlib.Path(__file__).resolve().parent / "signify" / "certs" / "authenticode-bundle.pem"
 CACHE_PATH = pathlib.Path(__file__).resolve().parent / ".cache" / "certs"
 CACHE_PATH.mkdir(parents=True, exist_ok=True)
 
 # First fetch all data
-ccadb_data = []
-certs_to_fetch = set()
-with requests.get(CCADB_URL, stream=True) as r:
+CertificateTrustList.update_stl_file()
+ctl = CertificateTrustList.from_stl_file()
+print("Fetched CTL file, there are {} subjects".format(len(ctl.subjects)))
+
+
+def check_certificate_in_cache(identifier):
+    if not (CACHE_PATH / identifier).exists():
+        return False
+    with open(CACHE_PATH / identifier, "r") as cert_file:
+        content = cert_file.read()
+        if "-----END CERTIFICATE-----" not in content:
+            print("Invalid cached certificate, adding {} again".format(identifier))
+            return False
+    return True
+
+
+def fetch_certificate(identifier):
+    r = requests.get(CERT_URL.format(identifier))
     r.raise_for_status()
-    lines = (line.decode('utf-8') for line in r.iter_lines())
-    for row in csv.DictReader(lines):
-        ccadb_data.append(row)
-        if not (CACHE_PATH / row['SHA-256 Fingerprint']).exists():
-            certs_to_fetch.add(row['SHA-256 Fingerprint'])
-        else:
-            with open(CACHE_PATH / row['SHA-256 Fingerprint'], "r") as cert_file:
-                content = cert_file.read()
-                if "-----END CERTIFICATE-----" not in content:
-                    print("Invalid cached certificate, adding {} again".format(row['SHA-256 Fingerprint']))
-                    certs_to_fetch.add(row['SHA-256 Fingerprint'])
-
-print("Fetched CSV file, there are {} entries".format(len(ccadb_data)))
+    with open(CACHE_PATH / identifier, "wb") as f:
+        f.write(asn1crypto.pem.armor("CERTIFICATE", r.content))
+    print("- Fetched certificate {}".format(identifier))
 
 
-# Second make sure we have all the certificates we need
-def fetch_certificate(sha256):
-    r = requests.get(CERT_URL.format(sha256))
-    r.raise_for_status()
-    with open(CACHE_PATH / sha256, "w") as f:
-        f.write(r.text)
-    print("- Fetched certificate {}".format(sha256))
+def readable_eku(eku):
+    from asn1crypto.x509 import KeyPurposeId
+    return KeyPurposeId._map.get(".".join(map(str, eku)), ".".join(map(str, eku)))
 
 
-print("Need to fetch {} certificates to cache".format(len(certs_to_fetch)))
-with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-    futures = [executor.submit(fetch_certificate, sha256) for sha256 in certs_to_fetch]
-    concurrent.futures.wait(futures)
-    print("Fetched {} certificates to cache".format(len(futures)))
+for i, subject in enumerate(ctl.subjects):
+    print(subject.friendly_name, "{} / {}".format(i+1, len(ctl.subjects)))
 
+    if check_certificate_in_cache(subject.identifier.hex()):
+        continue
+    fetch_certificate(subject.identifier.hex())
 
-# Thirdly, add all certificates to the bundle file
 with open(BUNDLE_PATH, "w", encoding='utf-8') as f:
-    for row in ccadb_data:
-        print("{CA Owner} - {CA Common Name or Certificate Name}".format(**row))
-
-        with open(CACHE_PATH / row['SHA-256 Fingerprint'], "r") as cert_file:
+    for subject in ctl.subjects:
+        with open(CACHE_PATH / subject.identifier.hex(), "r") as cert_file:
             certificate_body = cert_file.read()
 
-        for k, v in row.items():
-            f.write("{k}: {v}\n".format(k=k, v=v))
+        f.write("Subject Identifier: {}\n".format(subject.identifier.hex()))
+        if subject.friendly_name:
+            f.write("Friendly Name: {}\n".format(subject.friendly_name[:-1]))
+        if subject.extended_key_usages:
+            f.write("Extended key usages: {}\n".format([readable_eku(x) for x in subject.extended_key_usages]))
+        if subject.subject_name_md5:
+            f.write("Subject Name MD5: {}\n".format(subject.subject_name_md5.hex()))
+        if subject.disallowed_filetime:
+            f.write("Disallowed Filetime: {}\n".format(subject.disallowed_filetime))
+        if subject.root_program_chain_policies:
+            f.write("Root Program Chain Policies: {}\n".format(
+                [readable_eku(x) for x in subject.root_program_chain_policies]))
+        if subject.disallowed_extended_key_usages:
+            f.write("Disallowed extended key usages: {}\n".format(
+                [readable_eku(x) for x in subject.disallowed_extended_key_usages]))
+        if subject.not_before_filetime:
+            f.write("Not before Filetime: {}\n".format(subject.not_before_filetime))
+        if subject.not_before_extended_key_usages:
+            f.write("Not before extended key usages: {}\n".format(
+                [readable_eku(x) for x in subject.not_before_extended_key_usages]))
+
         f.write(certificate_body)
         f.write("\n")

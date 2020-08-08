@@ -50,8 +50,14 @@ class CertificateTrustList(SignedData):
         self.next_update = time_to_python(self.content['ctlNextUpdate'])
         self.subject_algorithm = _get_digest_algorithm(self.content['subjectAlgorithm'],
                                                        location="CertificateTrustList.subjectAlgorithm")
-        self.subjects = [CertificateTrustSubject(subject) for subject in self.content['trustedSubjects']]
+        self._subjects = {}
+        for subj in (CertificateTrustSubject(subject) for subject in self.content['trustedSubjects']):
+            self._subjects[subj.identifier.hex().lower()] = subj
         # TODO: extensions??
+
+    @property
+    def subjects(self):
+        return self._subjects.values()
 
     def verify_trust(self, certificate, *args, **kwargs):
         """Checks whether the specified certificate is valid in the given conditions according to this Certificate Trust
@@ -61,14 +67,12 @@ class CertificateTrustList(SignedData):
         """
 
         # Find the subject belonging to this certificate
-        subject = list(self.find_subjects(certificate))
+        subject = self.find_subject(certificate)
         if not subject:
             raise CTLCertificateVerificationError("The root %s is not in the certificate trust list" % certificate)
-        subject = subject[0]
-
         return subject.verify_trust(*args, **kwargs)
 
-    def find_subjects(self, certificate):
+    def find_subject(self, certificate):
         if self.subject_algorithm == hashlib.sha1:
             identifier = certificate.sha1_fingerprint
         elif self.subject_algorithm == hashlib.sha256:
@@ -76,9 +80,7 @@ class CertificateTrustList(SignedData):
         else:
             raise CertificateTrustListParseError("The specified subject algorithm is not yet supported.")
 
-        for subj in self.subjects:
-            if subj.identifier == identifier:
-                yield subj
+        return self._subjects.get(identifier)
 
     @classmethod
     def update_stl_file(cls):
@@ -174,9 +176,16 @@ class CertificateTrustSubject:
             :meth:`certvalidator.CertificateValidator.validate_usage`
         """
 
+        if timestamp is None:
+            timestamp = datetime.datetime.now(datetime.timezone.utc)
+        if extended_key_usages is None:
+            extended_key_usages = ()
+
         # Verify the certificate is valid on the specified date
         if not self.is_valid(timestamp):
-            raise CTLCertificateVerificationError("The root %s is not trusted on %s" % (self.friendly_name, timestamp))
+            raise CTLCertificateVerificationError("The root %s is not trusted on %s (trust range is %s - %s)"
+                                                  % (self.friendly_name, timestamp, self.not_before_filetime,
+                                                     self.disallowed_filetime))
 
         # Start by converting the list of provided extended_key_usages to a list of OIDs
         requested_extended_key_usages = set(_lookup_ekus(extended_key_usages))

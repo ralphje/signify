@@ -98,7 +98,7 @@ class Certificate(object):
                 self.extensions[asn1.oids.get(extension['extnID'])] = extension['extnValue']
 
     def __str__(self):
-        return "{}(serial:{})".format(self.subject.dn, self.serial_number)
+        return "{} (serial:{}, sha1:{})".format(self.subject.dn, self.serial_number, self.sha1_fingerprint)
 
     def __hash__(self):
         return hash((self.issuer, self.serial_number, self.subject,
@@ -140,11 +140,11 @@ class Certificate(object):
 
     @cached_property
     def sha256_fingerprint(self):
-        return self.to_asn1crypto.sha256_fingerprint
+        return self.to_asn1crypto.sha256_fingerprint.replace(" ", "").lower()
 
     @cached_property
     def sha1_fingerprint(self):
-        return self.to_asn1crypto.sha1_fingerprint
+        return self.to_asn1crypto.sha1_fingerprint.replace(" ", "").lower()
 
     def verify_signature(self, signature, data, algorithm, allow_legacy=False):
         """Verifies whether the signature bytes match the data using the hashing algorithm. Supports RSA and EC keys.
