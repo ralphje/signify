@@ -97,7 +97,7 @@ class CertificateTrustList(SignedData):
 
     @classmethod
     def from_stl_file(cls, path=AUTHROOTSTL_PATH):
-        with open(path, "rb") as f:
+        with open(str(path), "rb") as f:
             content, rest = ber_decoder.decode(f.read(), asn1Spec=rfc2315.ContentInfo())
         #
         # from pyasn1 import debug
