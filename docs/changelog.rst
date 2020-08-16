@@ -2,6 +2,23 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
+v0.3.0 (2020-08-16)
+-------------------
+This release should be mostly backwards-compatible, but various features have been added that warranted a larger
+version increase.
+
+* Support for passing in a different trusted certificate store than the default in various verify functions
+* Added option to ignore countersignature errors when validating
+* Added support for SHA-384 and SHA-512
+* Added ``Certificate.from_pems``, ``Certificate.__hash__``, ``Certificate.sha1_fingerprint``,
+  ``Certificate.sha256_fingerprint``
+* Added ``CertificateStore.find_certificate`` and ``CertificateStore.find_certificates``
+* Added support for ``authroot.stl`` (``signify.authroot``), though we haven't figured out how it works exactly yet.
+  Support can be used by adding a ctl to a trusted ``CertificateStore``.
+* Updated authenticode certificate store by basing it on Microsoft's ``authroot.stl``
+* Fixed bug in RFC3161 countersignatures that contain malformed RFC5652 structures
+* Fixed bug in RFC3161 countersignatures that have a different digest function and hash function
+
 v0.2.0 (2020-04-27)
 -------------------
 This release contains various backwards-incompatible changes.
