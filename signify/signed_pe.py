@@ -191,7 +191,7 @@ class SignedPEFile(object):
             certificate = self.file.read(length - 8)
 
             yield {'revision': revision, 'type': certificate_type, 'certificate': certificate}
-            position += length + (8 - (length % 8))
+            position += length + (8 - length % 8) % 8
 
     def get_fingerprinter(self):
         """Returns a fingerprinter object for this file.
