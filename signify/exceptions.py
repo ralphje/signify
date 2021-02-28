@@ -39,6 +39,22 @@ class AuthenticodeVerificationError(VerificationError):
     pass
 
 
+class AuthenticodeNotSignedError(AuthenticodeVerificationError):
+    pass
+
+
+class AuthenticodeInconsistentDigestAlgorithmError(AuthenticodeVerificationError):
+    pass
+
+
+class AuthenticodeInvalidDigestError(AuthenticodeVerificationError):
+    pass
+
+
+class AuthenticodeCounterSignerError(AuthenticodeVerificationError):
+    pass
+
+
 class CertificateTrustListParseError(SignifyError):
     pass
 

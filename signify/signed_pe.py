@@ -36,7 +36,8 @@ import os
 import struct
 import sys
 
-from signify.exceptions import AuthenticodeVerificationError, SignedPEParseError
+from signify.authenticode import AuthenticodeVerificationResult
+from signify.exceptions import SignedPEParseError, AuthenticodeNotSignedError
 
 logger = logging.getLogger(__name__)
 
@@ -281,8 +282,18 @@ class SignedPEFile(object):
             else:
                 return
         if last_error is None:
-            raise AuthenticodeVerificationError("No valid SignedData structure was found.")
+            raise AuthenticodeNotSignedError("No valid SignedData structure was found.")
         raise last_error
+
+    def explain_verify(self, *args, **kwargs):
+        """This will return a value indicating the signature status of this PE file. This will not raise an error
+        when the verification fails, but rather indicate this through the resulting enum
+
+        :rtype Tuple[AuthenticodeVerificationResult, Exception]: The verification result, and the exception containing
+            more details (if available or None)
+        """
+
+        return AuthenticodeVerificationResult.call(self.verify, *args, **kwargs)
 
 
 def main(*filenames):
@@ -293,7 +304,6 @@ def main(*filenames):
             try:
                 pe = SignedPEFile(file_obj)
                 for signed_data in pe.signed_datas:
-                    print("  Signature:")
                     print("    Included certificates:")
                     for cert in signed_data.certificates:
                         print("      - Subject: {}".format(cert.subject.dn))
@@ -311,23 +321,42 @@ def main(*filenames):
 
                     if signed_data.signer_info.countersigner:
                         print()
-                        print("    Countersigner:")
                         if hasattr(signed_data.signer_info.countersigner, 'issuer'):
+                            print("    Countersigner:")
                             print("        Issuer: {}".format(signed_data.signer_info.countersigner.issuer.dn))
+                        if hasattr(signed_data.signer_info.countersigner, 'signer_info'):
+                            print("    Countersigner (nested RFC3161):")
+                            print("        Issuer: {}".format(
+                                signed_data.signer_info.countersigner.signer_info.issuer.dn
+                            ))
                         print("        Serial: {}".format(signed_data.signer_info.countersigner.serial_number))
                         print("        Signing time: {}".format(signed_data.signer_info.countersigner.signing_time))
+
+                        if hasattr(signed_data.signer_info.countersigner, 'certificates'):
+                            print("        Included certificates:")
+                            for cert in signed_data.signer_info.countersigner.certificates:
+                                print("          - Subject: {}".format(cert.subject.dn))
+                                print("            Issuer: {}".format(cert.issuer.dn))
+                                print("            Serial: {}".format(cert.serial_number))
+                                print("            Valid from: {}".format(cert.valid_from))
+                                print("            Valid to: {}".format(cert.valid_to))
 
                     print()
                     print("    Digest algorithm: {}".format(signed_data.digest_algorithm.__name__))
                     print("    Digest: {}".format(signed_data.spc_info.digest.hex()))
 
                     print()
-                    try:
-                        signed_data.verify()
-                        print("    Signature: valid")
-                    except Exception as e:
-                        print("    Signature: invalid")
+
+                    result, e = signed_data.explain_verify()
+                    print("    {}".format(result))
+                    if e:
                         print("    {}".format(e))
+                    print("--------")
+
+                result, e = pe.explain_verify()
+                print(result)
+                if e:
+                    print(e)
 
             except Exception as e:
                 print("    Error while parsing: " + str(e))

@@ -283,7 +283,7 @@ class VerificationContext(object):
                 extended_optional=self.optional_eku
             )
         except Exception as e:
-            raise VerificationError("Chain verification from %s failed: %s" % (certificate, e))
+            raise CertificateVerificationError("Chain verification from %s failed: %s" % (certificate, e))
 
         signify_chain = [all_certs[x] for x in chain]
         self.verify_trust(signify_chain[0])
@@ -321,5 +321,5 @@ class VerificationContext(object):
         if exc:
             raise exc
 
-        raise VerificationError("The trust for %s could not be verified, as it is not trusted by any store"
-                                % certificate)
+        raise CertificateVerificationError("The trust for %s could not be verified, as it is not trusted by any store"
+                                           % certificate)

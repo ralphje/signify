@@ -2,6 +2,14 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
+Unreleased
+----------
+* Added the functions ``explain_verify`` to ``SignedPEFile`` and ``AuthenticodeSignerInfo`` that return an
+  easy-to-digest enum with the verification result.
+* Added support for nested SignedData structures inside the unauthenticated attributes of SignerInfo objects. These
+  are transparently added to the ``SignedPEFile.signed_datas`` iterator. You can use ``SignedPEFile.iter_signed_datas``
+  to control this behaviour.
+
 v0.3.0 (2020-08-16)
 -------------------
 This release should be mostly backwards-compatible, but various features have been added that warranted a larger

@@ -24,7 +24,7 @@
 
 .. _Authenticode_PE: http://download.microsoft.com/download/9/c/5/9c5b2167-8017-4bae-9fde-d599bac8184a/Authenticode_PE.docx
 """
-
+import enum
 import logging
 import pathlib
 
@@ -33,10 +33,11 @@ from pyasn1_modules import rfc3161, rfc2315, rfc5652
 
 from signify.asn1 import guarded_ber_decode, guarded_der_decode, pkcs7
 from signify.asn1.helpers import accuracy_to_python, patch_rfc5652_signeddata
-from signify.authroot import CertificateTrustList
-from signify.certificates import Certificate, CertificateName
+from signify.certificates import CertificateName
 from signify.context import CertificateStore, VerificationContext, FileSystemCertificateStore
-from signify.exceptions import AuthenticodeParseError, AuthenticodeVerificationError, ParseError
+from signify.exceptions import AuthenticodeParseError, AuthenticodeVerificationError, ParseError, \
+    AuthenticodeInconsistentDigestAlgorithmError, AuthenticodeInvalidDigestError, AuthenticodeCounterSignerError, \
+    SignedPEParseError, AuthenticodeNotSignedError, CertificateVerificationError, VerificationError
 from signify.signeddata import SignedData
 from signify.signerinfo import _get_digest_algorithm, SignerInfo, CounterSignerInfo
 from signify import asn1
@@ -50,6 +51,41 @@ TRUSTED_CERTIFICATE_STORE = TRUSTED_CERTIFICATE_STORE_NO_CTL
 # of the CTL, but Microsoft thinks they are.
 # TRUSTED_CERTIFICATE_STORE = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True,
 #                                                        ctl=CertificateTrustList.from_stl_file())
+
+
+class AuthenticodeVerificationResult(enum.Enum):
+    OK = enum.auto()
+    NOT_SIGNED = enum.auto()
+    PARSE_ERROR = enum.auto()
+    VERIFY_ERROR = enum.auto()
+    UNKNOWN_ERROR = enum.auto()
+    CERTIFICATE_ERROR = enum.auto()
+    INCONSISTENT_DIGEST_ALGORITHM = enum.auto()
+    INVALID_DIGEST = enum.auto()
+    COUNTERSIGNER_ERROR = enum.auto()
+
+    @classmethod
+    def call(cls, function, *args, **kwargs):
+        try:
+            function(*args, **kwargs)
+        except (SignedPEParseError, AuthenticodeNotSignedError) as exc:
+            return cls.NOT_SIGNED, exc
+        except AuthenticodeInconsistentDigestAlgorithmError as exc:
+            return cls.INCONSISTENT_DIGEST_ALGORITHM, exc
+        except AuthenticodeInvalidDigestError as exc:
+            return cls.INVALID_DIGEST, exc
+        except AuthenticodeCounterSignerError as exc:
+            return cls.COUNTERSIGNER_ERROR, exc
+        except CertificateVerificationError as exc:
+            return cls.CERTIFICATE_ERROR, exc
+        except ParseError as exc:
+            return cls.PARSE_ERROR, exc
+        except VerificationError as exc:
+            return cls.VERIFY_ERROR, exc
+        except Exception as exc:
+            return cls.UNKNOWN_ERROR, exc
+        else:
+            return cls.OK, None
 
 
 class AuthenticodeCounterSignerInfo(CounterSignerInfo):
@@ -219,10 +255,12 @@ class AuthenticodeSignedData(SignedData):
 
         # Check that the digest algorithms match
         if self.digest_algorithm != self.spc_info.digest_algorithm:
-            raise AuthenticodeVerificationError("SignedData.digestAlgorithm must equal SpcInfo.digestAlgorithm")
+            raise AuthenticodeInconsistentDigestAlgorithmError("SignedData.digestAlgorithm must equal "
+                                                               "SpcInfo.digestAlgorithm")
 
         if self.digest_algorithm != self.signer_info.digest_algorithm:
-            raise AuthenticodeVerificationError("SignedData.digestAlgorithm must equal SignerInfo.digestAlgorithm")
+            raise AuthenticodeInconsistentDigestAlgorithmError("SignedData.digestAlgorithm must equal "
+                                                               "SignerInfo.digestAlgorithm")
 
         # Check that the hashes are correct
         # 1. The hash of the file
@@ -232,7 +270,7 @@ class AuthenticodeSignedData(SignedData):
             expected_hash = fingerprinter.hash()[self.digest_algorithm().name]
 
         if expected_hash != self.spc_info.digest:
-            raise AuthenticodeVerificationError("The expected hash does not match the digest in SpcInfo")
+            raise AuthenticodeInvalidDigestError("The expected hash does not match the digest in SpcInfo")
 
         # 2. The hash of the spc blob
         # According to RFC2315, 9.3, identifier (tag) and length need to be
@@ -243,7 +281,7 @@ class AuthenticodeSignedData(SignedData):
         _, hashable_spc_blob = ber_decoder.decode(self.data['contentInfo']['content'], recursiveFlag=0)
         spc_blob_hash = self.digest_algorithm(bytes(hashable_spc_blob)).digest()
         if spc_blob_hash != self.signer_info.message_digest:
-            raise AuthenticodeVerificationError('The expected hash of the SpcInfo does not match SignerInfo')
+            raise AuthenticodeInvalidDigestError('The expected hash of the SpcInfo does not match SignerInfo')
 
         # Can't check authAttr hash against encrypted hash, done implicitly in
         # M2's pubkey.verify.
@@ -253,8 +291,8 @@ class AuthenticodeSignedData(SignedData):
                 # 3. Check the countersigner hash.
                 # Make sure to use the same digest_algorithm that the countersigner used
                 if not self.signer_info.countersigner.check_message_digest(self.signer_info.encrypted_digest):
-                    raise AuthenticodeVerificationError('The expected hash of the encryptedDigest does not match '
-                                                        'countersigner\'s SignerInfo')
+                    raise AuthenticodeCounterSignerError('The expected hash of the encryptedDigest does not match '
+                                                         'countersigner\'s SignerInfo')
 
                 cs_verification_context.timestamp = self.signer_info.countersigner.signing_time
 
@@ -266,12 +304,22 @@ class AuthenticodeSignedData(SignedData):
                 if allow_countersignature_errors:
                     pass
                 else:
-                    raise AuthenticodeVerificationError("An error occurred while validating the countersignature.")
+                    raise AuthenticodeCounterSignerError("An error occurred while validating the countersignature.")
             else:
                 # If no errors occur, we should be fine setting the timestamp to the countersignature's timestamp
                 verification_context.timestamp = self.signer_info.countersigner.signing_time
 
         self.signer_info.verify(verification_context)
+
+    def explain_verify(self, *args, **kwargs):
+        """This will return a value indicating the signature status of this object. This will not raise an error
+        when the verification fails, but rather indicate this through the resulting enum
+
+        :rtype Tuple[AuthenticodeVerificationResult, Exception]: The verification result, and the exception containing
+            more details (if available or None)
+        """
+
+        return AuthenticodeVerificationResult.call(self.verify, *args, **kwargs)
 
 
 class RFC3161SignerInfo(SignerInfo):
@@ -337,7 +385,7 @@ class RFC3161SignedData(SignedData):
         # Note that the mapping between the RFC3161 SignedData object is ensured by the verifier in SignedData
         blob_hash = self.digest_algorithm(bytes(self.data['encapContentInfo']['eContent'])).digest()
         if blob_hash != self.signer_info.message_digest:
-            raise AuthenticodeVerificationError('The expected hash of the TstInfo does not match SignerInfo')
+            raise AuthenticodeCounterSignerError('The expected hash of the TstInfo does not match SignerInfo')
 
         if context is None:
             context = VerificationContext(trusted_certificate_store, self.certificates,
