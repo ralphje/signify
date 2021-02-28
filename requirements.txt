@@ -1,6 +1,6 @@
-pyasn1
-certvalidator
-asn1crypto
-oscrypto
-pyasn1-modules
+pyasn1>=0.4.0
+certvalidator>=0.11
+asn1crypto>=1.3,<2
+oscrypto>=1.1,<2
+pyasn1-modules>=0.2.8
 requests

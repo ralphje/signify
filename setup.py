@@ -28,7 +28,11 @@ setup(
     author_email='ralph@ralphbroenink.net',
     description='Module to generate and verify PE signatures',
     long_description=long_description,
-    install_requires=['pyasn1>=0.4.0', 'certvalidator>=0.11', 'asn1crypto', 'oscrypto', 'pyasn1-modules'],
+    install_requires=['pyasn1>=0.4.0',
+                      'certvalidator>=0.11',
+                      'asn1crypto>=1.3,<2',
+                      'oscrypto>=1.1,<2',
+                      'pyasn1-modules>=0.2.8'],
     extras_require={
         "stlupdate": ["requests"],
     },
