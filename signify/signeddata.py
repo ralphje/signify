@@ -72,4 +72,4 @@ class SignedData:
 
         # SignerInfo
         if self._signerinfo_class is not None:
-            self.signer_infos = [self._signerinfo_class(si) for si in self.data['signerInfos']]
+            self.signer_infos = [self._signerinfo_class(si, parent=self) for si in self.data['signerInfos']]

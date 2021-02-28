@@ -77,6 +77,16 @@ class AuthenticodeSignerInfo(SignerInfo):
             self.program_name = self.authenticated_attributes[asn1.spc.SpcSpOpusInfo][0]['programName'].to_python()
             self.more_info = self.authenticated_attributes[asn1.spc.SpcSpOpusInfo][0]['moreInfo'].to_python()
 
+        # - Authenticode can use nested signatures through OID 1.3.6.1.4.1.311.2.4.1
+        self.nested_signed_datas = []
+        if asn1.spc.SpcNestedSignature in self.unauthenticated_attributes:
+            for sig_data in self.unauthenticated_attributes[asn1.spc.SpcNestedSignature]:
+                content_type = asn1.oids.get(sig_data['contentType'])
+                if content_type is not rfc2315.SignedData:
+                    raise AuthenticodeParseError("Nested signature is not a SignedData structure")
+                signed_data = guarded_ber_decode(sig_data['content'], asn1_spec=content_type())
+                self.nested_signed_datas.append(AuthenticodeSignedData(signed_data, pefile=self.parent.pefile))
+
         # - Authenticode can be signed using a RFC-3161 timestamp, so we discover this possibility here
         if pkcs7.Countersignature in self.unauthenticated_attributes \
                 and asn1.spc.SpcRfc3161Timestamp in self.unauthenticated_attributes:

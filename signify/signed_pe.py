@@ -210,7 +210,24 @@ class SignedPEFile(object):
         :return: iterator of signify.authenticode.SignedData
         """
 
+        yield from self.iter_signed_datas()
+
+    def iter_signed_datas(self, include_nested=True):
+        """Returns an iterator over :class:`signify.authenticode.SignedData` objects relevant for this PE file.
+
+        :param include_nested: Boolean, if True, will also iterate over all nested SignedData structures
+        :raises SignedPEParseError: For parse errors in the PEFile
+        :raises signify.authenticode.AuthenticodeParseError: For parse errors in the SignedData
+        :return: iterator of signify.authenticode.SignedData
+        """
+
         from .authenticode import AuthenticodeSignedData
+
+        def recursive_nested(signed_data):
+            yield signed_data
+            if include_nested:
+                for nested in signed_data.signer_info.nested_signed_datas:
+                    yield from recursive_nested(nested)
 
         found = False
         for certificate in self._parse_cert_table():
@@ -218,7 +235,8 @@ class SignedPEFile(object):
                 raise SignedPEParseError("Unknown certificate revision %x" % certificate['revision'])
 
             if certificate['type'] == 2:
-                yield AuthenticodeSignedData.from_envelope(certificate['certificate'], pefile=self)
+                yield from recursive_nested(AuthenticodeSignedData.from_envelope(certificate['certificate'],
+                                                                                 pefile=self))
                 found = True
 
         if not found:
@@ -275,6 +293,7 @@ def main(*filenames):
             try:
                 pe = SignedPEFile(file_obj)
                 for signed_data in pe.signed_datas:
+                    print("  Signature:")
                     print("    Included certificates:")
                     for cert in signed_data.certificates:
                         print("      - Subject: {}".format(cert.subject.dn))

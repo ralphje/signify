@@ -43,6 +43,7 @@ OID_TO_CLASS = {
     (1, 3, 6, 1, 4, 1, 311, 2, 1, 4): spc.SpcIndirectDataContent,
     # (1, 3, 6, 1, 4, 1, 311, 2, 1, 11): spc.SpcStatementType,  # TODO: test and verify
     (1, 3, 6, 1, 4, 1, 311, 2, 1, 12): spc.SpcSpOpusInfo,
+    (1, 3, 6, 1, 4, 1, 311, 2, 4, 1): spc.SpcNestedSignature,
     (1, 3, 6, 1, 4, 1, 311, 3, 3, 1): spc.SpcRfc3161Timestamp,
     (1, 3, 6, 1, 4, 1, 311, 10, 1): ctl.CertificateTrustList,
     (1, 3, 6, 1, 4, 1, 311, 10, 11, 9): ctl.EnhkeyUsage,

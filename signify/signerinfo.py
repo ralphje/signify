@@ -46,7 +46,7 @@ class SignerInfo(object):
     _required_authenticated_attributes = (rfc2315.ContentType, rfc2315.Digest)
     _expected_content_type = None
 
-    def __init__(self, data):
+    def __init__(self, data, parent=None):
         """The Authenticode's SignerInfo structure.
 
         :param data: The ASN.1 structure of the SignerInfo.
@@ -55,6 +55,7 @@ class SignerInfo(object):
             self._countersigner_class = globals()[self._countersigner_class]
 
         self.data = data
+        self.parent = parent
         self._parse()
 
     def _parse(self):

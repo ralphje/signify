@@ -107,3 +107,7 @@ class SpcStatementType(univ.Sequence):
 
 class SpcRfc3161Timestamp(rfc2315.ContentInfo):
     pass
+
+
+class SpcNestedSignature(rfc2315.ContentInfo):
+    pass
