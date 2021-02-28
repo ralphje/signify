@@ -4,6 +4,7 @@ This page contains the most significant changes in Signify between each release.
 
 Unreleased
 ----------
+* Drop support for Python 3.5
 * Added the functions ``explain_verify`` to ``SignedPEFile`` and ``AuthenticodeSignerInfo`` that return an
   easy-to-digest enum with the verification result.
 * Added support for nested SignedData structures inside the unauthenticated attributes of SignerInfo objects. These
