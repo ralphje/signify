@@ -277,15 +277,15 @@ def main(*filenames):
                 for signed_data in pe.signed_datas:
                     print("    Included certificates:")
                     for cert in signed_data.certificates:
-                        print("      - Subject: {}".format(cert.subject_dn))
-                        print("        Issuer: {}".format(cert.issuer_dn))
+                        print("      - Subject: {}".format(cert.subject.dn))
+                        print("        Issuer: {}".format(cert.issuer.dn))
                         print("        Serial: {}".format(cert.serial_number))
                         print("        Valid from: {}".format(cert.valid_from))
                         print("        Valid to: {}".format(cert.valid_to))
 
                     print()
                     print("    Signer:")
-                    print("        Issuer: {}".format(signed_data.signer_info.issuer_dn))
+                    print("        Issuer: {}".format(signed_data.signer_info.issuer.dn))
                     print("        Serial: {}".format(signed_data.signer_info.serial_number))
                     print("        Program name: {}".format(signed_data.signer_info.program_name))
                     print("        More info: {}".format(signed_data.signer_info.more_info))
@@ -293,9 +293,14 @@ def main(*filenames):
                     if signed_data.signer_info.countersigner:
                         print()
                         print("    Countersigner:")
-                        print("        Issuer: {}".format(signed_data.signer_info.countersigner.issuer_dn))
+                        if hasattr(signed_data.signer_info.countersigner, 'issuer'):
+                            print("        Issuer: {}".format(signed_data.signer_info.countersigner.issuer.dn))
                         print("        Serial: {}".format(signed_data.signer_info.countersigner.serial_number))
                         print("        Signing time: {}".format(signed_data.signer_info.countersigner.signing_time))
+
+                    print()
+                    print("    Digest algorithm: {}".format(signed_data.digest_algorithm.__name__))
+                    print("    Digest: {}".format(signed_data.spc_info.digest.hex()))
 
                     print()
                     try:
