@@ -199,22 +199,19 @@ class SignedPEFile(object):
 
         :rtype: signify.fingerprinter.AuthenticodeFingerprinter
         """
-        from .fingerprinter import AuthenticodeFingerprinter
+        from ..fingerprinter import AuthenticodeFingerprinter
         return AuthenticodeFingerprinter(self.file)
 
     @property
     def signed_datas(self):
-        """Returns an iterator over :class:`signify.authenticode.SignedData` objects relevant for this PE file.
-
-        :raises SignedPEParseError: For parse errors in the PEFile
-        :raises signify.authenticode.AuthenticodeParseError: For parse errors in the SignedData
-        :return: iterator of signify.authenticode.SignedData
+        """Returns an iterator over :class:`AuthenticodeSignedData` objects relevant for
+        this PE file. See :meth:`iter_signed_datas`
         """
 
         yield from self.iter_signed_datas()
 
     def iter_signed_datas(self, include_nested=True):
-        """Returns an iterator over :class:`signify.authenticode.SignedData` objects relevant for this PE file.
+        """Returns an iterator over :class:`AuthenticodeSignedData` objects relevant for this PE file.
 
         :param include_nested: Boolean, if True, will also iterate over all nested SignedData structures
         :raises SignedPEParseError: For parse errors in the PEFile
@@ -222,7 +219,7 @@ class SignedPEFile(object):
         :return: iterator of signify.authenticode.SignedData
         """
 
-        from .authenticode import AuthenticodeSignedData
+        from .structures import AuthenticodeSignedData
 
         def recursive_nested(signed_data):
             yield signed_data

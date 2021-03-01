@@ -7,14 +7,14 @@ from pyasn1.codec.ber import decoder as ber_decoder
 from pyasn1_modules import rfc2315
 
 from signify import asn1
-from signify.asn1 import guarded_ber_decode, ctl
+from signify.asn1 import guarded_ber_decode
 from signify.asn1.helpers import time_to_python
 from signify.exceptions import CertificateTrustListParseError, CTLCertificateVerificationError
-from signify.signeddata import SignedData
-from signify.signerinfo import _get_digest_algorithm
+from signify.pkcs7.signeddata import SignedData
+from signify.pkcs7.signerinfo import _get_digest_algorithm
 
 AUTHROOTSTL_URL = "http://ctldl.windowsupdate.com/msdownload/update/v3/static/trustedr/en/authroot.stl"
-AUTHROOTSTL_PATH = pathlib.Path(__file__).resolve().parent / "certs" / "authroot.stl"
+AUTHROOTSTL_PATH = pathlib.Path(__file__).resolve().parent.parent / "certs" / "authroot.stl"
 
 
 def _lookup_ekus(extended_key_usages=None):
@@ -38,6 +38,20 @@ def _lookup_ekus(extended_key_usages=None):
 
 
 class CertificateTrustList(SignedData):
+    """A subclass of :class:`signify.pkcs7.SignedData`, containing a list of trusted root certificates.
+
+    .. attribute:: data
+
+       The underlying ASN.1 data object
+
+    .. attribute:: subject_usage
+    .. attribute:: list_identifier
+    .. attribute:: sequence_number
+    .. attribute:: this_update
+    .. attribute:: next_update
+    .. attribute:: subject_algorithm
+
+    """
     _expected_content_type = asn1.ctl.CertificateTrustList
 
     def _parse(self):
@@ -57,6 +71,8 @@ class CertificateTrustList(SignedData):
 
     @property
     def subjects(self):
+        """A list of :class:`CertificateTrustSubject` s in this list."""
+
         return self._subjects.values()
 
     def verify_trust(self, certificate, *args, **kwargs):
@@ -73,6 +89,12 @@ class CertificateTrustList(SignedData):
         return subject.verify_trust(*args, **kwargs)
 
     def find_subject(self, certificate):
+        """Finds the :class:`CertificateTrustSubject` belonging to the provided :class:`signify.x509.Certificate`.
+
+        :param signify.x509.Certificate certificate: The certificate to look for.
+        :rtype: CertificateTrustSubject
+        """
+
         if self.subject_algorithm == hashlib.sha1:
             identifier = certificate.sha1_fingerprint
         elif self.subject_algorithm == hashlib.sha256:
@@ -97,6 +119,8 @@ class CertificateTrustList(SignedData):
 
     @classmethod
     def from_stl_file(cls, path=AUTHROOTSTL_PATH):
+        """Loads a :class:`CertificateTrustList` from a specified path."""
+
         with open(str(path), "rb") as f:
             content, rest = ber_decoder.decode(f.read(), asn1Spec=rfc2315.ContentInfo())
         #
@@ -114,6 +138,31 @@ class CertificateTrustList(SignedData):
 
 
 class CertificateTrustSubject:
+    """A subject listed in a :class:`CertificateTrustList`.
+
+    .. attribute:: data
+
+       The underlying ASN.1 data object
+
+    .. attribute:: attributes
+
+       A dictionary mapping of attribute types to values.
+
+    The following values are extracted from the attributes:
+
+    .. attribute:: extended_key_usages
+    .. attribute:: friendly_name
+    .. attribute:: key_identifier
+    .. attribute:: subject_name_md5
+    .. attribute:: auth_root_sha256
+    .. attribute:: disallowed_filetime
+    .. attribute:: root_program_chain_policies
+    .. attribute:: disallowed_extended_key_usages
+    .. attribute:: not_before_filetime
+    .. attribute:: not_before_extended_key_usages
+
+    """
+
     def __init__(self, data):
         self.data = data
         self._parse()
@@ -156,6 +205,8 @@ class CertificateTrustSubject:
             self.not_before_extended_key_usages = [tuple(x) for x in self.attributes[asn1.ctl.NotBeforeEnhkeyUsage][0]]
 
     def is_valid(self, timestamp):
+        """Returns whether the current entry is a valid certificate at the provided time."""
+
         # If there is a notBefore time, and there is no NotBeforeEnhkeyUsage, then the validity concerns the entire
         # certificate.
         # If there is both a notBefore time and a NotBeforeEnhkeyUsage, then the notBefore concerns the EKU only

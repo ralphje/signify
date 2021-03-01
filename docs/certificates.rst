@@ -1,6 +1,8 @@
-========================
-Certificates and context
-========================
+===================================
+X509: Certificates and Verification
+===================================
+.. module:: signify.x509
+
 To be able to verify structures, Signify has a library to allow validating certificates. The Certificate is an object
 that abstracts a x509 certificate and has the ability to be verified. The verification requires the creation of a
 validation chain, that lead back to a trusted certificate authority.
@@ -18,7 +20,6 @@ You can use this module as follows::
 
 Certificate
 -----------
-.. module:: signify.certificates
 
 .. autoclass:: Certificate
    :members:
@@ -26,14 +27,15 @@ Certificate
 .. autoclass:: CertificateName
    :members:
 
-Verification
-------------
-
-.. module:: signify.context
-
-.. autoclass:: VerificationContext
-   :members:
+Certificate Store
+-----------------
 .. autoclass:: CertificateStore
    :members:
 .. autoclass:: FileSystemCertificateStore
+   :members:
+
+Verification
+------------
+
+.. autoclass:: VerificationContext
    :members:

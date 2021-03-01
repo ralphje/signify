@@ -2,9 +2,13 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
-Unreleased
-----------
+v0.4.0 (unreleased)
+-------------------
 * Drop support for Python 3.5
+* Moved some stuff around to make more clear packages: ``signify.fingerprinter`` will remain unchanged,
+  ``signify.x509`` combines certificates and their verification, ``signify.pkcs7`` combines SignedData and SignerInfo,
+  and ``signify.authenticode`` contains all Microsoft-related code. This change is also reflected in how the docs
+  are structured.
 * Added the functions ``explain_verify`` to ``SignedPEFile`` and ``AuthenticodeSignerInfo`` that return an
   easy-to-digest enum with the verification result.
 * Added support for nested SignedData structures inside the unauthenticated attributes of SignerInfo objects. These

@@ -17,7 +17,7 @@ except Exception:
 setup(
     name='signify',
     version=about['__version__'],
-    packages=['signify', 'signify.asn1'],
+    packages=['signify', 'signify.asn1', 'signify.authenticode', 'signify.pkcs7', 'signify.x509'],
     package_data={'signify': ['*.pem']},
     include_package_data=True,
 

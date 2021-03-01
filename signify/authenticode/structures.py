@@ -31,20 +31,19 @@ import pathlib
 from pyasn1.codec.ber import decoder as ber_decoder
 from pyasn1_modules import rfc3161, rfc2315, rfc5652
 
-from signify.asn1 import guarded_ber_decode, guarded_der_decode, pkcs7
+from signify.asn1 import guarded_ber_decode, pkcs7
 from signify.asn1.helpers import accuracy_to_python, patch_rfc5652_signeddata
-from signify.certificates import CertificateName
-from signify.context import CertificateStore, VerificationContext, FileSystemCertificateStore
-from signify.exceptions import AuthenticodeParseError, AuthenticodeVerificationError, ParseError, \
+from signify.x509 import CertificateName, CertificateStore, VerificationContext, FileSystemCertificateStore
+from signify.exceptions import AuthenticodeParseError, ParseError, \
     AuthenticodeInconsistentDigestAlgorithmError, AuthenticodeInvalidDigestError, AuthenticodeCounterSignerError, \
     SignedPEParseError, AuthenticodeNotSignedError, CertificateVerificationError, VerificationError
-from signify.signeddata import SignedData
-from signify.signerinfo import _get_digest_algorithm, SignerInfo, CounterSignerInfo
+from signify.pkcs7 import SignedData, SignerInfo, CounterSignerInfo
+from signify.pkcs7.signerinfo import _get_digest_algorithm
 from signify import asn1
 
 logger = logging.getLogger(__name__)
 
-CERTIFICATE_LOCATION = pathlib.Path(__file__).resolve().parent / "certs" / "authenticode-bundle.pem"
+CERTIFICATE_LOCATION = pathlib.Path(__file__).resolve().parent.parent / "certs" / "authenticode-bundle.pem"
 TRUSTED_CERTIFICATE_STORE_NO_CTL = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True)
 TRUSTED_CERTIFICATE_STORE = TRUSTED_CERTIFICATE_STORE_NO_CTL
 # TODO: We should verify this better, but for some reason several certificates are not trusted by our own interpretation
@@ -106,9 +105,9 @@ class AuthenticodeSignerInfo(SignerInfo):
 
     .. attribute:: nested_signed_datas
 
-       It is possible for Authenticode SignerInfo objects to contain nested :class:`signify.signeddata.SignedData`
+       It is possible for Authenticode SignerInfo objects to contain nested :class:`signify.pkcs7.SignedData`
        objects. This is  similar to including multiple SignedData structures in the
-       :class:`signify.signed_pe.SignedPEFile`. This field  is extracted from  the unauthenticated attributes.
+       :class:`signify.authenticode.SignedPEFile`. This field  is extracted from  the unauthenticated attributes.
 
     The :attr:`countersigner` attribute can hold the same as in the normal :class:`SignerInfo`, but may also contain a
     :class:`RFC3161SignedData` class:
@@ -117,7 +116,7 @@ class AuthenticodeSignerInfo(SignerInfo):
 
        Authenticode may use a different countersigning mechanism, rather than using a nested
        :class:`AuthenticodeCounterSignerInfo`, it  may use a nested RFC-3161 response, which is a nested
-       :class:`signify.signeddata.SignedData` structure (of type :class:`RFC3161SignedData`). This is also assigned
+       :class:`signify.pkcs7.SignedData` structure (of type :class:`RFC3161SignedData`). This is also assigned
        to the countersigner attribute if this is available.
 
 
@@ -232,7 +231,7 @@ class SpcInfo:
 
 
 class AuthenticodeSignedData(SignedData):
-    """The :class:`signify.signeddata.SignedData` structure for Authenticode. It holds the same information as its
+    """The :class:`signify.pkcs7.SignedData` structure for Authenticode. It holds the same information as its
     superclass, with additionally the :class:`SpcInfo`:
 
     .. attribute:: spc_info
@@ -464,7 +463,7 @@ class RFC3161SignedData(SignedData):
     (as OID 1.3.6.1.4.1.311.3.3.1, which is in the Microsoft private namespace). This attribute contains its own
     signed data structure.
 
-    This is a subclass of :class:`signify.signeddata.SignedData`, containing a RFC3161 TSTInfo in its content field.
+    This is a subclass of :class:`signify.pkcs7.SignedData`, containing a RFC3161 TSTInfo in its content field.
 
     .. attribute:: tst_info
        :type: TSTInfo
@@ -505,7 +504,7 @@ class RFC3161SignedData(SignedData):
 
         The object is verified by verifying that the hash of the :class:`TSTInfo` matches the
         :attr:`SignerInfo.message_digest` value. The remainder of the validation is done by calling
-         :meth:`SignerInfo.verify`
+        :meth:`SignerInfo.verify`
         """
 
         # We should ensure that the hash in the SignerInfo matches the hash of the content

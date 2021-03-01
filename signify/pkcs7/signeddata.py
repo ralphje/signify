@@ -3,10 +3,10 @@ from pyasn1_modules import rfc2315, rfc5652
 
 from signify import asn1, _print_type
 from signify.asn1 import guarded_ber_decode
-from signify.certificates import Certificate
-from signify.context import CertificateStore
+from signify.x509.certificates import Certificate
+from signify.x509.context import CertificateStore
 from signify.exceptions import ParseError
-from signify.signerinfo import _get_digest_algorithm
+from signify.pkcs7.signerinfo import _get_digest_algorithm
 
 
 class SignedData:

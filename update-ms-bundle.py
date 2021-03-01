@@ -3,13 +3,11 @@ Mozilla's CCADB, as mentioned on https://docs.microsoft.com/en-us/security/trust
 on https://ccadb-public.secure.force.com/microsoft/IncludedCACertificateReportForMSFT.
 """
 
-import concurrent.futures
-import csv
 import pathlib
 import requests
 import asn1crypto.pem
 
-from signify.authroot import CertificateTrustList
+from signify.authenticode.authroot import CertificateTrustList
 
 CERT_URL = "http://ctldl.windowsupdate.com/msdownload/update/v3/static/trustedr/en/{}.crt"
 BUNDLE_PATH = pathlib.Path(__file__).resolve().parent / "signify" / "certs" / "authenticode-bundle.pem"

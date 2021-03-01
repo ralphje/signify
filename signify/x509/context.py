@@ -3,7 +3,7 @@ import logging
 
 from certvalidator import ValidationContext, CertificateValidator
 
-from signify.certificates import Certificate
+from signify.x509.certificates import Certificate
 from signify.exceptions import VerificationError, CTLCertificateVerificationError, CertificateVerificationError
 
 logger = logging.getLogger(__name__)

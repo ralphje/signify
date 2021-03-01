@@ -29,10 +29,10 @@ import binascii
 import datetime
 
 from signify.authenticode import CERTIFICATE_LOCATION, TRUSTED_CERTIFICATE_STORE, TRUSTED_CERTIFICATE_STORE_NO_CTL
-from signify.context import VerificationContext, FileSystemCertificateStore, CertificateStore
+from signify.x509.context import VerificationContext, FileSystemCertificateStore, CertificateStore
 from signify.exceptions import VerificationError, AuthenticodeVerificationError, SignedPEParseError
 from signify.fingerprinter import AuthenticodeFingerprinter
-from signify.signed_pe import SignedPEFile
+from signify.authenticode.signed_pe import SignedPEFile
 
 root_dir = pathlib.Path(__file__).parent
 trusted_certificate_store = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True)

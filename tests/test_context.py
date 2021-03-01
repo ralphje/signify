@@ -1,12 +1,11 @@
-import datetime
 import pathlib
 import unittest
 
 from signify.authenticode import TRUSTED_CERTIFICATE_STORE, TRUSTED_CERTIFICATE_STORE_NO_CTL
-from signify.certificates import Certificate
-from signify.context import VerificationContext, FileSystemCertificateStore
+from signify.x509.certificates import Certificate
+from signify.x509.context import VerificationContext, FileSystemCertificateStore
 from signify.exceptions import VerificationError
-from signify.signed_pe import SignedPEFile
+from signify.authenticode.signed_pe import SignedPEFile
 
 root_dir = pathlib.Path(__file__).parent
 

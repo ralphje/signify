@@ -1,8 +1,7 @@
 import unittest
 import pathlib
 
-from signify.authenticode import TRUSTED_CERTIFICATE_STORE
-from signify.authroot import CertificateTrustList
+from signify.authenticode.authroot import CertificateTrustList
 
 root_dir = pathlib.Path(__file__).parent
 

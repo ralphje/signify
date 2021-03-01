@@ -26,8 +26,7 @@ from pyasn1_modules.rfc5652 import Time
 
 from signify.asn1 import guarded_ber_decode
 from signify.asn1.helpers import time_to_python
-from signify.authenticode import CERTIFICATE_LOCATION, TRUSTED_CERTIFICATE_STORE
-from signify.certificates import Certificate
+from signify.authenticode import TRUSTED_CERTIFICATE_STORE
 from signify.exceptions import ParseError
 
 

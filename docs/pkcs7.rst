@@ -1,6 +1,7 @@
-=========================
-SignedData and SignerInfo
-=========================
+================================
+PKCS7: SignedData and SignerInfo
+================================
+.. module:: signify.pkcs7
 
 To support Authenticode, this library includes some code to parse and validate SignedData structures. These are defined
 in several RFC's, most notably RFC2315 (which is the version Authenticode uses). The structure of all relevant RFC's
@@ -21,15 +22,12 @@ SignedData
 ==========
 The SignedData object is the root structure for sending encrypted data in PKCS#7.
 
-.. module:: signify.signeddata
 
 .. autoclass:: SignedData
    :members:
 
 SignerInfo
 ==========
-
-.. module:: signify.signerinfo
 
 .. autoclass:: SignerInfo
    :members:

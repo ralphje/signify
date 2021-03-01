@@ -8,9 +8,9 @@ from pyasn1_modules import rfc5652, rfc2315
 from signify.asn1 import guarded_ber_decode, pkcs7
 from signify.exceptions import VerificationError, SignerInfoParseError, \
     SignerInfoVerificationError, ParseError
-from . import asn1, _print_type
-from .asn1.helpers import time_to_python
-from .certificates import CertificateName
+from signify import asn1, _print_type
+from signify.asn1.helpers import time_to_python
+from signify.x509.certificates import CertificateName
 
 ACCEPTED_DIGEST_ALGORITHMS = (hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha384, hashlib.sha512)
 

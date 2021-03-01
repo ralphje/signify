@@ -27,7 +27,7 @@ import sys
 import logging
 import binascii
 
-from .signed_pe import SignedPEFile
+from signify.authenticode.signed_pe import SignedPEFile
 
 logger = logging.getLogger(__name__)
 
@@ -105,8 +105,8 @@ class Fingerprinter(object):
     def __init__(self, file_obj, block_size=1000000):
         """A Fingerprinter is an interface to generate hashes of (parts) of a file.
 
-        It is passed in a file object and given a set of :class:`Finger`s that define how a file must be hashed. It is a
-        generic approach to not hashing parts of a file.
+        It is passed in a file object and given a set of :class:`Finger` s that define how a file must be hashed. It is
+        a generic approach to not hashing parts of a file.
 
         :param file_obj: A file opened in bytes-mode
         :param block_size: The block size used to feed to the hashers.

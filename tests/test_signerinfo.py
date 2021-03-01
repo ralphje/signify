@@ -4,7 +4,7 @@ import unittest
 from pyasn1_modules.rfc2315 import DigestAlgorithmIdentifier
 
 from signify.exceptions import ParseError
-from signify.signerinfo import _get_digest_algorithm
+from signify.pkcs7.signerinfo import _get_digest_algorithm
 
 
 class GetDigestAlgorithmTest(unittest.TestCase):
