@@ -289,7 +289,8 @@ class SignedPEFile(object):
         """This will return a value indicating the signature status of this PE file. This will not raise an error
         when the verification fails, but rather indicate this through the resulting enum
 
-        :rtype Tuple[AuthenticodeVerificationResult, Exception]: The verification result, and the exception containing
+        :rtype: (signify.authenticode.AuthenticodeVerificationResult, Exception)
+        :returns: The verification result, and the exception containing
             more details (if available or None)
         """
 

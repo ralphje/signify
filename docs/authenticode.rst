@@ -18,65 +18,46 @@ Note that the file must remain open as long as nog all SignedData objects have b
 
 Signed PE File
 --------------
+A regular PE file will contain zero or one :class:`AuthenticodeSignedData` objects. The :class:`SignedPEFile` class
+contains helpers to ensure the correct objects can be extracted, and additionally, allows for validating the PE
+signatures.
+
 .. module:: signify.signed_pe
 
 .. autoclass:: SignedPEFile
    :members:
 
+SignedData and SignerInfo
+-------------------------
+To help understand the specific SignedData and SignerInfo objects, the following graph may help:
+
+.. image:: http://yuml.me/f68f2b83.svg
 
 .. module:: signify.authenticode
 
-Data structures
----------------
-.. autoclass:: SignedData
+.. autoclass:: AuthenticodeSignedData
    :members:
 
-   .. attribute:: data
-
-      The underlying ASN.1 data object
-
-   .. attribute:: pefile
-
-      The underlying :class:`signify.signed_pe.SignedPEFile` object
-
-   .. attribute:: digest_algorithm
-   .. attribute:: content_type
-   .. attribute:: spc_info
-
-      The :class:`SpcInfo` object.
-
-   .. attribute:: certificates
-
-      The :class:`signify.context.CertificateStore` object.
-
-   .. attribute:: signer_info
-
-      The :class:`AuthenticodeSignerInfo` object.
+.. autoclass:: SpcInfo
+   :members:
 
 .. autoclass:: AuthenticodeSignerInfo
    :members:
 
-   .. attribute:: program_name
-   .. attribute:: more_info
+Regular countersigning
+----------------------
 
 .. autoclass:: AuthenticodeCounterSignerInfo
    :members:
-.. autoclass:: SpcInfo
+
+RFC3161 countersigning
+----------------------
+
+.. autoclass:: RFC3161SignedData
    :members:
-
-   .. attribute:: data
-
-      The underlying ASN.1 data object
-
-   .. attribute:: content_type
-
-      The contenttype class
-
-   .. attribute:: image_data
-   .. attribute:: digest_algorithm
-   .. attribute:: digest
-   .. attribute:: image_data
-
-
+.. autoclass:: TSTInfo
+   :members:
+.. autoclass:: RFC3161SignerInfo
+   :members:
 
 

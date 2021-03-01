@@ -89,13 +89,39 @@ class AuthenticodeVerificationResult(enum.Enum):
 
 
 class AuthenticodeCounterSignerInfo(CounterSignerInfo):
-    """Subclass of CounterSignerInfo that is used to contain the countersignerinfo for Authenticode."""
+    """Subclass of :class:`CounterSignerInfo` that is used to contain the countersignerinfo for Authenticode."""
 
     _required_authenticated_attributes = (rfc2315.ContentType, rfc5652.SigningTime, rfc2315.Digest)
 
 
 class AuthenticodeSignerInfo(SignerInfo):
-    """Subclass of SignerInfo that is used to contain the signerinfo for Authenticode."""
+    """Subclass of :class:`SignerInfo` that is used by the verification of Authenticode. Note that this will contain
+    the same attributes as :class:`SignerInfo`, and additionally the following:
+
+    .. attribute:: program_name
+                   more_info
+
+       This information is extracted from the SpcSpOpusInfo authenticated attribute, containing the program's name and
+       an URL with more information.
+
+    .. attribute:: nested_signed_datas
+
+       It is possible for Authenticode SignerInfo objects to contain nested :class:`signify.signeddata.SignedData`
+       objects. This is  similar to including multiple SignedData structures in the
+       :class:`signify.signed_pe.SignedPEFile`. This field  is extracted from  the unauthenticated attributes.
+
+    The :attr:`countersigner` attribute can hold the same as in the normal :class:`SignerInfo`, but may also contain a
+    :class:`RFC3161SignedData` class:
+
+    .. attribute:: countersigner
+
+       Authenticode may use a different countersigning mechanism, rather than using a nested
+       :class:`AuthenticodeCounterSignerInfo`, it  may use a nested RFC-3161 response, which is a nested
+       :class:`signify.signeddata.SignedData` structure (of type :class:`RFC3161SignedData`). This is also assigned
+       to the countersigner attribute if this is available.
+
+
+    """
 
     _countersigner_class = AuthenticodeCounterSignerInfo
     _expected_content_type = asn1.spc.SpcIndirectDataContent
@@ -150,9 +176,43 @@ class AuthenticodeSignerInfo(SignerInfo):
 
 
 class SpcInfo:
-    def __init__(self, data):
-        """The Authenticode's SpcIndirectDataContent information, and their children. It is only partially parsed."""
+    """The Authenticode's SpcIndirectDataContent information, and their children. This is expected to be part of the
+    content of the SignedData structure in Authenticode.
 
+    Note that this structure is completely flattened out from this ASN.1 spec::
+
+        SpcIndirectDataContent ::= SEQUENCE {
+            data SpcAttributeTypeAndOptionalValue,
+            messageDigest  DigestInfo
+        }
+        SpcAttributeTypeAndOptionalValue ::= SEQUENCE {
+            type ObjectID,
+            value [0] EXPLICIT ANY OPTIONAL
+        }
+        DigestInfo ::= SEQUENCE {
+            digestAlgorithm  AlgorithmIdentifier,
+            digest OCTETSTRING
+        }
+        AlgorithmIdentifier ::= SEQUENCE {
+            algorithm ObjectID,
+            parameters [0] EXPLICIT ANY OPTIONAL
+        }
+
+    .. attribute:: data
+
+       The underlying ASN.1 data object
+
+    .. attribute:: content_type
+
+       The contenttype class
+
+    .. attribute:: image_data
+    .. attribute:: digest_algorithm
+    .. attribute:: digest
+
+
+    """
+    def __init__(self, data):
         self.data = data
         self._parse()
 
@@ -172,12 +232,20 @@ class SpcInfo:
 
 
 class AuthenticodeSignedData(SignedData):
+    """The :class:`signify.signeddata.SignedData` structure for Authenticode. It holds the same information as its
+    superclass, with additionally the :class:`SpcInfo`:
+
+    .. attribute:: spc_info
+
+       The parsed :attr:`content` of this :class:`SignedData` object, being a SpcIndirectDataContent object.
+
+    """
+
     _expected_content_type = asn1.spc.SpcIndirectDataContent
     _signerinfo_class = AuthenticodeSignerInfo
 
     def __init__(self, data, pefile=None):
-        """The SignedData object of Authenticode. It is the root of all Authenticode related information.
-
+        """
         :param asn1.pkcs7.SignedData data: The ASN.1 structure of the SignedData object
         :param pefile: The related PEFile.
         """
@@ -208,15 +276,17 @@ class AuthenticodeSignedData(SignedData):
                allow_countersignature_errors=False):
         """Verifies the SignedData structure:
 
-        * Verifies that the digest algorithms match across the structure
-        * Ensures that the hash in the :class:`SpcInfo` structure matches the expected hash. If no expected hash is
+        * Verifies that the digest algorithms match across the structure (:class:`SpcInfo`,
+          :class:`AuthenticodeSignedData` and :class:`AuthenticodeSignerInfo` must have the same)
+        * Ensures that the hash in :attr:`SpcInfo.digest` matches the expected hash. If no expected hash is
           provided to this function, it is calculated using the :class:`Fingerprinter` obtained from the
           :class:`SignedPEFile` object.
-        * Verifies that the SpcInfo is signed by the :class:`SignerInfo`
-        * In the case of a countersigner, verifies that the :class:`CounterSignerInfo` has the hashed encrypted digest
-          of the :class:`SignerInfo`
-        * Verifies the chain of the countersigner up to a trusted root
-        * Verifies the chain of the signer up to a trusted root
+        * Verifies that the :class:`SpcInfo`, when hashed, is the same as the value in :attr:`SignerInfo.message_digest`
+        * In the case of a countersigner, calls :meth:`check_message_digest` on the countersigner to verify that the
+          hashed value of :attr:`AuthenticodeSignerInfo.encrypted_digest` is contained in the countersigner.
+        * Verifies the chain of the countersigner up to a trusted root, see :meth:`SignerInfo.verify`
+          and :meth:`RFC3161SignedData.verify`
+        * Verifies the chain of the signer up to a trusted root, see :meth:`SignerInfo.verify`
 
         In the case of a countersigner, the verification is performed using the timestamp of the
         :class:`CounterSignerInfo`, otherwise now is assumed. If there is no countersigner, you can override this
@@ -230,10 +300,10 @@ class AuthenticodeSignedData(SignedData):
             :class:`CounterSignerInfo`. The timestamp is overridden in the case of a countersigner. Default stores are
             TRUSTED_CERTIFICATE_STORE and the certificates of this :class:`SignedData` object. EKU is time_stamping
         :param CertificateStore trusted_certificate_store: A :class:`CertificateStore` object that contains a list of
-            trusted certificates to be used when :const:`None` is passed to either :param:`verification_context` or
-            :param:`cs_verification_context` and a :class:`VerificationContext` is created.
+            trusted certificates to be used when :const:`None` is passed to either ``verification_context`` or
+            ``cs_verification_context`` and a :class:`VerificationContext` is created.
         :param dict verification_context_kwargs: If provided, keyword arguments that are passed to the instantiation of
-            :class:`VerificationContext`s created in this function. Used for e.g. providing a timestamp.
+            :class:`VerificationContext` s created in this function. Used for e.g. providing a timestamp.
         :param bool allow_countersignature_errors: If this is set to True, errors in the countersignature cause the
             binary to be verified as if it was never countersigned
         :raises AuthenticodeVerificationError: when the verification failed
@@ -315,8 +385,8 @@ class AuthenticodeSignedData(SignedData):
         """This will return a value indicating the signature status of this object. This will not raise an error
         when the verification fails, but rather indicate this through the resulting enum
 
-        :rtype Tuple[AuthenticodeVerificationResult, Exception]: The verification result, and the exception containing
-            more details (if available or None)
+        :rtype: Tuple[AuthenticodeVerificationResult, Exception]
+        :return: The verification result, and the exception containing  more details (if available or None)
         """
 
         return AuthenticodeVerificationResult.call(self.verify, *args, **kwargs)
@@ -330,37 +400,86 @@ class RFC3161SignerInfo(SignerInfo):
     _countersigner_class = None  # prevent countersigners in here
 
 
-class RFC3161SignedData(SignedData):
-    _expected_content_type = rfc3161.TSTInfo
-    _signerinfo_class = RFC3161SignerInfo
+class TSTInfo:
+    """This is an implementation of the TSTInfo class as defined by RFC3161, used as content for a SignedData structure.
+    The following properties are available:
+
+    .. attribute:: data
+
+       The underlying ASN.1 data object
+
+    .. attribute:: policy
+
+    .. attribute:: hash_algorithm
+
+       The hash algorithm of the message imprint.
+
+    .. attribute:: message_digest
+
+       The hashed message
+
+    .. attribute:: serial_number
+
+       The serial number of this signature
+
+    .. attribute:: signing_time
+
+       The time this signature was generated
+
+    .. attribute:: signing_time_accuracy
+
+       The accuracy of the above time
+
+    .. attribute:: signing_authority
+
+       The authority generating this signature
+
+    """
 
     def __init__(self, data):
-        """Some samples have shown to include a RFC-3161 countersignature in the unauthenticated attributes
-        (as OID 1.3.6.1.4.1.311.3.3.1, which is in the Microsoft private namespace). This attribute contains its own
-        signed data structure.
-
-        :param asn1.pkcs7.SignedData data: The ASN.1 structure of the SignedData object
         """
-        super().__init__(data)
+
+        :param data: The ASN.1 structure of the TSTInfo object
+        """
+        self.data = data
+        self._parse()
+
+    def _parse(self):
+        if self.data['version'] != 1:
+            raise AuthenticodeParseError("TSTInfo.version must be 1, not %d" % self.data['version'])
+
+        self.policy = self.data['policy']  # TODO
+        self.hash_algorithm = _get_digest_algorithm(self.data['messageImprint']['hashAlgorithm'],
+                                                    location="TSTInfo.messageImprint.hashAlgorithm")
+        self.message_digest = bytes(self.data['messageImprint']['hashedMessage'])
+        self.serial_number = self.data['serialNumber']
+        self.signing_time = self.data['genTime'].asDateTime
+        self.signing_time_accuracy = accuracy_to_python(self.data['accuracy'])
+        # TODO handle case where directoryName is not a rdnSequence
+        self.signing_authority = CertificateName(self.data['tsa']['directoryName']['rdnSequence'])
+
+
+class RFC3161SignedData(SignedData):
+    """Some samples have shown to include a RFC-3161 countersignature in the unauthenticated attributes
+    (as OID 1.3.6.1.4.1.311.3.3.1, which is in the Microsoft private namespace). This attribute contains its own
+    signed data structure.
+
+    This is a subclass of :class:`signify.signeddata.SignedData`, containing a RFC3161 TSTInfo in its content field.
+
+    .. attribute:: tst_info
+       :type: TSTInfo
+
+       Contains the :class:`TSTInfo` class for this SignedData.
+    """
+
+    _expected_content_type = rfc3161.TSTInfo
+    _signerinfo_class = RFC3161SignerInfo
 
     def _parse(self):
         super()._parse()
 
         # Get the tst_info
-        self.tst_info = guarded_der_decode(self.data['encapContentInfo']['eContent'], asn1_spec=rfc3161.TSTInfo())
-
-        if self.tst_info['version'] != 1:
-            raise AuthenticodeParseError("TSTInfo.version must be 1, not %d" % self.data['version'])
-
-        self.policy = self.tst_info['policy']  # TODO
-        self.hash_algorithm = _get_digest_algorithm(self.tst_info['messageImprint']['hashAlgorithm'],
-                                                    location="TSTInfo.messageImprint.hashAlgorithm")
-        self.message_digest = bytes(self.tst_info['messageImprint']['hashedMessage'])
-        self.serial_number = self.tst_info['serialNumber']
-        self.signing_time = self.tst_info['genTime'].asDateTime
-        self.signing_time_accuracy = accuracy_to_python(self.tst_info['accuracy'])
-        # TODO handle case where directoryName is not a rdnSequence
-        self.signing_authority = CertificateName(self.tst_info['tsa']['directoryName']['rdnSequence'])
+        self.tst_info = TSTInfo(self.content)
 
         # signerInfos
         if len(self.signer_infos) != 1:
@@ -369,15 +488,24 @@ class RFC3161SignedData(SignedData):
 
         self.signer_info = self.signer_infos[0]
 
+    @property
+    def signing_time(self):
+        """Transparent attribute to ensure that the signing_time attribute is consistently available."""
+        return self.tst_info.signing_time
+
     def check_message_digest(self, data):
         """Given the data, returns whether the hash_algorithm and message_digest match the data provided."""
 
-        auth_attr_hash = self.hash_algorithm(data).digest()
-        return auth_attr_hash == self.message_digest
+        auth_attr_hash = self.tst_info.hash_algorithm(data).digest()
+        return auth_attr_hash == self.tst_info.message_digest
 
     def verify(self, context=None, trusted_certificate_store=TRUSTED_CERTIFICATE_STORE):
         """Verifies the RFC3161 SignedData object. The context that is passed in must account for the certificate
         store of this object, or be left None.
+
+        The object is verified by verifying that the hash of the :class:`TSTInfo` matches the
+        :attr:`SignerInfo.message_digest` value. The remainder of the validation is done by calling
+         :meth:`SignerInfo.verify`
         """
 
         # We should ensure that the hash in the SignerInfo matches the hash of the content

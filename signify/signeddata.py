@@ -10,11 +10,55 @@ from signify.signerinfo import _get_digest_algorithm
 
 
 class SignedData:
+    """A generic SignedData object. The SignedData object is defined in RFC2315 and RFC5652 (amongst others) and
+    defines data that is signed by one or more signers.
+
+    It is based on the following ASN.1 object (as per RFC2315)::
+
+        SignedData ::= SEQUENCE {
+          version Version,
+          digestAlgorithms DigestAlgorithmIdentifiers,
+          contentInfo ContentInfo,
+          certificates [0] IMPLICIT ExtendedCertificatesAndCertificates OPTIONAL,
+          crls [1] IMPLICIT CertificateRevocationLists OPTIONAL,
+          signerInfos SignerInfos
+        }
+
+    This class supports RFC2315 and RFC5652.
+
+    .. attribute:: data
+
+       The underlying ASN.1 data object
+
+    .. attribute:: digest_algorithm
+
+       The digest algorithm, i.e. the hash algorithm, that is used by the signers of the data.
+
+    .. attribute:: content_type
+
+       The class of the type of the content in the object.
+
+    .. attribute:: content
+
+       The actual content, as parsed by the :attr:`content_type` spec.
+
+    .. attribute:: certificates
+       :type: CertificateStore
+
+       A list of all included certificates in the SignedData. These can be used to determine a valid validation path
+       from the signer to a root certificate.
+
+    .. attribute:: signer_infos
+       :type: List[SignerInfo]
+
+       A list of all included SignerInfo objects
+    """
+
     _expected_content_type = None
     _signerinfo_class = None
 
     def __init__(self, data):
-        """A generic SignedData object.
+        """
 
         :param asn1.pkcs7.SignedData data: The ASN.1 structure of the SignedData object
         """

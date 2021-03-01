@@ -27,8 +27,45 @@ AlgorithmIdentifier = collections.namedtuple('AlgorithmIdentifier', 'algorithm p
 
 
 class Certificate(object):
+    """Representation of a Certificate. It is built from an ASN.1 structure.
+
+    .. attribute:: data
+
+       The underlying ASN.1 data object
+
+    .. attribute:: signature_algorithm
+                   signature_value
+                   subject_public_algorithm
+                   subject_public_key
+
+       These values are considered part of the certificate, but not
+       fully parsed.
+
+    .. attribute:: version
+
+       This is the version of the certificate
+
+    .. attribute:: serial_number
+
+       The full integer serial number of the certificate
+
+    .. attribute:: issuer
+                   subject
+
+       The :class:`CertificateName` for the issuer and subject.
+
+    .. attribute:: valid_from
+                   valid_to
+
+       The datetime objects between which the certificate is valid.
+
+    .. attribute:: extensions
+
+       This is a list of extension objects.
+    """
+
     def __init__(self, data):
-        """Representation of a Certificate. It is built from an ASN.1 structure.
+        """
 
         :type data: asn1.pkcs7.ExtendedCertificateOrCertificate or asn1.x509.Certificate or asn1.x509.TBSCertificate
         :param data: The ASN.1 structure

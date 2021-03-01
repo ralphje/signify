@@ -19,6 +19,7 @@ This module is compatible with Python 3.6+ and does not support Python 2.
    :caption: Python interface
 
    fingerprinter
+   signeddata
    certificates
    authenticode
 

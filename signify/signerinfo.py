@@ -42,14 +42,93 @@ def _get_encryption_algorithm(algorithm, location):
 
 
 class SignerInfo(object):
+    """The SignerInfo class is defined in RFC2315 and RFC5652 (amongst others) and defines the per-signer information
+    in a :class:`SignedData` structure.
+
+    It is based on the following ASN.1 object (as per RFC2315)::
+
+        SignerInfo ::= SEQUENCE {
+          version Version,
+          issuerAndSerialNumber IssuerAndSerialNumber,
+          digestAlgorithm DigestAlgorithmIdentifier,
+          authenticatedAttributes [0] IMPLICIT Attributes OPTIONAL,
+          digestEncryptionAlgorithm DigestEncryptionAlgorithmIdentifier,
+          encryptedDigest EncryptedDigest,
+          unauthenticatedAttributes [1] IMPLICIT Attributes OPTIONAL
+        }
+
+    This class supports RFC2315 and RFC5652.
+
+    .. attribute:: data
+
+       The underlying ASN.1 data object
+
+    .. attribute:: parent
+
+       The parent :class:`SignedData` object (or if other SignerInfos are present, it may be another object)
+
+    .. attribute:: issuer
+       :type: CertificateName
+
+       The issuer of the SignerInfo, i.e. the certificate of the signer of the SignedData object.
+
+    .. attribute:: serial_number
+
+       The serial number as specified by the issuer.
+
+    .. attribute:: digest_algorithm
+
+       The digest algorithm, i.e. the hash algorithm, under which the content and the authenticated attributes are
+       signed.
+
+    .. attribute:: authenticated_attributes
+                   unauthenticated_attributes
+
+       A SignerInfo object can contain both signed and unsigned attributes. These contain additional information
+       about the signature, but also the content type and message digest. The difference between signed and unsigned
+       is that unsigned attributes are not validated.
+
+       The type of this attribute is a dictionary. You should not need to access this value directly, rather using
+       one of the attributes listed below.
+
+    .. attribute:: digest_encryption_algorithm
+
+       This is the algorithm used for signing the digest with the signer's key.
+
+    .. attribute:: encrypted_digest
+
+       The result of encrypting the message digest and associated information with the signer's private key.
+
+
+    The following attributes are automatically parsed and added to the list of attributes if present.
+
+    .. attribute:: message_digest
+
+       This is an authenticated attribute, containing the signed digest of the data.
+
+    .. attribute:: content_type
+
+       This is an authenticated attribute, containing the content type of the content being signed.
+
+    .. attribute:: signing_time
+
+       This is an authenticated attribute, containing the timestamp of signing. Note that this should only be present in
+       countersigner objects.
+
+    .. attribute:: countersigner
+
+       This is an unauthenticated attribute, containing the countersigner of the SignerInfo.
+
+    """
+
     _countersigner_class = "CounterSignerInfo"
     _required_authenticated_attributes = (rfc2315.ContentType, rfc2315.Digest)
     _expected_content_type = None
 
     def __init__(self, data, parent=None):
-        """The Authenticode's SignerInfo structure.
-
+        """
         :param data: The ASN.1 structure of the SignerInfo.
+        :param parent: The parent :class:`SignedData` object.
         """
         if isinstance(self._countersigner_class, str):
             self._countersigner_class = globals()[self._countersigner_class]
@@ -246,7 +325,7 @@ class SignerInfo(object):
             raise first_error
 
     def verify(self, context):
-        """Verifies the SignerInfo, and its chain.
+        """Verifies that this :class:`SignerInfo` verifies up to a chain with the root of a trusted certificate.
 
         :param VerificationContext context: The context for verifying the SignerInfo.
         :return: A list of valid certificate chains for this SignerInfo.
@@ -275,4 +354,9 @@ class SignerInfo(object):
 
 
 class CounterSignerInfo(SignerInfo):
+    """The class CounterSignerInfo is a subclass of :class:`SignerInfo`. It is used as the SignerInfo of a
+    SignerInfo, containing the timestamp the SignerInfo was created on. This normally works by sending the digest of the
+    SignerInfo to an external trusted service, that will include a signed time in its response.
+    """
+
     _required_authenticated_attributes = (rfc2315.ContentType, rfc5652.SigningTime, rfc2315.Digest)

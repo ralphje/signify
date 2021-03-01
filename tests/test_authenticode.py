@@ -153,10 +153,12 @@ class AuthenticodeParserTestCase(unittest.TestCase):
         """this certificate is revoked"""
         with open(str(root_dir / "test_data" / "jameslth"), "rb") as f:
             pefile = SignedPEFile(f)
-            pefile.verify()
+            pefile.verify(verification_context_kwargs=
+                          {'timestamp': datetime.datetime(2021, 1, 1, tzinfo=datetime.timezone.utc)})
 
     def test_jameslth_revoked(self):
         """this certificate is revoked"""
+        # TODO: this certificate is now expired, so it will not show up as valid anyway
         with open(str(root_dir / "test_data" / "jameslth"), "rb") as f:
             pefile = SignedPEFile(f)
             with self.assertRaises(VerificationError):
