@@ -14,6 +14,10 @@ v0.4.0 (unreleased)
 * Added support for nested SignedData structures inside the unauthenticated attributes of SignerInfo objects. These
   are transparently added to the ``SignedPEFile.signed_datas`` iterator. You can use ``SignedPEFile.iter_signed_datas``
   to control this behaviour.
+* Changed ``AuthenticodeSignedData.verify`` to accept ``countersignature_mode`` as an argument, replacing
+  ``allow_countersignature_errors``. This allows you to skip countersignatures entirely, allowing actually using CRL
+  checks (otherwise, a timestamp would be set on the context of validation, which results in certvalidator disallowing
+  the CRL check because it cannot work with both timestamps and CRLs).
 
 v0.3.0 (2020-08-16)
 -------------------

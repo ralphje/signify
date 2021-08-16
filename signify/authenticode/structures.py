@@ -272,7 +272,7 @@ class AuthenticodeSignedData(SignedData):
 
     def verify(self, expected_hash=None, verification_context=None, cs_verification_context=None,
                trusted_certificate_store=TRUSTED_CERTIFICATE_STORE, verification_context_kwargs={},
-               allow_countersignature_errors=False):
+               countersignature_mode='strict'):
         """Verifies the SignedData structure:
 
         * Verifies that the digest algorithms match across the structure (:class:`SpcInfo`,
@@ -289,7 +289,9 @@ class AuthenticodeSignedData(SignedData):
 
         In the case of a countersigner, the verification is performed using the timestamp of the
         :class:`CounterSignerInfo`, otherwise now is assumed. If there is no countersigner, you can override this
-        by specifying a different timestamp in the :class:`VerificationContext`
+        by specifying a different timestamp in the :class:`VerificationContext`. Note that you cannot set a timestamp
+        when checking against the CRL; this is not permitted by the underlying library. If you need to do this, you
+        must therefore set countersignature_mode to ``ignore``.
 
         :param bytes expected_hash: The expected hash digest of the :class:`SignedPEFile`.
         :param VerificationContext verification_context: The VerificationContext for verifying the chain of the
@@ -303,8 +305,10 @@ class AuthenticodeSignedData(SignedData):
             ``cs_verification_context`` and a :class:`VerificationContext` is created.
         :param dict verification_context_kwargs: If provided, keyword arguments that are passed to the instantiation of
             :class:`VerificationContext` s created in this function. Used for e.g. providing a timestamp.
-        :param bool allow_countersignature_errors: If this is set to True, errors in the countersignature cause the
-            binary to be verified as if it was never countersigned
+        :param str countersignature_mode: Changes how countersignatures are handled. Defaults to 'strict', which means
+            that errors in the countersignature result in verification failure. If set to 'permit', the
+            countersignature is checked, but when it errors, it is verified as if the countersignature was never set.
+            When set to 'ignore', countersignatures are never checked.
         :raises AuthenticodeVerificationError: when the verification failed
         :return: :const:`None`
         """
@@ -314,7 +318,7 @@ class AuthenticodeSignedData(SignedData):
                                                        extended_key_usages=['code_signing'],
                                                        **verification_context_kwargs)
 
-        if cs_verification_context is None and self.signer_info.countersigner:
+        if cs_verification_context is None and self.signer_info.countersigner and countersignature_mode != 'ignore':
             cs_verification_context = VerificationContext(trusted_certificate_store, self.certificates,
                                                           extended_key_usages=['time_stamping'],
                                                           **verification_context_kwargs)
@@ -355,7 +359,7 @@ class AuthenticodeSignedData(SignedData):
         # Can't check authAttr hash against encrypted hash, done implicitly in
         # M2's pubkey.verify.
 
-        if self.signer_info.countersigner:
+        if self.signer_info.countersigner and countersignature_mode != 'ignore':
             try:
                 # 3. Check the countersigner hash.
                 # Make sure to use the same digest_algorithm that the countersigner used
@@ -370,7 +374,7 @@ class AuthenticodeSignedData(SignedData):
                 # an explicit context anyway
                 self.signer_info.countersigner.verify(cs_verification_context)
             except Exception:
-                if allow_countersignature_errors:
+                if countersignature_mode != 'strict':
                     pass
                 else:
                     raise AuthenticodeCounterSignerError("An error occurred while validating the countersignature.")
