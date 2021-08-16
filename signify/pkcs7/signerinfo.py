@@ -1,11 +1,10 @@
 import hashlib
 
-from pyasn1.codec.ber import decoder as ber_decoder
-from pyasn1.codec.der import encoder as der_encoder
 from pyasn1.type import univ
 from pyasn1_modules import rfc5652, rfc2315
 
 from signify.asn1 import guarded_ber_decode, pkcs7
+from signify.asn1 import preserving_der as preserving_der_encoder
 from signify.exceptions import VerificationError, SignerInfoParseError, \
     SignerInfoVerificationError, ParseError
 from signify import asn1, _print_type
@@ -256,17 +255,16 @@ class SignerInfo(object):
 
     @classmethod
     def _encode_attributes(cls, data):
-        """Given a set of Attributes, sorts them in the correct order. They need to be sorted in ascending order in the
-        SET, when DER encoded. This also makes sure that the tag on Attributes is correct.
+        """Given a set of Attributes, prepares them for creating a digest. It used to sort them by their DER encoded
+        values, now it is mostly a method to preserve the exact order they where in when they were encoded.
 
         :param data: The authenticatedAttributes or unauthenticatedAttributes to encode
         """
-        sorted_data = sorted([der_encoder.encode(i) for i in data])
-        new_attrs = rfc2315.Attributes()
-        for i, attribute in enumerate(sorted_data):
-            d, _ = ber_decoder.decode(attribute, asn1Spec=rfc2315.Attribute())
-            new_attrs.setComponentByPosition(i, d)
-        return der_encoder.encode(new_attrs)
+        # sorting may not be necessary, as it is not in the spec
+        new_attrs = type(data)()
+        for attribute in data:
+            new_attrs.append(attribute)
+        return preserving_der_encoder.encode(new_attrs)
 
     def _verify_issuer(self, issuer, context):
         """Verifies whether the given issuer is valid for the given context. Similar to

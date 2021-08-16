@@ -18,6 +18,8 @@ v0.4.0 (unreleased)
   ``allow_countersignature_errors``. This allows you to skip countersignatures entirely, allowing actually using CRL
   checks (otherwise, a timestamp would be set on the context of validation, which results in certvalidator disallowing
   the CRL check because it cannot work with both timestamps and CRLs).
+* Fixed issue where an abnormal order in the authenticated attributes of SignerInfo objects would cause validation to
+  fail.
 
 v0.3.0 (2020-08-16)
 -------------------

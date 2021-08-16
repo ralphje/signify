@@ -373,11 +373,12 @@ class AuthenticodeSignedData(SignedData):
                 # signatures. Note that RFC3161SignedData accepts a trusted_certificate_store argument, but we pass in
                 # an explicit context anyway
                 self.signer_info.countersigner.verify(cs_verification_context)
-            except Exception:
+            except Exception as e:
                 if countersignature_mode != 'strict':
                     pass
                 else:
-                    raise AuthenticodeCounterSignerError("An error occurred while validating the countersignature.")
+                    raise AuthenticodeCounterSignerError("An error occurred while validating the countersignature: "
+                                                         "{}".format(e))
             else:
                 # If no errors occur, we should be fine setting the timestamp to the countersignature's timestamp
                 verification_context.timestamp = self.signer_info.countersigner.signing_time

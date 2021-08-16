@@ -170,11 +170,18 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             pefile = SignedPEFile(f)
             pefile.verify()
 
+    def test_abnormal_attribute_order(self):
+        """this tests a sample that has an abnormal attribute order"""
+        with open(str(root_dir / "test_data" / "8757bf55-0077-4df5-9807-122a3261ee40"), "rb") as f:
+            pefile = SignedPEFile(f)
+            pefile.verify()
+
 
 class CertificateTestCase(unittest.TestCase):
     def test_all_trusted_certificates_are_trusted(self):
         context = VerificationContext(trusted_certificate_store)
-        for certificate in trusted_certificate_store:
+        # only select 50 to speed up testing
+        for certificate in trusted_certificate_store[:50]:
             # Trust depends on the timestamp
             context.timestamp = certificate.valid_to
             chain = certificate.verify(context)

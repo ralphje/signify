@@ -199,7 +199,7 @@ class SignedPEFile(object):
 
         :rtype: signify.fingerprinter.AuthenticodeFingerprinter
         """
-        from ..fingerprinter import AuthenticodeFingerprinter
+        from signify.fingerprinter import AuthenticodeFingerprinter
         return AuthenticodeFingerprinter(self.file)
 
     @property
@@ -219,7 +219,7 @@ class SignedPEFile(object):
         :return: iterator of signify.authenticode.SignedData
         """
 
-        from .structures import AuthenticodeSignedData
+        from signify.authenticode.structures import AuthenticodeSignedData
 
         def recursive_nested(signed_data):
             yield signed_data
@@ -322,12 +322,15 @@ def main(*filenames):
                         if hasattr(signed_data.signer_info.countersigner, 'issuer'):
                             print("    Countersigner:")
                             print("        Issuer: {}".format(signed_data.signer_info.countersigner.issuer.dn))
+                            print("        Serial: {}".format(signed_data.signer_info.countersigner.serial_number))
                         if hasattr(signed_data.signer_info.countersigner, 'signer_info'):
                             print("    Countersigner (nested RFC3161):")
                             print("        Issuer: {}".format(
                                 signed_data.signer_info.countersigner.signer_info.issuer.dn
                             ))
-                        print("        Serial: {}".format(signed_data.signer_info.countersigner.serial_number))
+                            print("        Serial: {}".format(
+                                signed_data.signer_info.countersigner.signer_info.serial_number
+                            ))
                         print("        Signing time: {}".format(signed_data.signer_info.countersigner.signing_time))
 
                         if hasattr(signed_data.signer_info.countersigner, 'certificates'):
