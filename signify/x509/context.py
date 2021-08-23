@@ -4,7 +4,7 @@ import logging
 from certvalidator import ValidationContext, CertificateValidator
 
 from signify.x509.certificates import Certificate
-from signify.exceptions import VerificationError, CTLCertificateVerificationError, CertificateVerificationError
+from signify.exceptions import VerificationError, CertificateVerificationError, CertificateNotTrustedVerificationError
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +15,7 @@ class CertificateStore(list):
     def __init__(self, *args, trusted=False, ctl=None, **kwargs):
         """
         :param bool trusted: If true, all certificates that are appended to this structure are set to trusted.
+        :param CertificateTrustList ctl: The certificate trust list to use (if any)
         """
         super().__init__(*args, **kwargs)
         self.trusted = trusted
@@ -23,20 +24,30 @@ class CertificateStore(list):
     def append(self, elem):
         return super().append(elem)
 
-    def verify_trust(self, chain, timestamp=None, extended_key_usages=None):
-        if not self.trusted or chain[0] not in self:
-            return False
+    def verify_trust(self, chain, context=None):
+        """Verifies that the chain is trusted given the context."""
+
+        if not self.is_trusted(chain[0]):
+            # use subclass of CertificateVerificationError to allow VerificationContext.verify_trust to throw a better
+            # exception
+            raise CertificateNotTrustedVerificationError("The certificate %s is not trusted by the store." % chain[0])
 
         if self.ctl is not None:
-            self.ctl.verify_trust(chain, timestamp=timestamp, extended_key_usages=extended_key_usages)
+            self.ctl.verify_trust(chain, context=context)
 
         return True
 
-    def is_trusted(self, certificate, timestamp=None, extended_key_usages=None):
-        try:
-            return self.verify_trust(certificate, timestamp=timestamp, extended_key_usages=extended_key_usages)
-        except CTLCertificateVerificationError:
-            return False
+    def is_trusted(self, certificate):
+        """Returns whether the provided certificate is trusted by this certificate store.
+
+        .. warning::
+
+           This check does not verify that the certificate is valid according to the Trust List, if set. It merely
+           checks that the provided certificate is in a trusted certificate store. You still need to verify the chain
+           for its full trust.
+        """
+
+        return self.trusted and certificate in self
 
     def find_certificate(self, **kwargs):
         """Finds the certificate as specified by the keyword arguments. See :meth:`find_certificates`
@@ -290,16 +301,19 @@ class VerificationContext(object):
         return signify_chain
 
     def is_trusted(self, certificate):
-        """Determines whether the given certificate is in a trusted certificate store.
+        """Returns whether the provided certificate is trusted by a trusted certificate store.
 
-        :param Certificate certificate: The certificate to verify trust for.
-        :return: True if the certificate is in a trusted certificate store.
+        .. warning::
+
+           This check does not verify that the certificate is valid according to the Trust List, if set. It merely
+           checks that the provided certificate is in a trusted certificate store. You still need to verify the chain
+           for its full trust.
         """
 
-        try:
-            return self.verify_trust([certificate])
-        except VerificationError:
-            return False
+        for store in self.stores:
+            if store.is_trusted(certificate):
+                return True
+        return False
 
     def verify_trust(self, chain):
         """Determines whether the given certificate chain is trusted by a trusted certificate store.
@@ -312,8 +326,10 @@ class VerificationContext(object):
 
         for store in self.stores:
             try:
-                if store.verify_trust(chain, timestamp=self.timestamp, extended_key_usages=self.extended_key_usages):
+                if store.verify_trust(chain, context=self):
                     return True
+            except CertificateNotTrustedVerificationError:
+                pass  # ignore this error, and catch it at function end
             except VerificationError as e:
                 exc = e
 

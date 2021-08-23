@@ -206,7 +206,7 @@ class CertificateTrustSubject:
         if asn1.ctl.NotBeforeEnhkeyUsage in self.attributes:
             self.not_before_extended_key_usages = [tuple(x) for x in self.attributes[asn1.ctl.NotBeforeEnhkeyUsage][0]]
 
-    def verify_trust(self, chain, timestamp=None, extended_key_usages=None):
+    def verify_trust(self, chain, context):
         """Checks whether the specified certificate is valid in the given conditions according to this Certificate Trust
         List. This is implemented following the definitions found on
         https://docs.microsoft.com/en-us/security/trusted-root/deprecation:
@@ -247,14 +247,14 @@ class CertificateTrustSubject:
         :attr:`not_before_extended_key_usages` will be set as well.
 
         :param List[Certificate] chain: The certificate chain to verify.
-        :param datetime.datetime timestamp: The timestamp to verify with. If None, the current time is used.
-            Must be a timezone-aware timestamp.
-        :param Iterable[str] extended_key_usages: An iterable with the EKU's to check for. See
-            :meth:`certvalidator.CertificateValidator.validate_usage`
+        :param VerificationContext context: The context to verify with. Mainly the timestamp and extended_key_usages
+            are used.
         """
 
+        timestamp = context.timestamp
         if timestamp is None:
             timestamp = datetime.datetime.now(datetime.timezone.utc)
+        extended_key_usages = context.extended_key_usages
         if extended_key_usages is None:
             extended_key_usages = ()
 

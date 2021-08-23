@@ -30,6 +30,10 @@ class CertificateVerificationError(VerificationError):
     pass
 
 
+class CertificateNotTrustedVerificationError(CertificateVerificationError):
+    pass
+
+
 class SignerInfoVerificationError(VerificationError):
     pass
 
