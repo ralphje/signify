@@ -4,20 +4,33 @@ This page contains the most significant changes in Signify between each release.
 
 v0.4.0 (unreleased)
 -------------------
+The following backwards incompatible changes were made:
+
 * Drop support for Python 3.5
 * Moved some stuff around to make more clear packages: ``signify.fingerprinter`` will remain unchanged,
   ``signify.x509`` combines certificates and their verification, ``signify.pkcs7`` combines SignedData and SignerInfo,
   and ``signify.authenticode`` contains all Microsoft-related code. This change is also reflected in how the docs
   are structured.
+* Changed ``AuthenticodeSignedData.verify`` to accept ``countersignature_mode`` as an argument, replacing
+  ``allow_countersignature_errors``. This allows you to skip countersignatures entirely, allowing actually using CRL
+  checks (otherwise, a timestamp would be set on the context of validation, which results in certvalidator disallowing
+  the CRL check because it cannot work with both timestamps and CRLs).
+* Changed ``CertificateStore.verify_trust``, ``VerificationContext.verify_trust`` and
+  ``CertificateTrustList.verify_trust`` to accept a certificate chain instead of a single certificate. This allows us
+  to check end-entity certificates in ``CertificateTrustList``.
+* ``CertificateTrustSubject.is_valid`` has been removed.
+
+The following features were added and bugs were fixed:
+
 * Added the functions ``explain_verify`` to ``SignedPEFile`` and ``AuthenticodeSignerInfo`` that return an
   easy-to-digest enum with the verification result.
 * Added support for nested SignedData structures inside the unauthenticated attributes of SignerInfo objects. These
   are transparently added to the ``SignedPEFile.signed_datas`` iterator. You can use ``SignedPEFile.iter_signed_datas``
   to control this behaviour.
-* Changed ``AuthenticodeSignedData.verify`` to accept ``countersignature_mode`` as an argument, replacing
-  ``allow_countersignature_errors``. This allows you to skip countersignatures entirely, allowing actually using CRL
-  checks (otherwise, a timestamp would be set on the context of validation, which results in certvalidator disallowing
-  the CRL check because it cannot work with both timestamps and CRLs).
+* By default, now uses a properly parsed Microsoft ``CertificateTrustList`` to allow partial removal of some
+  certificates from the store, fixing a bug with our original implementation. This aligns with the implementation on
+  Windows, and allows Microsoft to remove untrusted certificates from a certain timestamp, or to only allow certain
+  EKU's. To restore original behaviour, use ``TRUSTED_CERTIFICATE_STORE_NO_CTL`` as certificate store.
 * Fixed issue where an abnormal order in the authenticated attributes of SignerInfo objects would cause validation to
   fail.
 

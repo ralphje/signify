@@ -23,12 +23,12 @@ class CertificateStore(list):
     def append(self, elem):
         return super().append(elem)
 
-    def verify_trust(self, certificate, timestamp=None, extended_key_usages=None):
-        if not self.trusted or certificate not in self:
+    def verify_trust(self, chain, timestamp=None, extended_key_usages=None):
+        if not self.trusted or chain[0] not in self:
             return False
 
         if self.ctl is not None:
-            self.ctl.verify_trust(certificate, timestamp=timestamp, extended_key_usages=extended_key_usages)
+            self.ctl.verify_trust(chain, timestamp=timestamp, extended_key_usages=extended_key_usages)
 
         return True
 
@@ -286,7 +286,7 @@ class VerificationContext(object):
             raise CertificateVerificationError("Chain verification from %s failed: %s" % (certificate, e))
 
         signify_chain = [all_certs[x] for x in chain]
-        self.verify_trust(signify_chain[0])
+        self.verify_trust(signify_chain)
         return signify_chain
 
     def is_trusted(self, certificate):
@@ -297,23 +297,22 @@ class VerificationContext(object):
         """
 
         try:
-            return self.verify_trust(certificate)
+            return self.verify_trust([certificate])
         except VerificationError:
             return False
 
-    def verify_trust(self, certificate):
-        """Determines whether the given certificate is in a trusted certificate store.
+    def verify_trust(self, chain):
+        """Determines whether the given certificate chain is trusted by a trusted certificate store.
 
-        :param Certificate certificate: The certificate to verify trust for.
-        :return: True if the certificate is in a trusted certificate store.
+        :param List[Certificate] chain: The certificate chain to verify trust for.
+        :return: True if the certificate chain is trusted by a certificate store.
         """
 
         exc = None
 
         for store in self.stores:
             try:
-                if store.verify_trust(certificate,
-                                      timestamp=self.timestamp, extended_key_usages=self.extended_key_usages):
+                if store.verify_trust(chain, timestamp=self.timestamp, extended_key_usages=self.extended_key_usages):
                     return True
             except VerificationError as e:
                 exc = e
@@ -322,4 +321,4 @@ class VerificationContext(object):
             raise exc
 
         raise CertificateVerificationError("The trust for %s could not be verified, as it is not trusted by any store"
-                                           % certificate)
+                                           % chain)

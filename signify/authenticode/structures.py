@@ -31,6 +31,7 @@ import pathlib
 from pyasn1.codec.ber import decoder as ber_decoder
 from pyasn1_modules import rfc3161, rfc2315, rfc5652
 
+from signify.authenticode.authroot import CertificateTrustList
 from signify.asn1 import guarded_ber_decode, pkcs7
 from signify.asn1.helpers import accuracy_to_python, patch_rfc5652_signeddata
 from signify.x509 import CertificateName, CertificateStore, VerificationContext, FileSystemCertificateStore
@@ -45,11 +46,8 @@ logger = logging.getLogger(__name__)
 
 CERTIFICATE_LOCATION = pathlib.Path(__file__).resolve().parent.parent / "certs" / "authenticode-bundle.pem"
 TRUSTED_CERTIFICATE_STORE_NO_CTL = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True)
-TRUSTED_CERTIFICATE_STORE = TRUSTED_CERTIFICATE_STORE_NO_CTL
-# TODO: We should verify this better, but for some reason several certificates are not trusted by our own interpretation
-# of the CTL, but Microsoft thinks they are.
-# TRUSTED_CERTIFICATE_STORE = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True,
-#                                                        ctl=CertificateTrustList.from_stl_file())
+TRUSTED_CERTIFICATE_STORE = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True,
+                                                       ctl=CertificateTrustList.from_stl_file())
 
 
 class AuthenticodeVerificationResult(enum.Enum):

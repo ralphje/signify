@@ -15,6 +15,8 @@ from signify.pkcs7.signerinfo import _get_digest_algorithm
 
 AUTHROOTSTL_URL = "http://ctldl.windowsupdate.com/msdownload/update/v3/static/trustedr/en/authroot.stl"
 AUTHROOTSTL_PATH = pathlib.Path(__file__).resolve().parent.parent / "certs" / "authroot.stl"
+DISALLOWEDSTL_URL = "http://ctldl.windowsupdate.com/msdownload/update/v3/static/trustedr/en/disallowedcert.stl"
+DISALLOWEDSTL_PATH = pathlib.Path(__file__).resolve().parent.parent / "certs" / "disallowedcerts.stl"
 
 
 def _lookup_ekus(extended_key_usages=None):
@@ -75,18 +77,18 @@ class CertificateTrustList(SignedData):
 
         return self._subjects.values()
 
-    def verify_trust(self, certificate, *args, **kwargs):
+    def verify_trust(self, chain, *args, **kwargs):
         """Checks whether the specified certificate is valid in the given conditions according to this Certificate Trust
         List.
 
-        :param Certificate certificate: The root certificate to verify
+        :param List[Certificate] chain: The certificate chain to verify
         """
 
         # Find the subject belonging to this certificate
-        subject = self.find_subject(certificate)
+        subject = self.find_subject(chain[0])
         if not subject:
-            raise CTLCertificateVerificationError("The root %s is not in the certificate trust list" % certificate)
-        return subject.verify_trust(*args, **kwargs)
+            raise CTLCertificateVerificationError("The root %s is not in the certificate trust list" % chain[0])
+        return subject.verify_trust(chain, *args, **kwargs)
 
     def find_subject(self, certificate):
         """Finds the :class:`CertificateTrustSubject` belonging to the provided :class:`signify.x509.Certificate`.
@@ -105,14 +107,14 @@ class CertificateTrustList(SignedData):
         return self._subjects.get(identifier)
 
     @classmethod
-    def update_stl_file(cls):
+    def update_stl_file(cls, url=AUTHROOTSTL_URL, path=AUTHROOTSTL_PATH):
         """This downloads the latest version of the authroot.stl file and puts it in place of the locally bundled
         authroot.stl.
         """
 
         import requests
 
-        with requests.get(AUTHROOTSTL_URL, stream=True) as r, open(str(AUTHROOTSTL_PATH), "wb") as f:
+        with requests.get(url, stream=True) as r, open(str(path), "wb") as f:
             r.raise_for_status()
             for chunk in r.iter_content(chunk_size=8192):
                 f.write(chunk)
@@ -179,10 +181,10 @@ class CertificateTrustSubject:
         if asn1.ctl.FriendlyName in self.attributes:
             self.friendly_name = bytes(self.attributes[asn1.ctl.FriendlyName][0]).decode("utf-16")
 
-        self.key_identifier = bytes(self.attributes.get(asn1.ctl.KeyIdentifier, [None])[0])
-        self.subject_name_md5 = bytes(self.attributes.get(asn1.ctl.SubjectNameMd5Hash, [None])[0])
+        self.key_identifier = bytes(self.attributes.get(asn1.ctl.KeyIdentifier, [b""])[0])
+        self.subject_name_md5 = bytes(self.attributes.get(asn1.ctl.SubjectNameMd5Hash, [b""])[0])
         # TODO: RootProgramCertPolicies not implemented
-        self.auth_root_sha256 = bytes(self.attributes.get(asn1.ctl.AuthRootSha256Hash, [None])[0])
+        self.auth_root_sha256 = bytes(self.attributes.get(asn1.ctl.AuthRootSha256Hash, [b""])[0])
 
         self.disallowed_filetime = None
         if asn1.ctl.DisallowedFiletime in self.attributes:
@@ -204,23 +206,47 @@ class CertificateTrustSubject:
         if asn1.ctl.NotBeforeEnhkeyUsage in self.attributes:
             self.not_before_extended_key_usages = [tuple(x) for x in self.attributes[asn1.ctl.NotBeforeEnhkeyUsage][0]]
 
-    def is_valid(self, timestamp):
-        """Returns whether the current entry is a valid certificate at the provided time."""
-
-        # If there is a notBefore time, and there is no NotBeforeEnhkeyUsage, then the validity concerns the entire
-        # certificate.
-        # If there is both a notBefore time and a NotBeforeEnhkeyUsage, then the notBefore concerns the EKU only
-        if self.not_before_filetime is not None and self.not_before_extended_key_usages is None \
-                and timestamp < self.not_before_filetime:
-            return False
-        if self.disallowed_filetime is not None and timestamp > self.disallowed_filetime:
-            return False
-        return True
-
-    def verify_trust(self, timestamp=None, extended_key_usages=None):
+    def verify_trust(self, chain, timestamp=None, extended_key_usages=None):
         """Checks whether the specified certificate is valid in the given conditions according to this Certificate Trust
-        List.
+        List. This is implemented following the definitions found on
+        https://docs.microsoft.com/en-us/security/trusted-root/deprecation:
 
+        Removal
+            Removal of a root from the CTL. All certificates that chain to the root are no longer trusted.
+
+        In this case, the entry will not exist. This method cannot check for this.
+
+        EKU Removal
+            Removal of a specific EKU from a root certificate. All End entity certificates that chain to this root
+            can no longer utilize the removed EKU, independent of whether or not the digital signature was timestamped.
+
+        In this case, the EKU is removed from the set of allowed EKU's in :attr:`extended_key_usages`
+        OR added to the set of disallowed EKU's in :attr:`disallowed_extended_key_usages`
+
+        Disallow
+            This feature involves adding the certificate to the Disallow CTL. This feature effectively revokes the
+            certificate. Users cannot manually install the root and continue to have trust.
+
+        The disallowed authroot.stl will be updated in this case. This CTL will only contain the subject name hashes.
+
+        Disable
+            All certificates that chain to a disabled root will no longer be trusted with a very important exception;
+            digital signatures with a timestamp prior to the disable date will continue to validate successfully.
+
+        Empirical evidence has shown that in this case, :attr:`disallowed_filetime` will be set. In the case that
+        only an EKU is disabled, it is removed from the set of allowed EKU's in :attr:`extended_key_usages`
+        OR added to the set of disallowed EKU's in :attr:`disallowed_extended_key_usages`
+
+        NotBefore
+            Allows granular disabling of a root certificate or specific EKU capability of a root certificate.
+            Certificates issued AFTER the NotBefore date will no longer be trusted, however certificates issued
+            BEFORE to the NotBefore date will continue to be trusted. Digital signatures with a timestamp set
+            before the NotBefore date will continue to successfully validate.
+
+        In this case, the :attr:`not_before_filetime` will be set. In the case that this applies to a single EKU,
+        :attr:`not_before_extended_key_usages` will be set as well.
+
+        :param List[Certificate] chain: The certificate chain to verify.
         :param datetime.datetime timestamp: The timestamp to verify with. If None, the current time is used.
             Must be a timezone-aware timestamp.
         :param Iterable[str] extended_key_usages: An iterable with the EKU's to check for. See
@@ -232,12 +258,6 @@ class CertificateTrustSubject:
         if extended_key_usages is None:
             extended_key_usages = ()
 
-        # Verify the certificate is valid on the specified date
-        if not self.is_valid(timestamp):
-            raise CTLCertificateVerificationError("The root %s is not trusted on %s (trust range is %s - %s)"
-                                                  % (self.friendly_name, timestamp, self.not_before_filetime,
-                                                     self.disallowed_filetime))
-
         # Start by converting the list of provided extended_key_usages to a list of OIDs
         requested_extended_key_usages = set(_lookup_ekus(extended_key_usages))
 
@@ -248,22 +268,52 @@ class CertificateTrustSubject:
                 % (self.friendly_name, requested_extended_key_usages - set(self.extended_key_usages))
             )
 
-        # Disallowed eku's are never allowed
-        if self.disallowed_extended_key_usages \
-                and any(eku in self.disallowed_extended_key_usages for eku in requested_extended_key_usages):
+        # The notBefore time does concern the validity of the certificate that is being validated. It must have a
+        # notBefore of before the timestamp
+        if self.not_before_filetime is not None:
+            to_verify_timestamp = chain[-1].valid_from
+
+            if to_verify_timestamp >= self.not_before_filetime:
+                # If there is a notBefore time, and there is no NotBeforeEnhkeyUsage, then the validity concerns the
+                # entire certificate.
+                if self.not_before_extended_key_usages is None:
+                    raise CTLCertificateVerificationError(
+                        "The root %s is disallowed for certificate issued after %s (certificate is %s)"
+                        % (self.friendly_name, self.not_before_filetime, to_verify_timestamp)
+                    )
+                elif any(eku in self.not_before_extended_key_usages for eku in requested_extended_key_usages):
+                    raise CTLCertificateVerificationError(
+                        "The root %s disallows requested EKU's %s to certificates issued after %s (certificate is %s)"
+                        % (self.friendly_name, requested_extended_key_usages,
+                           self.not_before_filetime, to_verify_timestamp)
+                    )
+        elif self.not_before_extended_key_usages is not None \
+                and any(eku in self.not_before_extended_key_usages for eku in requested_extended_key_usages):
             raise CTLCertificateVerificationError(
-                "The root %s disallows some of the requested EKU's %s"
-                % (self.friendly_name, requested_extended_key_usages)
+                "The root %s disallows requested EKU's %s" % (self.friendly_name, requested_extended_key_usages)
             )
 
-        # We can have a not before filetime
-        if self.not_before_filetime is not None and self.not_before_extended_key_usages is not None:
-            if timestamp < self.not_before_filetime and \
-                    any(eku in self.not_before_extended_key_usages for eku in requested_extended_key_usages):
-                raise CTLCertificateVerificationError(
-                    "The root %s disallows some of the requested EKU's %s before %s"
-                    % (self.friendly_name, requested_extended_key_usages, self.not_before_filetime)
-                )
+        # The disallowed time does concern the timestamp of the signature being verified.
+        if self.disallowed_filetime is not None:
+            if timestamp >= self.not_before_filetime:
+                # If there is a notBefore time, and there is no NotBeforeEnhkeyUsage, then the validity concerns the
+                # entire certificate.
+                if self.disallowed_extended_key_usages is None:
+                    raise CTLCertificateVerificationError(
+                        "The root %s is disallowed since %s (requested %s)"
+                        % (self.friendly_name, self.disallowed_filetime, timestamp)
+                    )
+                elif any(eku in self.disallowed_extended_key_usages for eku in requested_extended_key_usages):
+                    raise CTLCertificateVerificationError(
+                        "The root %s is disallowed for EKU's %s since %s (requested %s at %s)"
+                        % (self.friendly_name, self.disallowed_extended_key_usages, self.disallowed_filetime,
+                           requested_extended_key_usages, timestamp)
+                    )
+        elif self.disallowed_extended_key_usages is not None \
+                and any(eku in self.disallowed_extended_key_usages for eku in requested_extended_key_usages):
+            raise CTLCertificateVerificationError(
+                "The root %s disallows requested EKU's %s" % (self.friendly_name, requested_extended_key_usages)
+            )
 
         return True
 
