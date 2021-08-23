@@ -2,7 +2,7 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
-v0.4.0 (unreleased)
+v0.4.0 (2021-08-23)
 -------------------
 The following backwards incompatible changes were made:
 
