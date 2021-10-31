@@ -1,3 +1,4 @@
+import datetime
 import pathlib
 import unittest
 
@@ -31,6 +32,7 @@ class ContextTestCase(unittest.TestCase):
 
 
 class ValidationTestCase(unittest.TestCase):
+    @unittest.skipIf(datetime.datetime.now() > datetime.datetime(2021, 10, 8), "revoked certificate expired")
     def test_revoked_certificate(self):
         root = FileSystemCertificateStore(root_dir / "certs" / 'digicert-global-root-ca.pem', trusted=True)
         intermediate = FileSystemCertificateStore(root_dir / "certs" / 'digicert-sha2-secure-server-ca.pem')
