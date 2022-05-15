@@ -293,11 +293,11 @@ class CertificateTrustSubject:
                 "The root %s disallows requested EKU's %s" % (self.friendly_name, requested_extended_key_usages)
             )
 
-        # The disallowed time does concern the timestamp of the signature being verified.
+        # The DisallowedFiletime time does concern the timestamp of the signature being verified.
         if self.disallowed_filetime is not None:
-            if timestamp >= self.not_before_filetime:
-                # If there is a notBefore time, and there is no NotBeforeEnhkeyUsage, then the validity concerns the
-                # entire certificate.
+            if timestamp >= self.disallowed_filetime:
+                # If there is a DisallowedFiletime, and there is no DisallowedEnhkeyUsage, then the validity 
+                # concerns the entire certificate.
                 if self.disallowed_extended_key_usages is None:
                     raise CTLCertificateVerificationError(
                         "The root %s is disallowed since %s (requested %s)"
