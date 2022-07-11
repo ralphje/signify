@@ -32,10 +32,10 @@ class ContextTestCase(unittest.TestCase):
 
 
 class ValidationTestCase(unittest.TestCase):
-    @unittest.skipIf(datetime.datetime.now() > datetime.datetime(2021, 10, 8), "revoked certificate expired")
+    @unittest.skipIf(datetime.datetime.now() > datetime.datetime(2022, 10, 27), "revoked certificate expired")
     def test_revoked_certificate(self):
         root = FileSystemCertificateStore(root_dir / "certs" / 'digicert-global-root-ca.pem', trusted=True)
-        intermediate = FileSystemCertificateStore(root_dir / "certs" / 'digicert-sha2-secure-server-ca.pem')
+        intermediate = FileSystemCertificateStore(root_dir / "certs" / 'rapidssl-tls-2020.pem')
         with open(str(root_dir / "certs" / 'revoked.badssl.com.pem'), "rb") as f:
             cert = Certificate.from_pem(f.read())
 
