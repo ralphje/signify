@@ -1,7 +1,7 @@
 Signify
 =======
-.. image:: https://app.travis-ci.com/ralphje/signify.svg?branch=master
-    :target: https://app.travis-ci.com/ralphje/signify
+.. image:: https://github.com/ralphje/signify/actions/workflows/test.yml/badge.svg
+    :target: https://github.com/ralphje/signify/actions/workflows/test.yml
 .. image:: https://codecov.io/gh/ralphje/signify/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/ralphje/signify
 .. image:: https://readthedocs.org/projects/signify/badge/?version=latest
@@ -14,7 +14,7 @@ This module is a forked from Google's ``verify_sigs`` module, updated to fit
 modern Python standards and be compatible with Python 3. It is **not** a drop-in
 replacement, as significant changes have occurred.
 
-This module is compatible with Python 3.6+ and does not support Python 2.
+This module is compatible with Python 3.7+ and does not support Python 2.
 
 Installation
 ------------

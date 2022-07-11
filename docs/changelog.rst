@@ -2,6 +2,12 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
+v0.5.0 (unreleased)
+-------------------
+* Drop support for Python 3.6
+* Add support for ECC keys
+* Fix DisallowedFileTime check in Authroot parsing
+
 v0.4.0 (2021-08-23)
 -------------------
 The following backwards incompatible changes were made:
