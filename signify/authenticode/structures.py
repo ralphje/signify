@@ -51,15 +51,35 @@ TRUSTED_CERTIFICATE_STORE = FileSystemCertificateStore(location=CERTIFICATE_LOCA
 
 
 class AuthenticodeVerificationResult(enum.Enum):
+    """This represents the result of an Authenticode verification. If everything is OK, it will equal to
+    ``AuthenticodeVerificationResult.OK``, otherwise one of the other enum items will be returned. Remember that only
+    the first exception is processed - there may be more wrong.
+    """
+
     OK = enum.auto()
+    """The signature is valid."""
     NOT_SIGNED = enum.auto()
+    """The provided PE file is not signed."""
     PARSE_ERROR = enum.auto()
+    """The Authenticode signature could not be parsed."""
     VERIFY_ERROR = enum.auto()
+    """The Authenticode signature could not be verified. This is a more generic error than other possible
+    statuses and is used as a catch-all.
+    """
     UNKNOWN_ERROR = enum.auto()
+    """An unknown error occurred during parsing or verifying."""
     CERTIFICATE_ERROR = enum.auto()
+    """An error occurred during the processing of a certificate (e.g. during chain building), or when verifying the
+    certificate's signature.
+    """
     INCONSISTENT_DIGEST_ALGORITHM = enum.auto()
+    """A highly specific error raised when different digest algorithms are used in SignedData, SpcInfo or SignerInfo."""
     INVALID_DIGEST = enum.auto()
+    """The verified digest does not match the calculated digest of the file. This is a tell-tale sign that the file
+    may have been tampered with.
+    """
     COUNTERSIGNER_ERROR = enum.auto()
+    """Something went wrong when verifying the countersignature."""
 
     @classmethod
     def call(cls, function, *args, **kwargs):

@@ -8,15 +8,28 @@ The Authenticode support of Signify allows you to easily verify a PE File's sign
         pefile = SignedPEFile(f)
         pefile.verify()
 
-This method will raise an error if it is invalid. If you need to get more information about the signature, you
-can use this::
+This method will raise an error if it is invalid. A simpler API is also available, allowing you to interpret the error
+if one happens::
+
+    with open("file.exe", "rb") as f:
+        pefile = SignedPEFile(f)
+        status, err = pefile.explain_verify()
+
+    if status != AuthenticodeVerificationResult.OK:
+        print(f"Invalid: {err}")
+
+If you need to get more information about the signature, you can use this::
 
     with open("file.exe", "rb") as f:
         pefile = SignedPEFile(f)
         for signed_data in pefile.signed_datas:
             print(signed_data.signer_info.program_name)
+            if signed_data.signer_info.countersigner is not None:
+                print(signed_data.signer_info.countersigner.signing_time)
 
-Note that the file must remain open as long as nog all SignedData objects have been parsed.
+A more thorough example is available in the examples directory of the Signify repository.
+
+Note that the file must remain open as long as not all SignedData objects have been parsed.
 
 Signed PE File
 --------------
@@ -25,6 +38,9 @@ contains helpers to ensure the correct objects can be extracted, and additionall
 signatures.
 
 .. autoclass:: SignedPEFile
+   :members:
+
+.. autoclass:: AuthenticodeVerificationResult
    :members:
 
 PKCS7 objects
