@@ -24,6 +24,11 @@ def accuracy_to_python(accuracy):
     return delta
 
 
+def bitstring_to_bytes(s):
+    # based on https://stackoverflow.com/questions/32675679/convert-binary-string-to-bytearray-in-python-3
+    return int(str(s), 2).to_bytes((len(s) + 7) // 8, byteorder='big')
+
+
 @contextlib.contextmanager
 def patch_rfc5652_signeddata():
     """Due to a specific error in the implementation of RFC5652 by (presumably) Microsoft, there is some issue

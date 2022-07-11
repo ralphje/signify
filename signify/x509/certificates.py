@@ -11,13 +11,9 @@ from pyasn1.codec.ber import decoder as ber_decoder
 from pyasn1_modules import rfc5652, rfc5280, rfc2315
 
 from signify import asn1
-try:
-    from signify._compat import cached_property
-except SyntaxError:
-    # For Python 3.5, where f-strings are not a thing
-    cached_property = property
+from signify._compat import cached_property
 from signify.asn1 import oids
-from signify.asn1.helpers import time_to_python
+from signify.asn1.helpers import time_to_python, bitstring_to_bytes
 from signify.exceptions import CertificateVerificationError
 
 logger = logging.getLogger(__name__)
@@ -26,7 +22,7 @@ logger = logging.getLogger(__name__)
 AlgorithmIdentifier = collections.namedtuple('AlgorithmIdentifier', 'algorithm parameters')
 
 
-class Certificate(object):
+class Certificate:
     """Representation of a Certificate. It is built from an ASN.1 structure.
 
     .. attribute:: data
@@ -127,7 +123,7 @@ class Certificate(object):
             algorithm=tbs_certificate['subjectPublicKeyInfo']['algorithm']['algorithm'],
             parameters=bytes(tbs_certificate['subjectPublicKeyInfo']['algorithm']['parameters'])
         )
-        self.subject_public_key = bytes(tbs_certificate['subjectPublicKeyInfo']['subjectPublicKey'])
+        self.subject_public_key = bitstring_to_bytes(tbs_certificate['subjectPublicKeyInfo']['subjectPublicKey'])
 
         self.extensions = {}
         if 'extensions' in tbs_certificate and tbs_certificate['extensions'].isValue:
