@@ -542,7 +542,7 @@ class RFC3161SignedData(SignedData):
                                           extended_key_usages=['time_stamping'])
 
         # The context is set correctly by the 'verify' function, including the current certificate store
-        self.signer_info.verify(context)
+        return self.signer_info.verify(context)
 
 
 if __name__ == "__main__":
