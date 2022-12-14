@@ -138,12 +138,14 @@ class Certificate:
                      self.subject_public_algorithm, self.subject_public_key))
 
     def __eq__(self, other):
-        return isinstance(other, Certificate) and \
-               self.issuer == other.issuer and \
-               self.serial_number == other.serial_number and \
-               self.subject == other.subject and \
-               self.subject_public_algorithm == other.subject_public_algorithm and \
-               self.subject_public_key == other.subject_public_key
+        return (
+            isinstance(other, Certificate)
+            and self.issuer == other.issuer
+            and self.serial_number == other.serial_number
+            and self.subject == other.subject
+            and self.subject_public_algorithm == other.subject_public_algorithm
+            and self.subject_public_key == other.subject_public_key
+        )
 
     @classmethod
     def from_der(cls, content):

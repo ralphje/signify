@@ -240,7 +240,7 @@ class VerificationContext(object):
             return
 
         for candidate in self.find_certificates(subject=certificate.issuer):
-            for chain in self.potential_chains(candidate, depth=depth-1):
+            for chain in self.potential_chains(candidate, depth=depth - 1):
                 # prevent recursion on itself
                 if certificate in chain:
                     continue
