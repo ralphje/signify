@@ -17,7 +17,8 @@ except Exception:
 setup(
     name='signify',
     version=about['__version__'],
-    packages=['signify', 'signify.asn1', 'signify.authenticode', 'signify.pkcs7', 'signify.x509'],
+    packages=['signify', 'signify.asn1', 'signify.authenticode', 'signify.pkcs7', 'signify.x509',
+              'signify.__pyinstaller'],
     package_data={'signify': ['*.pem']},
     include_package_data=True,
 
@@ -53,4 +54,9 @@ setup(
         'Topic :: System :: Software Distribution',
         'Topic :: Utilities',
     ],
+    entry_points={
+        'pyinstaller40': [
+            'hook-dirs = signify.__pyinstaller:get_hook_dirs'
+        ]
+    }
 )
