@@ -60,6 +60,13 @@ To help understand the specific SignedData and SignerInfo objects, the following
 
 Countersignature
 ----------------
+The countersignature is used to verify the timestamp of the signature. This is usually done by sending the signature
+to a time-stamping service, that provides the countersignature. This allows the signature to continue to be valid, even
+after the original certificate chain expiring.
+
+There are two types of countersignature: a regular countersignature, as used in PKCS7, or a nested RFC3161 response.
+This nested object is basically a :class:`authenticode.pkcs7.SignedData` object, which holds its own set of
+certificates.
 
 Regular
 ~~~~~~~
@@ -75,16 +82,4 @@ RFC3161
 .. autoclass:: TSTInfo
    :members:
 .. autoclass:: RFC3161SignerInfo
-   :members:
-
-Certificate Trust Lists (authroot.stl)
---------------------------------------
-Microsoft distributes its own Certificate Trust Lists, containing all trusted certificates. More information about its
-root program can be found
-`on Microsoft's website <https://docs.microsoft.com/en-us/security/trusted-root/release-notes>`_. Unfortunately, the
-exact meaning of certificates in the store with respect to Authenticode, is as of yet unclear.
-
-.. autoclass:: CertificateTrustList
-   :members:
-.. autoclass:: CertificateTrustSubject
    :members:

@@ -40,18 +40,61 @@ def _lookup_ekus(extended_key_usages=None):
 
 
 class CertificateTrustList(SignedData):
-    """A subclass of :class:`signify.pkcs7.SignedData`, containing a list of trusted root certificates.
+    """A subclass of :class:`signify.pkcs7.SignedData`, containing a list of trusted root certificates. It is based
+    on the following ASN.1 structure::
+
+        CertificateTrustList ::= SEQUENCE {
+          version CTLVersion DEFAULT v1,
+          subjectUsage SubjectUsage,
+          listIdentifier ListIdentifier OPTIONAL,
+          sequenceNumber HUGEINTEGER OPTIONAL,
+          ctlThisUpdate ChoiceOfTime,
+          ctlNextUpdate ChoiceOfTime OPTIONAL,
+          subjectAlgorithm AlgorithmIdentifier,
+          trustedSubjects TrustedSubjects OPTIONAL,
+          ctlExtensions [0] EXPLICIT Extensions OPTIONAL
+        }
+        CTLVersion ::= INTEGER {v1(0)}
+        SubjectUsage ::= EnhancedKeyUsage
+        ListIdentifier ::= OCTETSTRING
+        TrustedSubjects ::= SEQUENCE OF TrustedSubject
+        TrustedSubject ::= SEQUENCE{
+          subjectIdentifier SubjectIdentifier,
+          subjectAttributes Attributes OPTIONAL
+        }
+        SubjectIdentifier ::= OCTETSTRING
 
     .. attribute:: data
 
        The underlying ASN.1 data object
 
     .. attribute:: subject_usage
+
+       Defines the EKU of the Certificate Trust List. Should be 1.3.6.1.4.1.311.20.1.
+
     .. attribute:: list_identifier
+
+       The name of the template of the list.
+
     .. attribute:: sequence_number
+
+       The unique number of this list
+
     .. attribute:: this_update
+
+       The date of the current CTL.
+
     .. attribute:: next_update
+
+       The date of the next CTL.
+
     .. attribute:: subject_algorithm
+
+       Digest algorithm of verifying the list.
+
+    .. warning::
+
+       The CTL itself is currently not verifiable.
 
     """
     _expected_content_type = asn1.ctl.CertificateTrustList
@@ -140,7 +183,9 @@ class CertificateTrustList(SignedData):
 
 
 class CertificateTrustSubject:
-    """A subject listed in a :class:`CertificateTrustList`.
+    """A subject listed in a :class:`CertificateTrustList`. The structure in this object has mostly been
+    reverse-engineered using Windows tooling such as ``certutil -dump``. We do not pretend to have a complete picture
+    of all the edge-cases that are considered.
 
     .. attribute:: data
 
@@ -153,15 +198,55 @@ class CertificateTrustSubject:
     The following values are extracted from the attributes:
 
     .. attribute:: extended_key_usages
+
+       Defines the EKU's the certificate is valid for. It may be empty, which we take as 'all is acceptable'.
+
     .. attribute:: friendly_name
+
+       The friendly name of the certificate.
+
     .. attribute:: key_identifier
+
+       The sha1 fingerprint of the certificate.
+
     .. attribute:: subject_name_md5
+
+       The md5 of the subject name.
+
     .. attribute:: auth_root_sha256
+
+       The sha256 fingerprint of the certificate.
+
     .. attribute:: disallowed_filetime
+
+       The time since when a certificate has been disabled. Digital signatures with a timestamp prior to this date
+       continue to be valid, but use cases after this date are prohibited. It may be used in conjunction with
+       :attr:`disallowed_extended_key_usages` to define specific EKU's to be disabled.
+
     .. attribute:: root_program_chain_policies
+
+       A list of EKU's probably used for EV certificates.
+
     .. attribute:: disallowed_extended_key_usages
+
+       Defines the EKU's the certificate is not valid for. When used in combination with :attr:`disallowed_filetime`,
+       the disabled EKU's are only disabled from that date onwards, otherwise, it means since the beginning of time.
+
     .. attribute:: not_before_filetime
+
+       The time since when new certificates from this CA are not trusted. Certificates from prior the date will continue
+       to validate. When used in conjunction with :attr:`not_before_extended_key_usages`, this only concerns
+       certificates issued after this date for the defined EKU's.
+
     .. attribute:: not_before_extended_key_usages
+
+       Defines the EKU's for which the :attr:`not_before_filetime` is considered. If that attribute is not defined,
+       we assume that it means since the beginning of time.
+
+    .. warning::
+
+       The interpretation of the various attributes and their implications has been reverse-engineered. Though we seem
+       to have a fairly solid understanding, various edge-cases may not have been considered.
 
     """
 
@@ -208,43 +293,7 @@ class CertificateTrustSubject:
 
     def verify_trust(self, chain, context):
         """Checks whether the specified certificate is valid in the given conditions according to this Certificate Trust
-        List. This is implemented following the definitions found on
-        https://docs.microsoft.com/en-us/security/trusted-root/deprecation:
-
-        Removal
-            Removal of a root from the CTL. All certificates that chain to the root are no longer trusted.
-
-        In this case, the entry will not exist. This method cannot check for this.
-
-        EKU Removal
-            Removal of a specific EKU from a root certificate. All End entity certificates that chain to this root
-            can no longer utilize the removed EKU, independent of whether or not the digital signature was timestamped.
-
-        In this case, the EKU is removed from the set of allowed EKU's in :attr:`extended_key_usages`
-        OR added to the set of disallowed EKU's in :attr:`disallowed_extended_key_usages`
-
-        Disallow
-            This feature involves adding the certificate to the Disallow CTL. This feature effectively revokes the
-            certificate. Users cannot manually install the root and continue to have trust.
-
-        The disallowed authroot.stl will be updated in this case. This CTL will only contain the subject name hashes.
-
-        Disable
-            All certificates that chain to a disabled root will no longer be trusted with a very important exception;
-            digital signatures with a timestamp prior to the disable date will continue to validate successfully.
-
-        Empirical evidence has shown that in this case, :attr:`disallowed_filetime` will be set. In the case that
-        only an EKU is disabled, it is removed from the set of allowed EKU's in :attr:`extended_key_usages`
-        OR added to the set of disallowed EKU's in :attr:`disallowed_extended_key_usages`
-
-        NotBefore
-            Allows granular disabling of a root certificate or specific EKU capability of a root certificate.
-            Certificates issued AFTER the NotBefore date will no longer be trusted, however certificates issued
-            BEFORE to the NotBefore date will continue to be trusted. Digital signatures with a timestamp set
-            before the NotBefore date will continue to successfully validate.
-
-        In this case, the :attr:`not_before_filetime` will be set. In the case that this applies to a single EKU,
-        :attr:`not_before_extended_key_usages` will be set as well.
+        List.
 
         :param List[Certificate] chain: The certificate chain to verify.
         :param VerificationContext context: The context to verify with. Mainly the timestamp and extended_key_usages
