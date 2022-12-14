@@ -296,7 +296,7 @@ class CertificateTrustSubject:
         # The DisallowedFiletime time does concern the timestamp of the signature being verified.
         if self.disallowed_filetime is not None:
             if timestamp >= self.disallowed_filetime:
-                # If there is a DisallowedFiletime, and there is no DisallowedEnhkeyUsage, then the validity 
+                # If there is a DisallowedFiletime, and there is no DisallowedEnhkeyUsage, then the validity
                 # concerns the entire certificate.
                 if self.disallowed_extended_key_usages is None:
                     raise CTLCertificateVerificationError(

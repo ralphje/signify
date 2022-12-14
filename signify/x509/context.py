@@ -1,4 +1,3 @@
-import datetime
 import logging
 
 from certvalidator import ValidationContext, CertificateValidator
@@ -85,8 +84,11 @@ class CertificateStore(list):
                 continue
             if issuer is not None and certificate.issuer != issuer:
                 continue
-            if sha256_fingerprint is not None \
-                    and certificate.sha256_fingerprint.replace(" ", "").lower() != sha256_fingerprint.replace(" ", "").lower():
+            if (
+                sha256_fingerprint is not None
+                and certificate.sha256_fingerprint.replace(" ", "").lower()
+                    != sha256_fingerprint.replace(" ", "").lower()
+            ):
                 continue
             yield certificate
 

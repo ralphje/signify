@@ -1,5 +1,7 @@
 from . import pkcs7, spc, oids, ctl
 
+__all__ = ['pkcs7', 'spc', 'oids', 'ctl', 'guarded_ber_decode', 'guarded_der_decode']
+
 
 def guarded_ber_decode(data, asn1_spec=None):
     from pyasn1.codec.ber import decoder as ber_decoder

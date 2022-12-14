@@ -5,12 +5,7 @@ try:
 except ImportError:
     from threading import RLock
 
-    ################################################################################
-    ### cached_property() - computed once per instance, cached as attribute
-    ################################################################################
-
     _NOT_FOUND = object()
-
 
     class cached_property:
         def __init__(self, func):

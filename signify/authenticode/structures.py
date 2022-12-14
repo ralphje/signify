@@ -20,9 +20,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""This module effectively implements Microsoft's documentation on Authenticode_PE_.
-
-.. _Authenticode_PE: http://download.microsoft.com/download/9/c/5/9c5b2167-8017-4bae-9fde-d599bac8184a/Authenticode_PE.docx
+"""This module effectively implements Microsoft's documentation on
+`<http://download.microsoft.com/download/9/c/5/9c5b2167-8017-4bae-9fde-d599bac8184a/Authenticode_PE.docx>`_.
 """
 import enum
 import logging
@@ -34,7 +33,7 @@ from pyasn1_modules import rfc3161, rfc2315, rfc5652
 from signify.authenticode.authroot import CertificateTrustList
 from signify.asn1 import guarded_ber_decode, pkcs7
 from signify.asn1.helpers import accuracy_to_python, patch_rfc5652_signeddata
-from signify.x509 import CertificateName, CertificateStore, VerificationContext, FileSystemCertificateStore
+from signify.x509 import CertificateName, VerificationContext, FileSystemCertificateStore
 from signify.exceptions import AuthenticodeParseError, ParseError, \
     AuthenticodeInconsistentDigestAlgorithmError, AuthenticodeInvalidDigestError, AuthenticodeCounterSignerError, \
     SignedPEParseError, AuthenticodeNotSignedError, CertificateVerificationError, VerificationError
@@ -240,7 +239,7 @@ class SpcInfo:
         if 'value' in self.data['data'] and self.data['data']['value'].isValue:
             self.image_data = None
             # TODO: not parsed
-            #image_data = _guarded_ber_decode((self.data['data']['value'], asn1_spec=self.content_type())
+            # image_data = _guarded_ber_decode((self.data['data']['value'], asn1_spec=self.content_type())
 
         self.digest_algorithm = _get_digest_algorithm(self.data['messageDigest']['digestAlgorithm'],
                                                       location="SpcIndirectDataContent.digestAlgorithm")

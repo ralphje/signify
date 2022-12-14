@@ -59,13 +59,13 @@ class SignedPEFile(object):
         """Returns all ranges of the raw file that are relevant for exclusion for the calculation of the hash
         function used in Authenticode.
 
-        The relevant sections are (as per Authenticode_PE_, chapter Calculating the PE Image Hash):
+        The relevant sections are (as per
+        `<http://download.microsoft.com/download/9/c/5/9c5b2167-8017-4bae-9fde-d599bac8184a/Authenticode_PE.docx>`_,
+        chapter Calculating the PE Image Hash):
 
         * The location of the checksum
         * The location of the entry of the Certificate Table in the Data Directory
         * The location of the Certificate Table.
-
-        .. _Authenticode_PE: http://download.microsoft.com/download/9/c/5/9c5b2167-8017-4bae-9fde-d599bac8184a/Authenticode_PE.docx
 
         :returns: dict if successful, or None if not successful
         """
