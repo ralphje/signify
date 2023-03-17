@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from authenticode import SignedPEFile
+from signify.authenticode import SignedPEFile
 
 
 def main(*filenames):
