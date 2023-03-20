@@ -17,8 +17,7 @@ except Exception:
 setup(
     name='signify',
     version=about['__version__'],
-    packages=['signify', 'signify.asn1', 'signify.authenticode', 'signify.pkcs7', 'signify.x509',
-              'signify.__pyinstaller'],
+    packages=['signify', 'signify.asn1', 'signify.authenticode', 'signify.pkcs7', 'signify.x509'],
     package_data={'signify': ['*.pem']},
     include_package_data=True,
 
@@ -33,7 +32,8 @@ setup(
                       'certvalidator>=0.11',
                       'asn1crypto>=1.3,<2',
                       'oscrypto>=1.1,<2',
-                      'pyasn1-modules>=0.2.8'],
+                      'pyasn1-modules>=0.2.8',
+                      'mscerts'],
     extras_require={
         "stlupdate": ["requests"],
     },

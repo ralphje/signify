@@ -3,6 +3,7 @@ import hashlib
 import pathlib
 import struct
 
+import mscerts
 from pyasn1.codec.ber import decoder as ber_decoder
 from pyasn1_modules import rfc2315
 
@@ -13,10 +14,8 @@ from signify.exceptions import CertificateTrustListParseError, CTLCertificateVer
 from signify.pkcs7.signeddata import SignedData
 from signify.pkcs7.signerinfo import _get_digest_algorithm
 
-AUTHROOTSTL_URL = "http://ctldl.windowsupdate.com/msdownload/update/v3/static/trustedr/en/authroot.stl"
-AUTHROOTSTL_PATH = pathlib.Path(__file__).resolve().parent.parent / "certs" / "authroot.stl"
-DISALLOWEDSTL_URL = "http://ctldl.windowsupdate.com/msdownload/update/v3/static/trustedr/en/disallowedcert.stl"
-DISALLOWEDSTL_PATH = pathlib.Path(__file__).resolve().parent.parent / "certs" / "disallowedcerts.stl"
+
+AUTHROOTSTL_PATH = pathlib.Path(mscerts.where(stl=True))
 
 
 def _lookup_ekus(extended_key_usages=None):
@@ -148,19 +147,6 @@ class CertificateTrustList(SignedData):
             raise CertificateTrustListParseError("The specified subject algorithm is not yet supported.")
 
         return self._subjects.get(identifier)
-
-    @classmethod
-    def update_stl_file(cls, url=AUTHROOTSTL_URL, path=AUTHROOTSTL_PATH):
-        """This downloads the latest version of the authroot.stl file and puts it in place of the locally bundled
-        authroot.stl.
-        """
-
-        import requests
-
-        with requests.get(url, stream=True) as r, open(str(path), "wb") as f:
-            r.raise_for_status()
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
 
     @classmethod
     def from_stl_file(cls, path=AUTHROOTSTL_PATH):

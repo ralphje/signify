@@ -73,3 +73,7 @@ Use :const:`TRUSTED_CERTIFICATE_STORE` for a certificate store with associated C
 .. data:: TRUSTED_CERTIFICATE_STORE_NO_CTL
 
    A :class:`signify.x509.CertificateStore` without an associated :class:`CertificateTrustList`.
+
+
+Signify uses a separate project (`mscerts <https://pypi.org/project/mscerts/>`_) to ensure an up-to-date certificate
+bundle. This project is maintained by the same authors as Signify.

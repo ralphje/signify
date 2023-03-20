@@ -27,6 +27,7 @@ import enum
 import logging
 import pathlib
 
+import mscerts
 from pyasn1.codec.ber import decoder as ber_decoder
 from pyasn1_modules import rfc3161, rfc2315, rfc5652
 
@@ -43,7 +44,7 @@ from signify import asn1
 
 logger = logging.getLogger(__name__)
 
-CERTIFICATE_LOCATION = pathlib.Path(__file__).resolve().parent.parent / "certs" / "authenticode-bundle.pem"
+CERTIFICATE_LOCATION = pathlib.Path(mscerts.where(stl=False))
 TRUSTED_CERTIFICATE_STORE_NO_CTL = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True)
 TRUSTED_CERTIFICATE_STORE = FileSystemCertificateStore(location=CERTIFICATE_LOCATION, trusted=True,
                                                        ctl=CertificateTrustList.from_stl_file())
