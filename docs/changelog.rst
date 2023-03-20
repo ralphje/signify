@@ -2,11 +2,12 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
-v0.5.0 (unreleased)
+v0.5.0 (2023-03-20)
 -------------------
 * Drop support for Python 3.6
 * Add support for ECC keys
-* Move certificates to a separate project, mscerts, so that we can update it separately
+* Move certificates to a separate project, `mscerts <https://pypi.org/project/mscerts/>`_,
+  so that we can update it separately
 * Fix DisallowedFileTime check in Authroot parsing
 * Fix parsing of ``Certificate.subject_public_key``
 * Fix return statement of ``RFC3161SignedData.verify``
