@@ -34,9 +34,6 @@ setup(
                       'oscrypto>=1.1,<2',
                       'pyasn1-modules>=0.2.8',
                       'mscerts'],
-    extras_require={
-        "stlupdate": ["requests"],
-    },
     keywords=['authenticode', 'authentihash', 'fingerprinter', 'pe'],
     classifiers=[
         'Development Status :: 3 - Alpha',

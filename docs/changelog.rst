@@ -2,6 +2,10 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
+v0.5.1 (2023-03-22)
+-------------------
+* Remove PyInstaller hook and optional requirements from setup.py
+
 v0.5.0 (2023-03-20)
 -------------------
 * Drop support for Python 3.6
