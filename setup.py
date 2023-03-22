@@ -53,10 +53,5 @@ setup(
         'Topic :: Security :: Cryptography',
         'Topic :: System :: Software Distribution',
         'Topic :: Utilities',
-    ],
-    entry_points={
-        'pyinstaller40': [
-            'hook-dirs = signify.__pyinstaller:get_hook_dirs'
-        ]
-    }
+    ]
 )
