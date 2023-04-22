@@ -288,7 +288,7 @@ class AuthenticodeSignedData(SignedData):
         if 'crls' in self.data and self.data['crls'].isValue:
             raise AuthenticodeParseError("SignedData.crls is present, but that is unexpected.")
 
-    def verify(self, expected_hash=None, verification_context=None, cs_verification_context=None,
+    def verify(self, *, expected_hash=None, verification_context=None, cs_verification_context=None,
                trusted_certificate_store=TRUSTED_CERTIFICATE_STORE, verification_context_kwargs={},
                countersignature_mode='strict'):
         """Verifies the SignedData structure:
@@ -521,7 +521,7 @@ class RFC3161SignedData(SignedData):
         auth_attr_hash = self.tst_info.hash_algorithm(data).digest()
         return auth_attr_hash == self.tst_info.message_digest
 
-    def verify(self, context=None, trusted_certificate_store=TRUSTED_CERTIFICATE_STORE):
+    def verify(self, context=None, *, trusted_certificate_store=TRUSTED_CERTIFICATE_STORE):
         """Verifies the RFC3161 SignedData object. The context that is passed in must account for the certificate
         store of this object, or be left None.
 

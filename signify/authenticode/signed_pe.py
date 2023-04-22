@@ -35,6 +35,7 @@ import logging
 import os
 import struct
 
+from signify.pkcs7.signerinfo import ACCEPTED_DIGEST_ALGORITHMS
 from signify.authenticode import AuthenticodeVerificationResult
 from signify.exceptions import SignedPEParseError, AuthenticodeNotSignedError
 
@@ -239,19 +240,18 @@ class SignedPEFile(object):
         if not found:
             raise SignedPEParseError("A SignedData structure was not found in the PE file's Certificate Table")
 
-    def verify(self, expected_hashes=None, *args, **kwargs):
-        """Verifies the SignedData structures. This is a little bit more efficient than calling all verify-methods
-        separately.
+    def _calculate_expected_hashes(self, signed_datas, expected_hashes=None):
+        """Calculates the expected hashes that are needed for verification. This provides a small speed-up
+        by pre-calculating all hashes, so that not each individual SignerInfo object is responsible for calculating
+        their own hash.
 
-        :param expected_hashes: When provided, should be a mapping of hash names to digests. This could speed-up the
-                                verification process.
-        :raises AuthenticodeVerificationError: when the verification failed
+        :param signed_datas: The signed datas of this object. Provided to allow :meth:`verify` to prefetch these
+        :param expected_hashes: Hashes provided by the caller of :meth:`verify`
+        :return: All required hashes
         """
 
         if expected_hashes is None:
             expected_hashes = {}
-
-        signed_datas = list(self.signed_datas)
 
         # Calculate which hashes we require for the signedinfos
         digest_algorithms = set()
@@ -268,17 +268,66 @@ class SignedPEFile(object):
             fingerprinter.add_authenticode_hashers(*needed_hashes)
             expected_hashes.update(fingerprinter.hashes()['authentihash'])
 
+        return expected_hashes
+
+    def verify(self, *, multi_verify_mode='any', expected_hashes=None, **kwargs):
+        """Verifies the SignedData structures. This is a little bit more efficient than calling all verify-methods
+        separately.
+
+        :param expected_hashes: When provided, should be a mapping of hash names to digests. This could speed up the
+            verification process.
+        :param multi_verify_mode: Indicates how to verify when there are multiple :cls:`AuthenticodeSignedData` objects
+            in this PE file. Can be:
+
+            * 'any' (default) to indicate that any of the signatures must validate correctly.
+            * 'first' to indicate that the first signature must verify correctly
+              (the default of tools such as sigcheck.exe)
+            * 'all' to indicate that all signatures must verify
+            * 'best' to indicate that the signature using the best hashing algorithm must verify (e.g. if both SHA-1
+              and SHA-256 are present, only SHA-256 is checked); if multiple signatures exist with the same algorithm,
+              any may verify
+
+            This argument has no effect when only one signature is present.
+        :raises AuthenticodeVerificationError: when the verification failed
+        """
+
+        # we need to iterate it twice, so we need to prefetch all signed_datas
+        signed_datas = list(self.signed_datas)
+
+        # if there are no signed_datas, the binary is not signed
+        if not signed_datas:
+            raise AuthenticodeNotSignedError("No valid SignedData structure was found.")
+
+        # only consider the first signed_data; by selecting it here we prevent calculating more hashes than needed
+        if multi_verify_mode == 'first':
+            signed_datas = [signed_datas[0]]
+        elif multi_verify_mode == 'best':
+            # ACCEPTED_DIGEST_ALGORITHMS contains the algorithms in worst to best order
+            best_algorithm = max(
+                (sd.digest_algorithm for sd in signed_datas),
+                key=lambda alg: ACCEPTED_DIGEST_ALGORITHMS.index(alg)
+            )
+            signed_datas = [sd for sd in signed_datas if sd.digest_algorithm == best_algorithm]
+
+        expected_hashes = self._calculate_expected_hashes(signed_datas, expected_hashes)
+
         # Now iterate over all SignedDatas
         last_error = None
+        assert signed_datas
         for signed_data in signed_datas:
             try:
-                signed_data.verify(expected_hash=expected_hashes[signed_data.digest_algorithm().name], *args, **kwargs)
+                signed_data.verify(expected_hash=expected_hashes[signed_data.digest_algorithm().name], **kwargs)
             except Exception as e:
+                # best and any are interpreted as any; first doesn't matter either way, but raising where it is raised
+                # is a little bit clearer
+                if multi_verify_mode in ('all', 'first'):
+                    raise
                 last_error = e
             else:
-                return
+                if multi_verify_mode not in ('all', 'first'):
+                    return True
         if last_error is None:
-            raise AuthenticodeNotSignedError("No valid SignedData structure was found.")
+            return True
         raise last_error
 
     def explain_verify(self, *args, **kwargs):

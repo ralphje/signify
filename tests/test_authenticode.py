@@ -176,6 +176,48 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             pefile = SignedPEFile(f)
             pefile.verify()
 
+    def test_multiple_signatures_all_valid(self):
+        """this tests a sample that has two signed datas, that are both valid"""
+        with open(str(root_dir / "test_data" / "sigcheck.exe"), "rb") as f:
+            pefile = SignedPEFile(f)
+            self.assertEqual(len(list(pefile.signed_datas)), 2)
+
+            for mode in ('all', 'first', 'any', 'best'):
+                with self.subTest(multi_verify_mode=mode):
+                    pefile.verify(trusted_certificate_store=TRUSTED_CERTIFICATE_STORE_NO_CTL, multi_verify_mode=mode)
+
+    def test_multiple_signatures_invalid_sha1(self):
+        """this tests a sample that has an invalid sha-1 hash, but valid sha-256 hash"""
+        with open(str(root_dir / "test_data" / "sigcheck_sha1_patched.exe"), "rb") as f:
+            pefile = SignedPEFile(f)
+            for mode in ('all', 'first'):
+                with self.subTest(multi_verify_mode=mode), self.assertRaises(VerificationError):
+                    pefile.verify(trusted_certificate_store=TRUSTED_CERTIFICATE_STORE_NO_CTL, multi_verify_mode=mode)
+            for mode in ('any', 'best'):
+                with self.subTest(multi_verify_mode=mode):
+                    pefile.verify(trusted_certificate_store=TRUSTED_CERTIFICATE_STORE_NO_CTL, multi_verify_mode=mode)
+
+    def test_multiple_signatures_invalid_sha256(self):
+        """this tests a sample that has an valid sha-1 hash, but invalid sha-256 hash"""
+        with open(str(root_dir / "test_data" / "sigcheck_sha256_patched.exe"), "rb") as f:
+            pefile = SignedPEFile(f)
+            for mode in ('all', 'best'):
+                with self.subTest(multi_verify_mode=mode), self.assertRaises(VerificationError):
+                    pefile.verify(trusted_certificate_store=TRUSTED_CERTIFICATE_STORE_NO_CTL, multi_verify_mode=mode)
+            for mode in ('first', 'any'):
+                with self.subTest(multi_verify_mode=mode):
+                    pefile.verify(trusted_certificate_store=TRUSTED_CERTIFICATE_STORE_NO_CTL, multi_verify_mode=mode)
+
+    def test_multiple_signatures_all_invalid(self):
+        """this tests a sample that has only invalid signautres"""
+        with open(str(root_dir / "test_data" / "sigcheck_sha256_patched.exe"), "rb") as f:
+            pefile = SignedPEFile(f)
+            # we can test for the fact that all signatures are invalid here as well, because the normal CTL will
+            # disallow sha1
+            for mode in ('all', 'best', 'first', 'any'):
+                with self.subTest(multi_verify_mode=mode), self.assertRaises(VerificationError):
+                    pefile.verify(multi_verify_mode=mode)
+
 
 class CertificateTestCase(unittest.TestCase):
     def test_all_trusted_certificates_are_trusted(self):

@@ -2,6 +2,14 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
+unreleased
+----------
+* Added ``multi_verify_mode`` as argument to ``SignedPEFile.verify``. This allows you to specify how you'd like to
+  handle the case of multiple signatures in the PE file, but not all signatures validate. The Windows default seems to
+  be to rely on the first signature, though Signify defaults to allow any signature to verify. Next to these two,
+  we have also added the options for 'all' (all signatures must verify) and 'best' (the best must verify).
+* Changed some arguments of some methods to keyword-only arguments. This is a backwards-incompatible change.
+
 v0.5.2 (2023-04-22)
 -------------------
 * Pin pyasn1 dependency version to <0.5.0 for now, due to some apparent backwards-incompatible changes.

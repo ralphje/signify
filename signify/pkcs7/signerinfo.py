@@ -11,6 +11,8 @@ from signify import asn1, _print_type
 from signify.asn1.helpers import time_to_python
 from signify.x509.certificates import CertificateName
 
+
+# this list must be in the order of worst to best
 ACCEPTED_DIGEST_ALGORITHMS = (hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha384, hashlib.sha512)
 
 
