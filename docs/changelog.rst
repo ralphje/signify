@@ -2,6 +2,10 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
+v0.5.2 (2023-04-22)
+-------------------
+* Pin pyasn1 dependency version to <0.5.0 for now, due to some apparent backwards-incompatible changes.
+
 v0.5.1 (2023-03-22)
 -------------------
 * Remove PyInstaller hook and optional requirements from setup.py
