@@ -8,17 +8,16 @@ from typing import Any, Iterable, Iterator, List
 import asn1crypto.crl
 import asn1crypto.ocsp
 import asn1crypto.x509
+from certvalidator import CertificateValidator, ValidationContext
 from typing_extensions import Literal
 
-from certvalidator import ValidationContext, CertificateValidator
-
 from signify.authenticode import authroot
-from signify.x509.certificates import Certificate, CertificateName
 from signify.exceptions import (
-    VerificationError,
-    CertificateVerificationError,
     CertificateNotTrustedVerificationError,
+    CertificateVerificationError,
+    VerificationError,
 )
+from signify.x509.certificates import Certificate, CertificateName
 
 logger = logging.getLogger(__name__)
 
@@ -162,14 +161,14 @@ class FileSystemCertificateStore(CertificateStore):
 
         if self.location.is_dir():
             for file in self.location.glob("*"):
-                with open(str(file), "rb") as f:
+                with file.open("rb") as f:
                     self.extend(Certificate.from_pems(f.read()))
         else:
-            with open(str(self.location), "rb") as f:
+            with self.location.open("rb") as f:
                 self.extend(Certificate.from_pems(f.read()))
 
 
-class VerificationContext(object):
+class VerificationContext:
     def __init__(
         self,
         *stores: CertificateStore,
@@ -310,7 +309,7 @@ class VerificationContext(object):
                 if certificate in chain:
                     continue
                 else:
-                    yield chain + [certificate]
+                    yield [*chain, certificate]
 
     def verify(self, certificate: Certificate) -> Iterable[Certificate]:
         """Verifies the certificate, and its chain.
@@ -322,7 +321,8 @@ class VerificationContext(object):
             verified.
         """
 
-        # we keep track of our asn1 objects to make sure we return Certificate objects when we're done
+        # we keep track of our asn1 objects to make sure we return Certificate objects
+        # when we're done
         to_check_asn1cert = certificate.to_asn1crypto
         all_certs = {to_check_asn1cert: certificate}
 
@@ -332,7 +332,8 @@ class VerificationContext(object):
         for store in self.stores:
             for cert in store:
                 asn1cert = cert.to_asn1crypto
-                # we short-circuit the check here to ensure we do not check too much possibilities
+                # we short-circuit the check here to ensure we do not check too much
+                # possibilities
                 (trust_roots if store.trusted else intermediates).append(asn1cert)
                 all_certs[asn1cert] = cert
 
@@ -366,7 +367,7 @@ class VerificationContext(object):
             )
         except Exception as e:
             raise CertificateVerificationError(
-                "Chain verification from %s failed: %s" % (certificate, e)
+                f"Chain verification from {certificate} failed: {e}"
             )
 
         signify_chain = [all_certs[x] for x in chain]
@@ -404,7 +405,7 @@ class VerificationContext(object):
             try:
                 if store.verify_trust(chain, context=self):
                     return True
-            except CertificateNotTrustedVerificationError:
+            except CertificateNotTrustedVerificationError:  # noqa: PERF203
                 pass  # ignore this error, and catch it at function end
             except VerificationError as e:
                 exc = e

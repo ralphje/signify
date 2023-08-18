@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Type, Any, Sequence
+from typing import Any, Sequence
 
 from pyasn1.codec.ber import decoder as ber_decoder
 from pyasn1.type import univ
@@ -8,14 +8,14 @@ from pyasn1.type.base import Asn1Type
 from pyasn1_modules import rfc2315, rfc5652
 from typing_extensions import Self
 
-from signify import asn1, _print_type
-from signify._typing import OidTuple, HashFunction
+from signify import _print_type, asn1
+from signify._typing import HashFunction, OidTuple
 from signify.asn1 import guarded_ber_decode
+from signify.asn1.hashing import _get_digest_algorithm
+from signify.exceptions import ParseError
+from signify.pkcs7 import signerinfo
 from signify.x509.certificates import Certificate
 from signify.x509.context import CertificateStore
-from signify.exceptions import ParseError
-from signify.asn1.hashing import _get_digest_algorithm
-from signify.pkcs7 import signerinfo
 
 
 class SignedData:
@@ -66,13 +66,13 @@ class SignedData:
 
     data: rfc2315.SignedData | rfc5652.SignedData
     digest_algorithm: HashFunction
-    content_type: Type[Asn1Type] | OidTuple
+    content_type: type[Asn1Type] | OidTuple
     content: univ.Sequence
     certificates: CertificateStore
     signer_infos: Sequence[signerinfo.SignerInfo]
 
-    _expected_content_type: Type[univ.Sequence] | None = None
-    _signerinfo_class: Type[signerinfo.SignerInfo] | str | None = None
+    _expected_content_type: type[univ.Sequence] | None = None
+    _signerinfo_class: type[signerinfo.SignerInfo] | str | None = None
 
     def __init__(self, data: rfc2315.SignedData | rfc5652.SignedData):
         """
@@ -124,9 +124,7 @@ class SignedData:
             )
             content = self.data["encapContentInfo"]["eContent"]
         else:
-            raise ParseError(
-                "Unknown SignedData data type {}".format(_print_type(self.data))
-            )
+            raise ParseError(f"Unknown SignedData data type {_print_type(self.data)}")
 
         if self.content_type is not self._expected_content_type:
             raise ParseError(

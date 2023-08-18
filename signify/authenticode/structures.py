@@ -30,41 +30,40 @@ import datetime
 import enum
 import logging
 import pathlib
-from typing import Callable, Any, Type, Iterable, Sequence
-
-from pyasn1.type.base import Asn1Type
-from typing_extensions import ParamSpec, Literal
+from typing import Any, Callable, Iterable, Sequence
 
 import mscerts
 from pyasn1.codec.ber import decoder as ber_decoder
-from pyasn1_modules import rfc3161, rfc2315, rfc5652
+from pyasn1.type.base import Asn1Type
+from pyasn1_modules import rfc2315, rfc3161, rfc5652
+from typing_extensions import Literal, ParamSpec
 
-from signify._typing import OidTuple, HashFunction
+from signify import asn1
+from signify._typing import HashFunction, OidTuple
+from signify.asn1 import guarded_ber_decode, pkcs7, spc
+from signify.asn1.hashing import _get_digest_algorithm
+from signify.asn1.helpers import accuracy_to_python, patch_rfc5652_signeddata
 from signify.authenticode import signed_pe
 from signify.authenticode.authroot import CertificateTrustList
-from signify.asn1 import guarded_ber_decode, pkcs7, spc
-from signify.asn1.helpers import accuracy_to_python, patch_rfc5652_signeddata
-from signify.x509 import (
-    CertificateName,
-    VerificationContext,
-    FileSystemCertificateStore,
-    CertificateStore,
-    Certificate,
-)
 from signify.exceptions import (
-    AuthenticodeParseError,
-    ParseError,
+    AuthenticodeCounterSignerError,
     AuthenticodeInconsistentDigestAlgorithmError,
     AuthenticodeInvalidDigestError,
-    AuthenticodeCounterSignerError,
-    SignedPEParseError,
     AuthenticodeNotSignedError,
+    AuthenticodeParseError,
     CertificateVerificationError,
+    ParseError,
+    SignedPEParseError,
     VerificationError,
 )
-from signify.pkcs7 import SignedData, SignerInfo, CounterSignerInfo
-from signify.asn1.hashing import _get_digest_algorithm
-from signify import asn1
+from signify.pkcs7 import CounterSignerInfo, SignedData, SignerInfo
+from signify.x509 import (
+    Certificate,
+    CertificateName,
+    CertificateStore,
+    FileSystemCertificateStore,
+    VerificationContext,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +95,7 @@ class AuthenticodeVerificationResult(enum.Enum):
     PARSE_ERROR = enum.auto()
     """The Authenticode signature could not be parsed."""
     VERIFY_ERROR = enum.auto()
-    """The Authenticode signature could not be verified. This is a more generic error 
+    """The Authenticode signature could not be verified. This is a more generic error
     than other possible statuses and is used as a catch-all.
     """
     UNKNOWN_ERROR = enum.auto()
@@ -192,7 +191,9 @@ class AuthenticodeSignerInfo(SignerInfo):
 
     parent: AuthenticodeSignedData
     # allow other countersigner as well
-    countersigner: AuthenticodeCounterSignerInfo | RFC3161SignedData | None  # type: ignore[assignment]
+    countersigner: (  # type: ignore[assignment]
+        AuthenticodeCounterSignerInfo | RFC3161SignedData | None
+    )
 
     _countersigner_class = AuthenticodeCounterSignerInfo
     _expected_content_type = asn1.spc.SpcIndirectDataContent
@@ -315,7 +316,7 @@ class SpcInfo:
 
     """
 
-    content_type: Type[Asn1Type] | OidTuple
+    content_type: type[Asn1Type] | OidTuple
     image_data: None
     digest_algorithm: HashFunction
     digest: bytes
@@ -406,7 +407,7 @@ class AuthenticodeSignedData(SignedData):
         verification_context: VerificationContext | None = None,
         cs_verification_context: VerificationContext | None = None,
         trusted_certificate_store: CertificateStore = TRUSTED_CERTIFICATE_STORE,
-        verification_context_kwargs: dict[str, Any] = {},
+        verification_context_kwargs: dict[str, Any] | None = None,
         countersignature_mode: Literal["strict", "permit", "ignore"] = "strict",
     ) -> None:
         """Verifies the SignedData structure:
@@ -462,6 +463,8 @@ class AuthenticodeSignedData(SignedData):
         :return: :const:`None`
         """
 
+        if verification_context_kwargs is None:
+            verification_context_kwargs = {}
         if verification_context is None:
             verification_context = VerificationContext(
                 trusted_certificate_store,
@@ -559,8 +562,7 @@ class AuthenticodeSignedData(SignedData):
                     pass
                 else:
                     raise AuthenticodeCounterSignerError(
-                        "An error occurred while validating the countersignature: {}"
-                        .format(e)
+                        f"An error occurred while validating the countersignature: {e}"
                     )
             else:
                 # If no errors occur, we should be fine setting the timestamp to the

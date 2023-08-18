@@ -5,21 +5,21 @@ import datetime
 import logging
 import re
 from functools import cached_property
-from typing import Any, Type, Iterator, Iterable, overload, cast
+from typing import Any, Iterable, Iterator, cast, overload
 
 import asn1crypto.pem
 import asn1crypto.x509
 from oscrypto import asymmetric
-from pyasn1.codec.der import encoder as der_encoder
-from pyasn1.codec.der import decoder as der_decoder
 from pyasn1.codec.ber import decoder as ber_decoder
+from pyasn1.codec.der import decoder as der_decoder
+from pyasn1.codec.der import encoder as der_encoder
 from pyasn1.type.base import Asn1Type
-from pyasn1_modules import rfc5652, rfc5280, rfc2315
+from pyasn1_modules import rfc2315, rfc5280, rfc5652
 
 from signify import asn1, x509
-from signify._typing import OidTuple, HashFunction
+from signify._typing import HashFunction, OidTuple
 from signify.asn1 import oids
-from signify.asn1.helpers import time_to_python, bitstring_to_bytes
+from signify.asn1.helpers import bitstring_to_bytes, time_to_python
 from signify.exceptions import CertificateVerificationError
 
 logger = logging.getLogger(__name__)
@@ -78,7 +78,7 @@ class Certificate:
     subject: CertificateName
     subject_public_algorithm: AlgorithmIdentifier
     subject_public_key: bytes
-    extensions: dict[Type[Asn1Type] | OidTuple, Asn1Type]
+    extensions: dict[type[Asn1Type] | OidTuple, Asn1Type]
 
     def __init__(
         self,
@@ -194,8 +194,9 @@ class Certificate:
                 ]
 
     def __str__(self) -> str:
-        return "{} (serial:{}, sha1:{})".format(
-            self.subject.dn, self.serial_number, self.sha1_fingerprint
+        return (
+            f"{self.subject.dn}"
+            f" (serial:{self.serial_number}, sha1:{self.sha1_fingerprint})"
         )
 
     def __hash__(self) -> int:
@@ -232,7 +233,7 @@ class Certificate:
     @classmethod
     def from_pems(cls, content: bytes) -> Iterator[Certificate]:
         """Reads a Certificate from a PEM formatted file."""
-        for type_name, headers, der_bytes in asn1crypto.pem.unarmor(
+        for _type_name, _headers, der_bytes in asn1crypto.pem.unarmor(
             content, multiple=True
         ):
             yield cls.from_der(der_bytes)
@@ -290,17 +291,14 @@ class Certificate:
             verify_func = asymmetric.ecdsa_verify
         else:
             raise CertificateVerificationError(
-                "Signature algorithm %s is unsupported for %s"
-                % (public_key.algorithm, self)
+                f"Signature algorithm {public_key.algorithm} is unsupported for {self}"
             )
 
         try:
             verify_func(public_key, signature, data, algorithm().name)
         except Exception as e:
             if not allow_legacy or public_key.algorithm != "rsa":
-                raise CertificateVerificationError(
-                    "Invalid signature for %s: %s" % (self, e)
-                )
+                raise CertificateVerificationError(f"Invalid signature for {self}: {e}")
         else:
             return
 
@@ -312,7 +310,7 @@ class Certificate:
             )
         except Exception as e:
             raise CertificateVerificationError(
-                "Invalid signature for %s (legacy attempted): %s" % (self, e)
+                f"Invalid signature for {self} (legacy attempted): {e}"
             )
 
     def potential_chains(
@@ -364,7 +362,7 @@ class CertificateName:
                 value = "\\" + value
             if value.endswith(" "):
                 value = value[:-1] + "\\ "
-            result.append("{type}={value}".format(type=type, value=value))
+            result.append(f"{type}={value}")
         return ", ".join(result)
 
     @property

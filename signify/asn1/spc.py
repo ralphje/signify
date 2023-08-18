@@ -18,17 +18,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Authenticode-specific ASN.1 data structures."""
+
 from __future__ import annotations
 
 from typing import cast
 
-"""Authenticode-specific ASN.1 data structures."""
-
-from pyasn1.type import char
-from pyasn1.type import namedtype
-from pyasn1.type import tag
-from pyasn1.type import univ
-from pyasn1_modules import rfc2459, rfc2315
+from pyasn1.type import char, namedtype, tag, univ
+from pyasn1_modules import rfc2315, rfc2459
 
 
 class SpcAttributeTypeAndOptionalValue(univ.Sequence):  # type: ignore[misc]

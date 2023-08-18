@@ -1,6 +1,5 @@
-from pyasn1.type import univ, namedtype, namedval, tag
-from pyasn1_modules import rfc5280, rfc2315
-
+from pyasn1.type import namedtype, namedval, tag, univ
+from pyasn1_modules import rfc2315, rfc5280
 
 # Based on http://download.microsoft.com/download/C/8/8/C8862966-5948-444D-87BD-07B976ADA28C/%5BMS-CAESO%5D.pdf
 
@@ -70,7 +69,8 @@ class SubjectNameMd5Hash(univ.OctetString):  # type: ignore[misc]
     pass
 
 
-class RootProgramCertPolicies(univ.OctetString):  # type: ignore[misc]  # TODO: not implemented
+class RootProgramCertPolicies(univ.OctetString):  # type: ignore[misc]
+    # TODO: not implemented
     pass
 
 

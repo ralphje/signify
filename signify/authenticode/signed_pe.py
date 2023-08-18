@@ -20,11 +20,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""This module effectively implements the relevant parts of the PECOFF_ documentation to find the relevant parts of the
-PE structure.
+"""This module effectively implements the relevant parts of the PECOFF_ documentation
+to find the relevant parts of the PE structure.
 
-It is also capable of listing all the certificates in the Certificate Table and find the certificate with type 0x2.
-The actual parsing of this certificate is perfomed by :mod:`signify.authenticode`.
+It is also capable of listing all the certificates in the Certificate Table and find
+the certificate with type 0x2. The actual parsing of this certificate is perfomed by
+:mod:`signify.authenticode`.
 
 .. _PECOFF: http://www.microsoft.com/whdc/system/platform/firmware/PECOFF.mspx
 """
@@ -36,25 +37,30 @@ import hashlib
 import logging
 import os
 import struct
-from typing import BinaryIO, Iterator, Iterable, Any
-from typing_extensions import TypedDict, Literal
+from typing import Any, BinaryIO, Iterable, Iterator
+
+from typing_extensions import Literal, TypedDict
 
 from signify import fingerprinter
 from signify.asn1.hashing import ACCEPTED_DIGEST_ALGORITHMS
 from signify.authenticode import structures
-from signify.exceptions import SignedPEParseError, AuthenticodeNotSignedError
+from signify.exceptions import AuthenticodeNotSignedError, SignedPEParseError
 
 logger = logging.getLogger(__name__)
 
 RelRange = collections.namedtuple("RelRange", "start length")
-ParsedCertTable = TypedDict(
-    "ParsedCertTable", {"revision": int, "type": int, "certificate": bytes}
-)
+
+
+class ParsedCertTable(TypedDict):
+    revision: int
+    type: int
+    certificate: bytes
 
 
 class SignedPEFile:
     def __init__(self, file_obj: BinaryIO):
-        """A PE file that is to be parsed to find the relevant sections for Authenticode parsing.
+        """A PE file that is to be parsed to find the relevant sections for
+        Authenticode parsing.
 
         :param file_obj: A PE file opened in binary file
         """
@@ -65,8 +71,8 @@ class SignedPEFile:
         self._filelength = self.file.tell()
 
     def get_authenticode_omit_sections(self) -> dict[str, RelRange] | None:
-        """Returns all ranges of the raw file that are relevant for exclusion for the calculation of the hash
-        function used in Authenticode.
+        """Returns all ranges of the raw file that are relevant for exclusion for the
+        calculation of the hash function used in Authenticode.
 
         The relevant sections are (as per
         `<http://download.microsoft.com/download/9/c/5/9c5b2167-8017-4bae-9fde-d599bac8184a/Authenticode_PE.docx>`_,
@@ -92,7 +98,8 @@ class SignedPEFile:
     def _parse_pe_header_locations(self) -> dict[str, RelRange]:
         """Parses a PE file to find the sections to exclude from the AuthentiCode hash.
 
-        See http://www.microsoft.com/whdc/system/platform/firmware/PECOFF.mspx for information about the structure.
+        See http://www.microsoft.com/whdc/system/platform/firmware/PECOFF.mspx for
+        information about the structure.
         """
 
         location = {}
@@ -178,7 +185,8 @@ class SignedPEFile:
             )
             return location
 
-        # According to the spec, the certificate table entry of the data directory should be omitted
+        # According to the spec, the certificate table entry of the data directory
+        # should be omitted
         location["datadir_certtable"] = RelRange(cert_base, 8)
 
         # Read the certificate table entry of the Data Directory
@@ -226,7 +234,8 @@ class SignedPEFile:
             revision = struct.unpack("<H", self.file.read(2))[0]
             certificate_type = struct.unpack("<H", self.file.read(2))[0]
 
-            # check if we are not going to perform a negative read (and 0 bytes is weird as well)
+            # check if we are not going to perform a negative read (and 0 bytes is
+            # weird as well)
             if length <= 8:
                 raise SignedPEParseError("Invalid length in certificate table header")
             certificate = self.file.read(length - 8)
@@ -392,7 +401,7 @@ class SignedPEFile:
                     expected_hash=expected_hashes[signed_data.digest_algorithm().name],
                     **kwargs,
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: PERF203
                 # best and any are interpreted as any; first doesn't matter either way,
                 # but raising where it is raised is a little bit clearer
                 if multi_verify_mode in ("all", "first"):

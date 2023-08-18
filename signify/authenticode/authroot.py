@@ -4,7 +4,7 @@ import datetime
 import hashlib
 import pathlib
 import struct
-from typing import Any, Iterable, Iterator, Type
+from typing import Any, Iterable, Iterator
 
 import mscerts
 from pyasn1.codec.ber import decoder as ber_decoder
@@ -16,13 +16,13 @@ from typing_extensions import Self
 from signify import asn1
 from signify._typing import HashFunction, OidTuple
 from signify.asn1 import guarded_ber_decode
+from signify.asn1.hashing import _get_digest_algorithm
 from signify.asn1.helpers import time_to_python
 from signify.exceptions import (
     CertificateTrustListParseError,
     CTLCertificateVerificationError,
 )
 from signify.pkcs7.signeddata import SignedData
-from signify.asn1.hashing import _get_digest_algorithm
 from signify.x509 import certificates, context
 
 AUTHROOTSTL_PATH = pathlib.Path(mscerts.where(stl=True))
@@ -194,7 +194,7 @@ class CertificateTrustList(SignedData):
     def from_stl_file(cls, path: pathlib.Path = AUTHROOTSTL_PATH) -> Self:
         """Loads a :class:`CertificateTrustList` from a specified path."""
 
-        with open(str(path), "rb") as f:
+        with path.open("rb") as f:
             content, rest = ber_decoder.decode(f.read(), asn1Spec=rfc2315.ContentInfo())
         #
         # from pyasn1 import debug
@@ -387,11 +387,9 @@ class CertificateTrustSubject:
             requested_extended_key_usages - set(self.extended_key_usages)
         ):
             raise CTLCertificateVerificationError(
-                "The root %s lists its extended key usages, but %s are not present"
-                % (
-                    self.friendly_name,
-                    requested_extended_key_usages - set(self.extended_key_usages),
-                )
+                f"The root {self.friendly_name} lists its extended key usages, but"
+                f" {requested_extended_key_usages - set(self.extended_key_usages)} are"
+                " not present"
             )
 
         # The notBefore time does concern the validity of the certificate that is being
@@ -404,35 +402,27 @@ class CertificateTrustSubject:
                 # then the validity concerns the entire certificate.
                 if self.not_before_extended_key_usages is None:
                     raise CTLCertificateVerificationError(
-                        "The root %s is disallowed for certificate issued after %s"
-                        " (certificate is %s)"
-                        % (
-                            self.friendly_name,
-                            self.not_before_filetime,
-                            to_verify_timestamp,
-                        )
+                        f"The root {self.friendly_name} is disallowed for certificate"
+                        f" issued after {self.not_before_filetime} (certificate is"
+                        f" {to_verify_timestamp})"
                     )
                 elif any(
                     eku in self.not_before_extended_key_usages
                     for eku in requested_extended_key_usages
                 ):
                     raise CTLCertificateVerificationError(
-                        "The root %s disallows requested EKU's %s to certificates"
-                        " issued after %s (certificate is %s)"
-                        % (
-                            self.friendly_name,
-                            requested_extended_key_usages,
-                            self.not_before_filetime,
-                            to_verify_timestamp,
-                        )
+                        f"The root {self.friendly_name} disallows requested EKU's"
+                        f" {requested_extended_key_usages} to certificates issued after"
+                        f" {self.not_before_filetime} (certificate is"
+                        f" {to_verify_timestamp})"
                     )
         elif self.not_before_extended_key_usages is not None and any(
             eku in self.not_before_extended_key_usages
             for eku in requested_extended_key_usages
         ):
             raise CTLCertificateVerificationError(
-                "The root %s disallows requested EKU's %s"
-                % (self.friendly_name, requested_extended_key_usages)
+                f"The root {self.friendly_name} disallows requested EKU's"
+                f" {requested_extended_key_usages}"
             )
 
         # The DisallowedFiletime time does concern the timestamp of the signature
@@ -444,31 +434,26 @@ class CertificateTrustSubject:
                 # certificate.
                 if self.disallowed_extended_key_usages is None:
                     raise CTLCertificateVerificationError(
-                        "The root %s is disallowed since %s (requested %s)"
-                        % (self.friendly_name, self.disallowed_filetime, timestamp)
+                        f"The root {self.friendly_name} is disallowed since "
+                        f"{self.disallowed_filetime} (requested {timestamp})"
                     )
                 elif any(
                     eku in self.disallowed_extended_key_usages
                     for eku in requested_extended_key_usages
                 ):
                     raise CTLCertificateVerificationError(
-                        "The root %s is disallowed for EKU's %s since %s (requested %s"
-                        " at %s)"
-                        % (
-                            self.friendly_name,
-                            self.disallowed_extended_key_usages,
-                            self.disallowed_filetime,
-                            requested_extended_key_usages,
-                            timestamp,
-                        )
+                        f"The root {self.friendly_name} is disallowed for EKU's"
+                        f" {self.disallowed_extended_key_usages} since"
+                        f" {self.disallowed_filetime} (requested"
+                        f" {requested_extended_key_usages} at {timestamp})"
                     )
         elif self.disallowed_extended_key_usages is not None and any(
             eku in self.disallowed_extended_key_usages
             for eku in requested_extended_key_usages
         ):
             raise CTLCertificateVerificationError(
-                "The root %s disallows requested EKU's %s"
-                % (self.friendly_name, requested_extended_key_usages)
+                f"The root {self.friendly_name} disallows requested EKU's"
+                f" {requested_extended_key_usages}"
             )
 
         return True
@@ -476,7 +461,7 @@ class CertificateTrustSubject:
     @classmethod
     def _parse_attributes(
         cls, data: rfc2315.Attributes
-    ) -> dict[OidTuple | Type[Asn1Type], list[Any]]:
+    ) -> dict[OidTuple | type[Asn1Type], list[Any]]:
         """Given a set of Attributes, parses them and returns them as a dict
 
         :param data: The attributes to process

@@ -22,12 +22,13 @@
 
 from __future__ import annotations
 
+import binascii
 import collections
 import hashlib
-import os
-import sys
 import logging
-import binascii
+import os
+import pathlib
+import sys
 from typing import BinaryIO
 
 from signify._typing import HashFunction
@@ -163,8 +164,8 @@ class Fingerprinter:
 
         :returns: Next range of interest in a Range namedtuple.
         """
-        starts = set([x.current_range.start for x in self._fingers if x.current_range])
-        ends = set([x.current_range.end for x in self._fingers if x.current_range])
+        starts = {x.current_range.start for x in self._fingers if x.current_range}
+        ends = {x.current_range.end for x in self._fingers if x.current_range}
 
         if not starts:
             return None
@@ -265,7 +266,7 @@ class Fingerprinter:
         if len(hashes) != 1:
             raise RuntimeError("Can't return a single hash, use hashes() instead")
 
-        return list(hashes.values())[0]
+        return next(iter(hashes.values()))
 
 
 class AuthenticodeFingerprinter(Fingerprinter):
@@ -297,8 +298,8 @@ class AuthenticodeFingerprinter(Fingerprinter):
 
 def main(*filenames: str) -> None:
     for filename in filenames:
-        print("{}:".format(filename))
-        with open(filename, "rb") as file_obj:
+        print(f"{filename}:")
+        with pathlib.Path(filename).open("rb") as file_obj:
             fingerprinter = AuthenticodeFingerprinter(file_obj)
             fingerprinter.add_hashers(
                 hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha512
@@ -309,16 +310,12 @@ def main(*filenames: str) -> None:
             results = fingerprinter.hashes()
 
             for description, result in sorted(results.items()):
-                print("  {}:".format(description or "generic"))
+                print(f"  {description or 'generic'}:")
 
                 for k, v in sorted(result.items()):
                     if k == "_":
                         continue
-                    print(
-                        "    {k:<10}: {v}".format(
-                            k=k, v=binascii.hexlify(v).decode("ascii")
-                        )
-                    )
+                    print(f"    {k:<10}: {binascii.hexlify(v).decode('ascii')}")
 
 
 if __name__ == "__main__":

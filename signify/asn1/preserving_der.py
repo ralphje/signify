@@ -11,29 +11,35 @@ class SetOfEncoder(cer_encoder.SetOfEncoder):  # type: ignore[misc]
     has been removed.
     """
 
-    def encodeValue(self, value, asn1Spec, encodeFun, **options):  # type: ignore[no-untyped-def]
+    def encodeValue(  # type: ignore[no-untyped-def]  # noqa: N802
+        self,
+        value,
+        asn1Spec,  # noqa: N803
+        encodeFun,  # noqa: N803
+        **options,
+    ):
         chunks = self._encodeComponents(value, asn1Spec, encodeFun, **options)
 
         if len(chunks) > 1:
             zero = str2octs("\x00")
-            maxLen = max(map(len, chunks))
-            paddedChunks = [(x.ljust(maxLen, zero), x) for x in chunks]
+            max_len = max(map(len, chunks))
+            padded_chunks = [(x.ljust(max_len, zero), x) for x in chunks]
 
-            chunks = [x[1] for x in paddedChunks]
+            chunks = [x[1] for x in padded_chunks]
 
         return null.join(chunks), True, True
 
 
-tagMap = encoder.tagMap.copy()
+tagMap = encoder.tagMap.copy()  # noqa: N816
 tagMap.update({univ.SetOf.tagSet: SetOfEncoder()})
 
-typeMap = encoder.typeMap.copy()
+typeMap = encoder.typeMap.copy()  # noqa: N816
 typeMap.update({univ.SetOf.typeId: SetOfEncoder()})
 
 
 class Encoder(encoder.Encoder):  # type: ignore[misc]
-    fixedDefLengthMode = True
-    fixedChunkSize = 0
+    fixedDefLengthMode = True  # noqa: N815
+    fixedChunkSize = 0  # noqa: N815
 
 
 encode = Encoder(tagMap, typeMap)

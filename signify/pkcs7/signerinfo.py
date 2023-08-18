@@ -1,27 +1,27 @@
 from __future__ import annotations
 
 import datetime
-from typing import Iterable, Type, Any, cast
-from typing_extensions import Literal
+from typing import Any, Iterable, cast
 
 from pyasn1.type import univ
 from pyasn1.type.base import Asn1Type
-from pyasn1_modules import rfc5652, rfc2315
+from pyasn1_modules import rfc2315, rfc5652
+from typing_extensions import Literal
 
-from signify._typing import OidTuple, HashFunction
-from signify.asn1.hashing import _get_encryption_algorithm, _get_digest_algorithm
-from signify.pkcs7 import signeddata
+from signify import _print_type, asn1
+from signify._typing import HashFunction, OidTuple
 from signify.asn1 import guarded_ber_decode, pkcs7
 from signify.asn1 import preserving_der as preserving_der_encoder
+from signify.asn1.hashing import _get_digest_algorithm, _get_encryption_algorithm
+from signify.asn1.helpers import time_to_python
 from signify.exceptions import (
-    VerificationError,
     SignerInfoParseError,
     SignerInfoVerificationError,
+    VerificationError,
 )
-from signify import asn1, _print_type
-from signify.asn1.helpers import time_to_python
+from signify.pkcs7 import signeddata
 from signify.x509 import VerificationContext
-from signify.x509.certificates import CertificateName, Certificate
+from signify.x509.certificates import Certificate, CertificateName
 
 
 class SignerInfo:
@@ -114,22 +114,22 @@ class SignerInfo:
 
     issuer: CertificateName
     serial_number: int
-    authenticated_attributes: dict[OidTuple | Type[Asn1Type], list[Any]]
-    unauthenticated_attributes: dict[OidTuple | Type[Asn1Type], list[Any]]
+    authenticated_attributes: dict[OidTuple | type[Asn1Type], list[Any]]
+    unauthenticated_attributes: dict[OidTuple | type[Asn1Type], list[Any]]
     digest_encryption_algorithm: str
     encrypted_digest: bytes
     digest_algorithm: HashFunction
     message_digest: bytes | None
-    content_type: OidTuple | Type[Asn1Type] | None
+    content_type: OidTuple | type[Asn1Type] | None
     signing_time: datetime.datetime | None
     countersigner: CounterSignerInfo | None
 
-    _countersigner_class: Type[CounterSignerInfo] | str | None = "CounterSignerInfo"
+    _countersigner_class: type[CounterSignerInfo] | str | None = "CounterSignerInfo"
     _required_authenticated_attributes: Iterable[univ.ObjectIdentifier] = (
         rfc2315.ContentType,
         rfc2315.Digest,
     )
-    _expected_content_type: Type[univ.Sequence] | None = None
+    _expected_content_type: type[univ.Sequence] | None = None
 
     def __init__(
         self,
@@ -243,11 +243,9 @@ class SignerInfo:
                 and self.content_type is not self._expected_content_type
             ):
                 raise SignerInfoParseError(
-                    "Unexpected content type for SignerInfo, expected %s, got %s"
-                    % (
-                        _print_type(self._expected_content_type),
-                        _print_type(self.content_type),
-                    )
+                    "Unexpected content type for SignerInfo, expected"
+                    f" {_print_type(self._expected_content_type)}, got"
+                    f" {_print_type(self.content_type)}"
                 )
 
         # - The signingTime (used by countersigner)
@@ -295,7 +293,7 @@ class SignerInfo:
         | rfc5652.SignedAttributes
         | rfc5652.UnsignedAttributes,
         required: Iterable[univ.ObjectIdentifier] = (),
-    ) -> dict[OidTuple | Type[Asn1Type], list[Any]]:
+    ) -> dict[OidTuple | type[Asn1Type], list[Any]]:
         """Given a set of Attributes, parses them and returns them as a dict
 
         :param data: The authenticatedAttributes or unauthenticatedAttributes to process
@@ -307,7 +305,7 @@ class SignerInfo:
         elif isinstance(data, (rfc5652.SignedAttributes, rfc5652.UnsignedAttributes)):
             type_key, value_key = "attrType", "attrValues"
 
-        result: dict[tuple[int, ...] | Type[Asn1Type], list[Any]] = {}
+        result: dict[tuple[int, ...] | type[Asn1Type], list[Any]] = {}
         for attr in data:
             typ = asn1.oids.get(attr[type_key], asn1.oids.OID_TO_CLASS)
             values = []
@@ -317,10 +315,11 @@ class SignerInfo:
                 values.append(value)
             result[typ] = values
 
-        if not all((x in result for x in required)):
+        if not all(x in result for x in required):
             raise SignerInfoParseError(
-                "Not all required attributes found. Required: %s; Found: %s"
-                % ([_print_type(x) for x in required], [_print_type(x) for x in result])
+                "Not all required attributes found."
+                f" Required: {[_print_type(x) for x in required]};"
+                f" Found: {[_print_type(x) for x in result]}"
             )
 
         return result
@@ -340,8 +339,7 @@ class SignerInfo:
         """
         # sorting may not be necessary, as it is not in the spec
         new_attrs = type(data)()
-        for attribute in data:
-            new_attrs.append(attribute)
+        new_attrs.extend(data)
         return cast(bytes, preserving_der_encoder.encode(new_attrs))
 
     def _verify_issuer(self, issuer: Certificate, context: VerificationContext) -> None:
@@ -363,8 +361,8 @@ class SignerInfo:
             )
         except VerificationError as e:
             raise SignerInfoVerificationError(
-                "Could not verify {cert} as the signer of the authenticated attributes"
-                " in {cls}: {exc}".format(cert=issuer, cls=type(self).__name__, exc=e)
+                f"Could not verify {issuer} as the signer of the authenticated"
+                f" attributes in {type(self).__name__}: {e}"
             )
 
     def _build_chain(
@@ -399,12 +397,13 @@ class SignerInfo:
             issuer=self.issuer, serial_number=self.serial_number
         ):
             try:
-                # _verify_issuer may fail when it is not a valid issuer for this SignedInfo
+                # _verify_issuer may fail when it is not a valid issuer for this
+                # SignedInfo
                 self._verify_issuer(issuer, context)
 
                 # _build_chain may fail when anywhere up its chain an error occurs
                 yield context.verify(issuer)
-            except VerificationError as e:
+            except VerificationError as e:  # noqa: PERF203
                 if first_error is None:
                     first_error = e
             else:
@@ -420,16 +419,16 @@ class SignerInfo:
         :param VerificationContext context: The context for verifying the SignerInfo.
         :return: A list of valid certificate chains for this SignerInfo.
         :rtype: Iterable[Iterable[Certificate]]
-        :raises AuthenticodeVerificationError: When the SignerInfo could not be verified.
+        :raises AuthenticodeVerificationError: When the SignerInfo could not be
+            verified.
         """
 
         chains = list(self._build_chain(context))
 
         if not chains:
             raise SignerInfoVerificationError(
-                "No valid certificate chain found to a trust anchor from {}".format(
-                    type(self).__name__
-                )
+                "No valid certificate chain found to a trust anchor from"
+                f" {type(self).__name__}"
             )
 
         return chains
