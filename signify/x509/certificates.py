@@ -5,27 +5,29 @@ import datetime
 import logging
 import re
 from functools import cached_property
-from typing import Any, Type, Iterator, Iterable, overload, cast
+from typing import Any, Iterable, Iterator, cast, overload
 
 import asn1crypto.pem
 import asn1crypto.x509
 from oscrypto import asymmetric
-from pyasn1.codec.der import encoder as der_encoder
-from pyasn1.codec.der import decoder as der_decoder
 from pyasn1.codec.ber import decoder as ber_decoder
+from pyasn1.codec.der import decoder as der_decoder
+from pyasn1.codec.der import encoder as der_encoder
 from pyasn1.type.base import Asn1Type
-from pyasn1_modules import rfc5652, rfc5280, rfc2315
+from pyasn1_modules import rfc2315, rfc5280, rfc5652
 
 from signify import asn1, x509
-from signify._typing import OidTuple, HashFunction
+from signify._typing import HashFunction, OidTuple
 from signify.asn1 import oids
-from signify.asn1.helpers import time_to_python, bitstring_to_bytes
+from signify.asn1.helpers import bitstring_to_bytes, time_to_python
 from signify.exceptions import CertificateVerificationError
 
 logger = logging.getLogger(__name__)
 
 
-AlgorithmIdentifier = collections.namedtuple("AlgorithmIdentifier", "algorithm parameters")
+AlgorithmIdentifier = collections.namedtuple(
+    "AlgorithmIdentifier", "algorithm parameters"
+)
 
 
 class Certificate:
@@ -76,7 +78,7 @@ class Certificate:
     subject: CertificateName
     subject_public_algorithm: AlgorithmIdentifier
     subject_public_key: bytes
-    extensions: dict[Type[Asn1Type] | OidTuple, Asn1Type]
+    extensions: dict[type[Asn1Type] | OidTuple, Asn1Type]
 
     def __init__(
         self,
@@ -90,7 +92,8 @@ class Certificate:
     ):
         """
 
-        :type data: asn1.pkcs7.ExtendedCertificateOrCertificate or asn1.x509.Certificate or asn1.x509.TBSCertificate
+        :type data: asn1.pkcs7.ExtendedCertificateOrCertificate or
+            asn1.x509.Certificate or asn1.x509.TBSCertificate
         :param data: The ASN.1 structure
         """
 
@@ -106,30 +109,43 @@ class Certificate:
     def _parse(self) -> None:
         if isinstance(self.data, rfc5652.CertificateChoices):
             if "extendedCertificate" in self.data:
-                raise NotImplementedError("Support for extendedCertificate is not implemented")
+                raise NotImplementedError(
+                    "Support for extendedCertificate is not implemented"
+                )
             if "certificate" not in self.data:
                 raise NotImplementedError(
-                    "This is not a certificate, probably an attribute certificate (containing no public key)"
+                    "This is not a certificate, probably an attribute certificate"
+                    " (containing no public key)"
                 )
 
             certificate = self.data["certificate"]
             self.signature_algorithm = certificate["signatureAlgorithm"]
             self.signature_value = (
-                certificate["signatureValue"] if "signatureValue" in certificate else certificate["signature"]
+                certificate["signatureValue"]
+                if "signatureValue" in certificate
+                else certificate["signature"]
             )
             tbs_certificate = certificate["tbsCertificate"]
 
         elif isinstance(
-            self.data, (rfc2315.ExtendedCertificateOrCertificate, rfc5652.ExtendedCertificateOrCertificate)
+            self.data,
+            (
+                rfc2315.ExtendedCertificateOrCertificate,
+                rfc5652.ExtendedCertificateOrCertificate,
+            ),
         ):
             if "extendedCertificate" in self.data:
                 # TODO: Not sure if needed.
-                raise NotImplementedError("Support for extendedCertificate is not implemented")
+                raise NotImplementedError(
+                    "Support for extendedCertificate is not implemented"
+                )
 
             certificate = self.data["certificate"]
             self.signature_algorithm = certificate["signatureAlgorithm"]
             self.signature_value = (
-                certificate["signatureValue"] if "signatureValue" in certificate else certificate["signature"]
+                certificate["signatureValue"]
+                if "signatureValue" in certificate
+                else certificate["signature"]
             )
             tbs_certificate = certificate["tbsCertificate"]
 
@@ -137,7 +153,9 @@ class Certificate:
             certificate = self.data
             self.signature_algorithm = certificate["signatureAlgorithm"]
             self.signature_value = (
-                certificate["signatureValue"] if "signatureValue" in certificate else certificate["signature"]
+                certificate["signatureValue"]
+                if "signatureValue" in certificate
+                else certificate["signature"]
             )
             tbs_certificate = certificate["tbsCertificate"]
 
@@ -148,8 +166,8 @@ class Certificate:
         self.serial_number = int(tbs_certificate["serialNumber"])
         self.issuer = CertificateName(tbs_certificate["issuer"][0])
 
-        # the following two ifs are here because time_to_python may return None and we want to prevent Nones
-        # in these keys
+        # the following two ifs are here because time_to_python may return None and we
+        # want to prevent Nones in these keys
         valid_from = time_to_python(tbs_certificate["validity"]["notBefore"])
         if valid_from:
             self.valid_from = valid_from
@@ -160,21 +178,36 @@ class Certificate:
 
         self.subject_public_algorithm = AlgorithmIdentifier(
             algorithm=tbs_certificate["subjectPublicKeyInfo"]["algorithm"]["algorithm"],
-            parameters=bytes(tbs_certificate["subjectPublicKeyInfo"]["algorithm"]["parameters"]),
+            parameters=bytes(
+                tbs_certificate["subjectPublicKeyInfo"]["algorithm"]["parameters"]
+            ),
         )
-        self.subject_public_key = bitstring_to_bytes(tbs_certificate["subjectPublicKeyInfo"]["subjectPublicKey"])
+        self.subject_public_key = bitstring_to_bytes(
+            tbs_certificate["subjectPublicKeyInfo"]["subjectPublicKey"]
+        )
 
         self.extensions = {}
         if "extensions" in tbs_certificate and tbs_certificate["extensions"].isValue:
             for extension in tbs_certificate["extensions"]:
-                self.extensions[asn1.oids.get(extension["extnID"])] = extension["extnValue"]
+                self.extensions[asn1.oids.get(extension["extnID"])] = extension[
+                    "extnValue"
+                ]
 
     def __str__(self) -> str:
-        return "{} (serial:{}, sha1:{})".format(self.subject.dn, self.serial_number, self.sha1_fingerprint)
+        return (
+            f"{self.subject.dn}"
+            f" (serial:{self.serial_number}, sha1:{self.sha1_fingerprint})"
+        )
 
     def __hash__(self) -> int:
         return hash(
-            (self.issuer, self.serial_number, self.subject, self.subject_public_algorithm, self.subject_public_key)
+            (
+                self.issuer,
+                self.serial_number,
+                self.subject,
+                self.subject_public_algorithm,
+                self.subject_public_key,
+            )
         )
 
     def __eq__(self, other: object) -> bool:
@@ -200,7 +233,9 @@ class Certificate:
     @classmethod
     def from_pems(cls, content: bytes) -> Iterator[Certificate]:
         """Reads a Certificate from a PEM formatted file."""
-        for type_name, headers, der_bytes in asn1crypto.pem.unarmor(content, multiple=True):
+        for _type_name, _headers, der_bytes in asn1crypto.pem.unarmor(
+            content, multiple=True
+        ):
             yield cls.from_der(der_bytes)
 
     @cached_property
@@ -211,7 +246,9 @@ class Certificate:
     @cached_property
     def to_asn1crypto(self) -> asn1crypto.x509.Certificate:
         """Retrieves the :mod:`asn1crypto` x509 Certificate object."""
-        return cast(asn1crypto.x509.Certificate, asn1crypto.x509.Certificate.load(self.to_der))
+        return cast(
+            asn1crypto.x509.Certificate, asn1crypto.x509.Certificate.load(self.to_der)
+        )
 
     @cached_property
     def sha256_fingerprint(self) -> str:
@@ -222,17 +259,23 @@ class Certificate:
         return cast(str, self.to_asn1crypto.sha1_fingerprint).replace(" ", "").lower()
 
     def verify_signature(
-        self, signature: bytes, data: bytes, algorithm: HashFunction, allow_legacy: bool = False
+        self,
+        signature: bytes,
+        data: bytes,
+        algorithm: HashFunction,
+        allow_legacy: bool = False,
     ) -> None:
-        """Verifies whether the signature bytes match the data using the hashing algorithm. Supports RSA and EC keys.
-        Note that not all hashing algorithms are supported.
+        """Verifies whether the signature bytes match the data using the hashing
+        algorithm. Supports RSA and EC keys. Note that not all hashing algorithms
+        are supported.
 
         :param bytes signature: The signature to verify
         :param bytes data: The data that must be verified
         :type algorithm: a hashlib function
         :param algorithm: The hashing algorithm to use
-        :param bool allow_legacy: If True, allows a legacy signature verification. This method is intended for the case
-            where the encryptedDigest does not contain an ASN.1 structure, but a raw hash value instead. It is attempted
+        :param bool allow_legacy: If True, allows a legacy signature verification.
+            This method is intended for the case where the encryptedDigest does not
+            contain an ASN.1 structure, but a raw hash value instead. It is attempted
             automatically when verification of the RSA signature fails.
 
             This case is described in more detail on
@@ -248,25 +291,31 @@ class Certificate:
             verify_func = asymmetric.ecdsa_verify
         else:
             raise CertificateVerificationError(
-                "Signature algorithm %s is unsupported for %s" % (public_key.algorithm, self)
+                f"Signature algorithm {public_key.algorithm} is unsupported for {self}"
             )
 
         try:
             verify_func(public_key, signature, data, algorithm().name)
         except Exception as e:
             if not allow_legacy or public_key.algorithm != "rsa":
-                raise CertificateVerificationError("Invalid signature for %s: %s" % (self, e))
+                raise CertificateVerificationError(f"Invalid signature for {self}: {e}")
         else:
             return
 
         try:
             hasher = algorithm()
             hasher.update(data)
-            asymmetric.rsa_pkcs1v15_verify(public_key, signature, hasher.digest(), "raw")
+            asymmetric.rsa_pkcs1v15_verify(
+                public_key, signature, hasher.digest(), "raw"
+            )
         except Exception as e:
-            raise CertificateVerificationError("Invalid signature for %s (legacy attempted): %s" % (self, e))
+            raise CertificateVerificationError(
+                f"Invalid signature for {self} (legacy attempted): {e}"
+            )
 
-    def potential_chains(self, context: x509.VerificationContext) -> Iterator[list[Certificate]]:
+    def potential_chains(
+        self, context: x509.VerificationContext
+    ) -> Iterator[list[Certificate]]:
         """Alias for :meth:`VerificationContext.potential_chains`"""
 
         return context.potential_chains(self)
@@ -302,7 +351,9 @@ class CertificateName:
             #   associated with LDAP [4], then the type name string from that table
             #   is used, otherwise it is encoded as the dotted-decimal encoding of
             #   the AttributeType's OBJECT IDENTIFIER.
-            type = oids.OID_TO_RDN.get(type_value["type"], ".".join(map(str, type_value["type"])))
+            type = oids.OID_TO_RDN.get(
+                type_value["type"], ".".join(map(str, type_value["type"]))
+            )
             value = str(ber_decoder.decode(type_value["value"])[0])
 
             # Escaping according to RFC2253
@@ -311,7 +362,7 @@ class CertificateName:
                 value = "\\" + value
             if value.endswith(" "):
                 value = value[:-1] + "\\ "
-            result.append("{type}={value}".format(type=type, value=value))
+            result.append(f"{type}={value}")
         return ", ".join(result)
 
     @property
@@ -327,7 +378,9 @@ class CertificateName:
     def get_components(self, component_type: str | OidTuple) -> Iterator[str]:
         ...
 
-    def get_components(self, component_type: str | OidTuple | None = None) -> Iterator[tuple[str, str]] | Iterator[str]:
+    def get_components(
+        self, component_type: str | OidTuple | None = None
+    ) -> Iterator[tuple[str, str]] | Iterator[str]:
         """Get individual components of this CertificateName
 
         :param component_type: if provided, yields only values of this type,
@@ -336,11 +389,17 @@ class CertificateName:
 
         for n in self.data[::-1]:
             type_value = n[0]  # get the AttributeTypeAndValue object
-            type = oids.OID_TO_RDN.get(type_value["type"], ".".join(map(str, type_value["type"])))
+            type = oids.OID_TO_RDN.get(
+                type_value["type"], ".".join(map(str, type_value["type"]))
+            )
             value = str(ber_decoder.decode(type_value["value"])[0])
 
             if component_type is not None:
-                if component_type in (type_value["type"], ".".join(map(str, type_value["type"])), type):
+                if component_type in (
+                    type_value["type"],
+                    ".".join(map(str, type_value["type"])),
+                    type,
+                ):
                     yield value
             else:
                 yield type, value

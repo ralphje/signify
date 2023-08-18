@@ -23,13 +23,14 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Type, TypeVar, overload
+from typing import TypeVar, overload
 
 from pyasn1.type.base import Asn1Type
-from pyasn1_modules import rfc3161, rfc5652, rfc2315
+from pyasn1_modules import rfc2315, rfc3161, rfc5652
 
-from . import pkcs7, spc, ctl
-from .._typing import HashFunction, OidTuple
+from signify._typing import HashFunction, OidTuple
+
+from . import ctl, pkcs7, spc
 
 OID_TO_HASH: dict[OidTuple, HashFunction] = {
     (1, 2, 840, 113549, 2, 5): hashlib.md5,
@@ -39,7 +40,7 @@ OID_TO_HASH: dict[OidTuple, HashFunction] = {
     (2, 16, 840, 1, 101, 3, 4, 2, 3): hashlib.sha512,
 }
 
-OID_TO_CLASS: dict[OidTuple, Type[Asn1Type]] = {
+OID_TO_CLASS: dict[OidTuple, type[Asn1Type]] = {
     (1, 2, 840, 113549, 1, 7, 1): pkcs7.Data,
     (1, 2, 840, 113549, 1, 7, 2): rfc2315.SignedData,
     (1, 2, 840, 113549, 1, 9, 3): rfc2315.ContentType,
@@ -102,7 +103,7 @@ _V = TypeVar("_V")
 
 
 @overload
-def get(key: OidTuple, oids: None = None) -> Type[Asn1Type] | OidTuple:
+def get(key: OidTuple, oids: None = None) -> type[Asn1Type] | OidTuple:
     ...
 
 

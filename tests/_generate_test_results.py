@@ -33,8 +33,12 @@ def main():
         print("Updating {}...".format(filename))
         with open(str(filename), "rb") as file_obj:
             fingerprinter = AuthenticodeFingerprinter(file_obj)
-            fingerprinter.add_hashers(hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha512)
-            fingerprinter.add_authenticode_hashers(hashlib.md5, hashlib.sha1, hashlib.sha256)
+            fingerprinter.add_hashers(
+                hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha512
+            )
+            fingerprinter.add_authenticode_hashers(
+                hashlib.md5, hashlib.sha1, hashlib.sha256
+            )
             results = fingerprinter.hashes()
 
         # convert to hex
@@ -45,5 +49,5 @@ def main():
             json.dump(results, res_obj)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

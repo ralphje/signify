@@ -25,7 +25,12 @@ import json
 import unittest
 import pathlib
 
-from signify.fingerprinter import AuthenticodeFingerprinter, Fingerprinter, Finger, Range
+from signify.fingerprinter import (
+    AuthenticodeFingerprinter,
+    Fingerprinter,
+    Finger,
+    Range,
+)
 
 root_dir = pathlib.Path(__file__).parent
 
@@ -40,8 +45,12 @@ class FingerPrinterTestCase(unittest.TestCase):
             with self.subTest(filename):
                 with open(str(filename), "rb") as file_obj:
                     fingerprinter = AuthenticodeFingerprinter(file_obj)
-                    fingerprinter.add_hashers(hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha512)
-                    fingerprinter.add_authenticode_hashers(hashlib.md5, hashlib.sha1, hashlib.sha256)
+                    fingerprinter.add_hashers(
+                        hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha512
+                    )
+                    fingerprinter.add_authenticode_hashers(
+                        hashlib.md5, hashlib.sha1, hashlib.sha256
+                    )
                     results = fingerprinter.hashes()
 
                 # convert to hex
@@ -58,7 +67,7 @@ class FingerPrinterTestCase(unittest.TestCase):
         # Check if the limit on maximum blocksize for processing still holds.
         dummy = io.BytesIO(b"")
         fp = Fingerprinter(dummy)
-        fp._fingers.append(Finger([], [Range(0, 1000001)],  ""))
+        fp._fingers.append(Finger([], [Range(0, 1000001)], ""))
 
         start, stop = fp._next_interval
         self.assertEqual(0, start)
