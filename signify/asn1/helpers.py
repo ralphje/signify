@@ -1,19 +1,23 @@
+from __future__ import annotations
+
 import contextlib
 import datetime
+from typing import Iterator, cast
 
-from pyasn1_modules import rfc5652
+from pyasn1.type.useful import GeneralizedTime, UTCTime
+from pyasn1_modules import rfc5652, rfc3161
 
 
-def time_to_python(time):
+def time_to_python(time: GeneralizedTime | UTCTime) -> datetime.datetime | None:
     if 'utcTime' in time:
-        return time['utcTime'].asDateTime
+        return cast(datetime.datetime, time['utcTime'].asDateTime)
     elif 'generalTime' in time:
-        return time['generalTime'].asDateTime
+        return cast(datetime.datetime, time['generalTime'].asDateTime)
     else:
         return None
 
 
-def accuracy_to_python(accuracy):
+def accuracy_to_python(accuracy: rfc3161.Accuracy) -> datetime.timedelta:
     delta = datetime.timedelta()
     if 'seconds' in accuracy and accuracy['seconds'].isValue:
         delta += datetime.timedelta(seconds=int(accuracy['seconds']))
@@ -24,13 +28,13 @@ def accuracy_to_python(accuracy):
     return delta
 
 
-def bitstring_to_bytes(s):
+def bitstring_to_bytes(s: str) -> bytes:
     # based on https://stackoverflow.com/questions/32675679/convert-binary-string-to-bytearray-in-python-3
     return int(str(s), 2).to_bytes((len(s) + 7) // 8, byteorder='big')
 
 
 @contextlib.contextmanager
-def patch_rfc5652_signeddata():
+def patch_rfc5652_signeddata() -> Iterator[rfc5652.SignedData]:
     """Due to a specific error in the implementation of RFC5652 by (presumably) Microsoft, there is some issue
     where v2AttrCerts are incorrectly tagged as AttributeCertificateV1 in the CertificateChoices structure. See
     https://github.com/ralphje/signify/issues/9#issuecomment-633510304 for more details. This function monkey-patches

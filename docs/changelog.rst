@@ -4,11 +4,14 @@ This page contains the most significant changes in Signify between each release.
 
 unreleased
 ----------
+* Drop support for Python 3.7, as it is end-of-life since June 2023. The minimum required version is now 3.8.
+* Changed some arguments of some methods to keyword-only arguments. This is a backwards-incompatible change.
+
+* Added full typing support, with full and complete type annotations.
 * Added ``multi_verify_mode`` as argument to ``SignedPEFile.verify``. This allows you to specify how you'd like to
   handle the case of multiple signatures in the PE file, but not all signatures validate. The Windows default seems to
   be to rely on the first signature, though Signify defaults to allow any signature to verify. Next to these two,
   we have also added the options for 'all' (all signatures must verify) and 'best' (the best must verify).
-* Changed some arguments of some methods to keyword-only arguments. This is a backwards-incompatible change.
 
 v0.5.2 (2023-04-22)
 -------------------
@@ -24,9 +27,10 @@ v0.5.0 (2023-03-20)
 * Add support for ECC keys
 * Move certificates to a separate project, `mscerts <https://pypi.org/project/mscerts/>`_,
   so that we can update it separately
-* Fix DisallowedFileTime check in Authroot parsing
-* Fix parsing of ``Certificate.subject_public_key``
-* Fix return statement of ``RFC3161SignedData.verify``
+* Fix DisallowedFileTime check in Authroot parsing to ensure it checks against the DisallowedFileTime and not the
+  NotbeforeTime.
+* Fix parsing of ``Certificate.subject_public_key`` to ensure it returns a proper bytestring
+* Fix return statement of ``RFC3161SignedData.verify`` to return True.
 
 v0.4.0 (2021-08-23)
 -------------------

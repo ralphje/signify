@@ -20,19 +20,26 @@
 
 """ASN.1 OIDs mappings to parser classes or strings, where there is no class."""
 
-import hashlib
+from __future__ import annotations
 
+import hashlib
+from typing import Type, TypeVar, overload
+
+from pyasn1.type.base import Asn1Type
 from pyasn1_modules import rfc3161, rfc5652, rfc2315
 
 from . import pkcs7, spc, ctl
+from .._typing import HashFunction, OidTuple
 
-OID_TO_CLASS = {
+OID_TO_HASH: dict[OidTuple, HashFunction] = {
     (1, 2, 840, 113549, 2, 5): hashlib.md5,
     (1, 3, 14, 3, 2, 26): hashlib.sha1,
     (2, 16, 840, 1, 101, 3, 4, 2, 1): hashlib.sha256,
     (2, 16, 840, 1, 101, 3, 4, 2, 2): hashlib.sha384,
     (2, 16, 840, 1, 101, 3, 4, 2, 3): hashlib.sha512,
+}
 
+OID_TO_CLASS: dict[OidTuple, Type[Asn1Type]] = {
     (1, 2, 840, 113549, 1, 7, 1): pkcs7.Data,
     (1, 2, 840, 113549, 1, 7, 2): rfc2315.SignedData,
     (1, 2, 840, 113549, 1, 9, 3): rfc2315.ContentType,
@@ -59,37 +66,53 @@ OID_TO_CLASS = {
     (1, 3, 6, 1, 4, 1, 311, 10, 11, 127): ctl.NotBeforeEnhkeyUsage,
 }
 
-OID_TO_PUBKEY = {
-    (1, 2, 840, 113549, 1, 1, 1): 'rsa',
-    (1, 2, 840, 113549, 1, 1, 5): 'rsa-sha1',
-    (1, 2, 840, 113549, 1, 1, 11): 'rsa-sha256',
-    (1, 2, 840, 113549, 1, 1, 12): 'rsa-sha384',
-    (1, 2, 840, 113549, 1, 1, 13): 'rsa-sha512',
-    (1, 2, 840, 10040, 4, 1): 'dsa',
-    (1, 2, 840, 10040, 4, 3): 'dsa-sha1',
-    (1, 2, 840, 10045, 2, 1): 'ecc',
-    (1, 2, 840, 10045, 4, 1): 'ecdsa-sha1',
-    (1, 2, 840, 10045, 4, 3, 1): 'ecdsa-sha224',
-    (1, 2, 840, 10045, 4, 3, 2): 'ecdsa-sha256',
-    (1, 2, 840, 10045, 4, 3, 3): 'ecdsa-sha384',
-    (1, 2, 840, 10045, 4, 3, 4): 'ecdsa-sha512',
+OID_TO_PUBKEY: dict[OidTuple, str] = {
+    (1, 2, 840, 113549, 1, 1, 1): "rsa",
+    (1, 2, 840, 113549, 1, 1, 5): "rsa-sha1",
+    (1, 2, 840, 113549, 1, 1, 11): "rsa-sha256",
+    (1, 2, 840, 113549, 1, 1, 12): "rsa-sha384",
+    (1, 2, 840, 113549, 1, 1, 13): "rsa-sha512",
+    (1, 2, 840, 10040, 4, 1): "dsa",
+    (1, 2, 840, 10040, 4, 3): "dsa-sha1",
+    (1, 2, 840, 10045, 2, 1): "ecc",
+    (1, 2, 840, 10045, 4, 1): "ecdsa-sha1",
+    (1, 2, 840, 10045, 4, 3, 1): "ecdsa-sha224",
+    (1, 2, 840, 10045, 4, 3, 2): "ecdsa-sha256",
+    (1, 2, 840, 10045, 4, 3, 3): "ecdsa-sha384",
+    (1, 2, 840, 10045, 4, 3, 4): "ecdsa-sha512",
 }
 
-OID_TO_RDN = {
-    (2, 5, 4, 3): 'CN',  # common name
-    (2, 5, 4, 6): 'C',  # country
-    (2, 5, 4, 7): 'L',  # locality
-    (2, 5, 4, 8): 'ST',  # stateOrProvince
-    (2, 5, 4, 9): 'STREET',  # street
-    (2, 5, 4, 10): 'O',  # organization
-    (2, 5, 4, 11): 'OU',  # organizationalUnit
-    (0, 9, 2342, 19200300, 100, 1, 25): 'DC',  # domainComponent
-    (1, 2, 840, 113549, 1, 9, 1): 'EMAIL',  # emailaddress
+OID_TO_RDN: dict[OidTuple, str] = {
+    (2, 5, 4, 3): "CN",  # common name
+    (2, 5, 4, 6): "C",  # country
+    (2, 5, 4, 7): "L",  # locality
+    (2, 5, 4, 8): "ST",  # stateOrProvince
+    (2, 5, 4, 9): "STREET",  # street
+    (2, 5, 4, 10): "O",  # organization
+    (2, 5, 4, 11): "OU",  # organizationalUnit
+    (0, 9, 2342, 19200300, 100, 1, 25): "DC",  # domainComponent
+    (1, 2, 840, 113549, 1, 9, 1): "EMAIL",  # emailaddress
 }
 
 EKU_CODE_SIGNING = (1, 3, 6, 1, 5, 5, 7, 3, 3)  # codeSigning
 EKU_TIME_STAMPING = (1, 3, 6, 1, 5, 5, 7, 3, 8)  # timeStamping
 
 
-def get(key, oids=OID_TO_CLASS):
+_V = TypeVar("_V")
+
+
+@overload
+def get(key: OidTuple, oids: None = None) -> Type[Asn1Type] | OidTuple:
+    ...
+
+
+@overload
+def get(key: OidTuple, oids: dict[OidTuple, _V]) -> _V | OidTuple:
+    ...
+
+
+def get(key: OidTuple, oids: dict[OidTuple, _V] | None = None) -> _V | OidTuple:
+    if oids is None:
+        oids = OID_TO_CLASS  # type: ignore[assignment]
+    assert oids is not None
     return oids.get(key, tuple(key))

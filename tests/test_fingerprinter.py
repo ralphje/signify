@@ -56,17 +56,17 @@ class FingerPrinterTestCase(unittest.TestCase):
 
     def test_reasonable_interval(self):
         # Check if the limit on maximum blocksize for processing still holds.
-        dummy = io.StringIO("")
+        dummy = io.BytesIO(b"")
         fp = Fingerprinter(dummy)
-        fp._fingers.append(Finger(None, [Range(0, 1000001)],  None))
+        fp._fingers.append(Finger([], [Range(0, 1000001)],  ""))
 
         start, stop = fp._next_interval
         self.assertEqual(0, start)
         self.assertEqual(1000000, stop)
 
     def test_adjustments(self):
-        fp = Fingerprinter(io.StringIO(""))
-        fp._fingers.append(Finger(None, [Range(10, 20)], None))
+        fp = Fingerprinter(io.BytesIO(b""))
+        fp._fingers.append(Finger([], [Range(10, 20)], ""))
 
         # The remaining range should not yet be touched...
         fp._consume(9, 10)
@@ -86,13 +86,13 @@ class FingerPrinterTestCase(unittest.TestCase):
 
     def test_hash_block(self):
         # Does it invoke a hash function?
-        dummy = "12345"
-        fp = Fingerprinter(io.StringIO(dummy))
-        big_finger = Finger(None, [Range(0, len(dummy))], None)
+        dummy = b"12345"
+        fp = Fingerprinter(io.BytesIO(dummy))
+        big_finger = Finger([], [Range(0, len(dummy))], "")
 
         class MockHasher(object):
             def __init__(self):
-                self.seen = ""
+                self.seen = b""
 
             def update(self, content):  # pylint: disable-msg=C6409
                 self.seen += content

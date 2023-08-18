@@ -20,22 +20,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import collections
 import hashlib
 import os
 import sys
 import logging
 import binascii
+from typing import BinaryIO
 
-from signify.authenticode.signed_pe import SignedPEFile
+from signify._typing import HashFunction
+from signify.authenticode import signed_pe
 
 logger = logging.getLogger(__name__)
 
-Range = collections.namedtuple('Range', 'start end')
+Range = collections.namedtuple("Range", "start end")
 """A range with a start and an end."""
 
 
-class Finger(object):
+class Finger:
     """A Finger defines how to hash a file to get specific fingerprints.
 
     The Finger contains one or more hash functions, a set of ranges in the file that are to be processed with these
@@ -44,7 +48,7 @@ class Finger(object):
     While one Finger provides potentially multiple hashers, they all get fed the same ranges of the file.
     """
 
-    def __init__(self, hashers, ranges, description=None):
+    def __init__(self, hashers: list[hashlib._Hash], ranges: list[Range], description: str):
         """
 
         :param hashers: A list of hashers to feed.
@@ -57,13 +61,13 @@ class Finger(object):
         self.description = description
 
     @property
-    def current_range(self):
+    def current_range(self) -> Range | None:
         """The working range of this Finger. Returns None if there is none."""
         if self._ranges:
             return self._ranges[0]
         return None
 
-    def consume(self, start, end):
+    def consume(self, start: int, end: int) -> None:
         """Consumes an entire range, or part thereof.
 
         If the finger has no ranges left, or the current range start is higher than the end of the consumed block,
@@ -83,26 +87,26 @@ class Finger(object):
 
         if old.start > start:
             if old.start < end:
-                raise RuntimeError('Block end too high.')
+                raise RuntimeError("Block end too high.")
             return
         if old.start < start:
-            raise RuntimeError('Block start too high.')
+            raise RuntimeError("Block start too high.")
         if old.end == end:
-            del (self._ranges[0])
+            del self._ranges[0]
         elif old.end > end:
             self._ranges[0] = Range(end, old.end)
         else:
-            raise RuntimeError('Block length exceeds range.')
+            raise RuntimeError("Block length exceeds range.")
 
-    def update(self, block):
+    def update(self, block: bytes) -> None:
         """Given a data block, feed it to all the registered hashers."""
 
         for hasher in self.hashers:
             hasher.update(block)
 
 
-class Fingerprinter(object):
-    def __init__(self, file_obj, block_size=1000000):
+class Fingerprinter:
+    def __init__(self, file_obj: BinaryIO, block_size: int = 1000000):
         """A Fingerprinter is an interface to generate hashes of (parts) of a file.
 
         It is passed in a file object and given a set of :class:`Finger` s that define how a file must be hashed. It is
@@ -118,9 +122,11 @@ class Fingerprinter(object):
         self.file.seek(0, os.SEEK_END)
         self._filelength = self.file.tell()
 
-        self._fingers = []
+        self._fingers: list[Finger] = []
 
-    def add_hashers(self, *hashers, ranges=None, description="generic"):
+    def add_hashers(
+        self, *hashers: HashFunction, ranges: list[Range] | None = None, description: str = "generic"
+    ) -> None:
         """Add hash methods to the fingerprinter.
 
         :param hashers: A list of hashers to add to the Fingerprinter. This generally will be hashlib functions.
@@ -128,15 +134,15 @@ class Fingerprinter(object):
                        entire file.
         :param description: The name for the hashers. This name will return in :meth:`hashes`
         """
-        hashers = [x() for x in hashers]
+        concrete_hashers = [x() for x in hashers]
         if not ranges:
             ranges = [Range(0, self._filelength)]
 
-        finger = Finger(hashers, ranges, description)
+        finger = Finger(concrete_hashers, ranges, description)
         self._fingers.append(finger)
 
     @property
-    def _next_interval(self):
+    def _next_interval(self) -> Range | None:
         """Returns the next Range of the file that is to be hashed.
 
         For all fingers, inspect their next expected range, and return the
@@ -161,7 +167,7 @@ class Fingerprinter(object):
             min_end = min_start + self.block_size
         return Range(min_start, min_end)
 
-    def _hash_block(self, block, start, end):
+    def _hash_block(self, block: bytes, start: int, end: int) -> None:
         """_HashBlock feeds data blocks into the hashers of fingers.
 
         This function must be called before adjusting fingers for next
@@ -183,18 +189,20 @@ class Fingerprinter(object):
             expected_range = finger.current_range
             if expected_range is None:
                 continue
-            if start > expected_range.start or \
-                    (start == expected_range.start and end > expected_range.end) or \
-                    (start < expected_range.start < end):
-                raise RuntimeError('Cutting across fingers.')
+            if (
+                start > expected_range.start
+                or (start == expected_range.start and end > expected_range.end)
+                or (start < expected_range.start < end)
+            ):
+                raise RuntimeError("Cutting across fingers.")
             if start == expected_range.start:
                 finger.update(block)
 
-    def _consume(self, start, end):
+    def _consume(self, start: int, end: int) -> None:
         for finger in self._fingers:
             finger.consume(start, end)
 
-    def hashes(self):
+    def hashes(self) -> dict[str, dict[str, bytes]]:
         """Finalizing function for the Fingerprint class.
 
         This method applies all the different hash functions over the previously specified different ranges of the
@@ -213,16 +221,17 @@ class Fingerprinter(object):
             self.file.seek(interval.start, os.SEEK_SET)
             block = self.file.read(interval.end - interval.start)
             if len(block) != interval.end - interval.start:
-                raise RuntimeError('Short read on file.')
+                raise RuntimeError("Short read on file.")
             self._hash_block(block, interval.start, interval.end)
             self._consume(interval.start, interval.end)
 
         results = {}
         for finger in self._fingers:
             leftover = finger.current_range
-            if leftover:
-                if len(finger.ranges) > 1 or leftover.start != self._filelength or leftover.end != self._filelength:
-                    raise RuntimeError('Non-empty range remains.')
+            if leftover and (
+                len(finger._ranges) > 1 or leftover.start != self._filelength or leftover.end != self._filelength
+            ):
+                raise RuntimeError("Non-empty range remains.")
 
             res = {}
             for hasher in finger.hashers:
@@ -233,7 +242,7 @@ class Fingerprinter(object):
         self._fingers = []
         return results
 
-    def hash(self):
+    def hash(self) -> dict[str, bytes]:
         """Very similar to :meth:`hashes`, but only returns a single dict of hash names to digests.
 
         This method can only be called when the :meth:`add_hashers` method was called exactly once.
@@ -248,12 +257,12 @@ class Fingerprinter(object):
 class AuthenticodeFingerprinter(Fingerprinter):
     """An extension of the :class:`Fingerprinter` class that enables the calculation of authentihashes of PE Files."""
 
-    def add_authenticode_hashers(self, *hashers):
+    def add_authenticode_hashers(self, *hashers: HashFunction) -> bool:
         """Specialized method of :meth:`add_hashers` to add hashers with ranges limited to those that are needed to
         calculate the hash of signed PE Files.
         """
 
-        pefile = SignedPEFile(self.file)
+        pefile = signed_pe.SignedPEFile(self.file)
         omit = pefile.get_authenticode_omit_sections()
 
         if omit is None:
@@ -266,11 +275,11 @@ class AuthenticodeFingerprinter(Fingerprinter):
             start = sum(start_length)
         ranges.append(Range(start, self._filelength))
 
-        self.add_hashers(*hashers, ranges=ranges, description='authentihash')
+        self.add_hashers(*hashers, ranges=ranges, description="authentihash")
         return True
 
 
-def main(*filenames):
+def main(*filenames: str) -> None:
     for filename in filenames:
         print("{}:".format(filename))
         with open(filename, "rb") as file_obj:
@@ -288,5 +297,5 @@ def main(*filenames):
                     print("    {k:<10}: {v}".format(k=k, v=binascii.hexlify(v).decode("ascii")))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main(*sys.argv[1:])

@@ -1,12 +1,21 @@
+from __future__ import annotations
+
+from typing import Type, Any, Sequence
+
 from pyasn1.codec.ber import decoder as ber_decoder
+from pyasn1.type import univ
+from pyasn1.type.base import Asn1Type
 from pyasn1_modules import rfc2315, rfc5652
+from typing_extensions import Self
 
 from signify import asn1, _print_type
+from signify._typing import OidTuple, HashFunction
 from signify.asn1 import guarded_ber_decode
 from signify.x509.certificates import Certificate
 from signify.x509.context import CertificateStore
 from signify.exceptions import ParseError
-from signify.pkcs7.signerinfo import _get_digest_algorithm
+from signify.asn1.hashing import _get_digest_algorithm
+from signify.pkcs7 import signerinfo
 
 
 class SignedData:
@@ -53,14 +62,20 @@ class SignedData:
 
        A list of all included SignerInfo objects
     """
+    data: rfc2315.SignedData | rfc5652.SignedData
+    digest_algorithm: HashFunction
+    content_type: Type[Asn1Type] | OidTuple
+    content: univ.Sequence
+    certificates: CertificateStore
+    signer_infos: Sequence[signerinfo.SignerInfo]
 
-    _expected_content_type = None
-    _signerinfo_class = None
+    _expected_content_type: Type[univ.Sequence] | None = None
+    _signerinfo_class: Type[signerinfo.SignerInfo] | str | None = None
 
-    def __init__(self, data):
+    def __init__(self, data: rfc2315.SignedData | rfc5652.SignedData):
         """
 
-        :param asn1.pkcs7.SignedData data: The ASN.1 structure of the SignedData object
+        :param data: The ASN.1 structure of the SignedData object
         """
 
         if isinstance(self._signerinfo_class, str):
@@ -70,10 +85,10 @@ class SignedData:
         self._parse()
 
     @classmethod
-    def from_envelope(cls, data, *args, **kwargs):
+    def from_envelope(cls, data: bytes, *args: Any, **kwargs: Any) -> Self:
         """Loads a :class:`SignedData` object from raw data that contains ContentInfo.
 
-        :param bytes data: The bytes to parse
+        :param data: The bytes to parse
         """
         # This one is not guarded, which is intentional
         content, rest = ber_decoder.decode(data, asn1Spec=rfc2315.ContentInfo())
@@ -83,10 +98,10 @@ class SignedData:
         data = guarded_ber_decode(content['content'], asn1_spec=rfc2315.SignedData())
 
         signed_data = cls(data, *args, **kwargs)
-        signed_data._rest_data = rest
+        signed_data._rest_data = rest  # type: ignore[attr-defined]
         return signed_data
 
-    def _parse(self):
+    def _parse(self) -> None:
         # digestAlgorithms
         if len(self.data['digestAlgorithms']) != 1:
             raise ParseError("SignedData.digestAlgorithms must contain exactly 1 algorithm, not %d" %
@@ -116,4 +131,5 @@ class SignedData:
 
         # SignerInfo
         if self._signerinfo_class is not None:
+            assert not isinstance(self._signerinfo_class, str)
             self.signer_infos = [self._signerinfo_class(si, parent=self) for si in self.data['signerInfos']]

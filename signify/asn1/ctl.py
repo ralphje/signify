@@ -5,36 +5,36 @@ from pyasn1_modules import rfc5280, rfc2315
 # Based on http://download.microsoft.com/download/C/8/8/C8862966-5948-444D-87BD-07B976ADA28C/%5BMS-CAESO%5D.pdf
 
 
-class CTLVersion(univ.Integer):
+class CTLVersion(univ.Integer):  # type: ignore[misc]
     namedValues = namedval.NamedValues(
         ('v1', 0)
     )
 
 
-class SubjectUsage(rfc5280.ExtKeyUsageSyntax):
+class SubjectUsage(rfc5280.ExtKeyUsageSyntax):  # type: ignore[misc]
     pass
 
 
-class ListIdentifier(univ.OctetString):
+class ListIdentifier(univ.OctetString):  # type: ignore[misc]
     pass
 
 
-class SubjectIdentifier(univ.OctetString):
+class SubjectIdentifier(univ.OctetString):  # type: ignore[misc]
     pass
 
 
-class TrustedSubject(univ.Sequence):
+class TrustedSubject(univ.Sequence):  # type: ignore[misc]
     componentType = namedtype.NamedTypes(
         namedtype.NamedType('subjectIdentifier', SubjectIdentifier()),
         namedtype.OptionalNamedType('subjectAttributes', rfc2315.Attributes()),
     )
 
 
-class TrustedSubjects(univ.SequenceOf):
+class TrustedSubjects(univ.SequenceOf):  # type: ignore[misc]
     componentType = TrustedSubject()
 
 
-class CertificateTrustList(univ.Sequence):
+class CertificateTrustList(univ.Sequence):  # type: ignore[misc]
     componentType = namedtype.NamedTypes(
         namedtype.DefaultedNamedType('version', CTLVersion('v1')),
         namedtype.NamedType('subjectUsage', SubjectUsage()),
@@ -52,45 +52,45 @@ class CertificateTrustList(univ.Sequence):
 # The following are known attributes
 
 
-class EnhkeyUsage(rfc5280.ExtKeyUsageSyntax):
+class EnhkeyUsage(rfc5280.ExtKeyUsageSyntax):  # type: ignore[misc]
     pass
 
 
-class FriendlyName(univ.OctetString):
+class FriendlyName(univ.OctetString):  # type: ignore[misc]
     pass
 
 
-class KeyIdentifier(univ.OctetString):
+class KeyIdentifier(univ.OctetString):  # type: ignore[misc]
     pass
 
 
-class SubjectNameMd5Hash(univ.OctetString):
+class SubjectNameMd5Hash(univ.OctetString):  # type: ignore[misc]
     pass
 
 
-class RootProgramCertPolicies(univ.OctetString):  # TODO: not implemented
+class RootProgramCertPolicies(univ.OctetString):  # type: ignore[misc]  # TODO: not implemented
     pass
 
 
-class AuthRootSha256Hash(univ.OctetString):
+class AuthRootSha256Hash(univ.OctetString):  # type: ignore[misc]
     pass
 
 
-class DisallowedFiletime(univ.OctetString):
+class DisallowedFiletime(univ.OctetString):  # type: ignore[misc]
     pass
 
 
-class RootProgramChainPolicies(rfc5280.ExtKeyUsageSyntax):
+class RootProgramChainPolicies(rfc5280.ExtKeyUsageSyntax):  # type: ignore[misc]
     pass
 
 
-class DisallowedEnhkeyUsage(rfc5280.ExtKeyUsageSyntax):
+class DisallowedEnhkeyUsage(rfc5280.ExtKeyUsageSyntax):  # type: ignore[misc]
     pass
 
 
-class NotBeforeFiletime(univ.OctetString):
+class NotBeforeFiletime(univ.OctetString):  # type: ignore[misc]
     pass
 
 
-class NotBeforeEnhkeyUsage(rfc5280.ExtKeyUsageSyntax):
+class NotBeforeEnhkeyUsage(rfc5280.ExtKeyUsageSyntax):  # type: ignore[misc]
     pass

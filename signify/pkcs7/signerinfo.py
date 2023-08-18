@@ -1,48 +1,26 @@
-import hashlib
+from __future__ import annotations
+
+import datetime
+from typing import Iterable, Type, Any, cast
+from typing_extensions import Literal
 
 from pyasn1.type import univ
+from pyasn1.type.base import Asn1Type
 from pyasn1_modules import rfc5652, rfc2315
 
+from signify._typing import OidTuple, HashFunction
+from signify.asn1.hashing import _get_encryption_algorithm, _get_digest_algorithm
+from signify.pkcs7 import signeddata
 from signify.asn1 import guarded_ber_decode, pkcs7
 from signify.asn1 import preserving_der as preserving_der_encoder
-from signify.exceptions import VerificationError, SignerInfoParseError, \
-    SignerInfoVerificationError, ParseError
+from signify.exceptions import VerificationError, SignerInfoParseError, SignerInfoVerificationError
 from signify import asn1, _print_type
 from signify.asn1.helpers import time_to_python
-from signify.x509.certificates import CertificateName
+from signify.x509 import VerificationContext
+from signify.x509.certificates import CertificateName, Certificate
 
 
-# this list must be in the order of worst to best
-ACCEPTED_DIGEST_ALGORITHMS = (hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha384, hashlib.sha512)
-
-
-def _verify_empty_algorithm_parameters(algorithm, location):
-    if 'parameters' in algorithm and algorithm['parameters'].isValue:
-        parameters = guarded_ber_decode(algorithm['parameters'])
-        if not isinstance(parameters, univ.Null):
-            raise ParseError("%s has parameters set, which is unexpected" % (location,))
-
-
-def _get_digest_algorithm(algorithm, location, acceptable=ACCEPTED_DIGEST_ALGORITHMS):
-    result = asn1.oids.get(algorithm['algorithm'])
-    if result not in acceptable:
-        raise ParseError("%s must be one of %s, not %s" % (location, [x().name for x in acceptable],
-                                                           _print_type(result)))
-
-    _verify_empty_algorithm_parameters(algorithm, location)
-    return result
-
-
-def _get_encryption_algorithm(algorithm, location):
-    result = asn1.oids.OID_TO_PUBKEY.get(algorithm['algorithm'])
-    if result is None:
-        raise ParseError("%s: %s is not acceptable as encryption algorithm" % (location, algorithm['algorithm']))
-
-    _verify_empty_algorithm_parameters(algorithm, location)
-    return result
-
-
-class SignerInfo(object):
+class SignerInfo:
     """The SignerInfo class is defined in RFC2315 and RFC5652 (amongst others) and defines the per-signer information
     in a :class:`SignedData` structure.
 
@@ -122,11 +100,23 @@ class SignerInfo(object):
 
     """
 
-    _countersigner_class = "CounterSignerInfo"
-    _required_authenticated_attributes = (rfc2315.ContentType, rfc2315.Digest)
-    _expected_content_type = None
+    issuer: CertificateName
+    serial_number: int
+    authenticated_attributes: dict[OidTuple | Type[Asn1Type], list[Any]]
+    unauthenticated_attributes: dict[OidTuple | Type[Asn1Type], list[Any]]
+    digest_encryption_algorithm: str
+    encrypted_digest: bytes
+    digest_algorithm: HashFunction
+    message_digest: bytes | None
+    content_type: OidTuple | Type[Asn1Type] | None
+    signing_time: datetime.datetime | None
+    countersigner: CounterSignerInfo | None
 
-    def __init__(self, data, parent=None):
+    _countersigner_class: Type[CounterSignerInfo] | str | None = "CounterSignerInfo"
+    _required_authenticated_attributes: Iterable[univ.ObjectIdentifier] = (rfc2315.ContentType, rfc2315.Digest)
+    _expected_content_type: Type[univ.Sequence] | None = None
+
+    def __init__(self, data: rfc2315.SignerInfo | rfc5652.SignerInfo, parent: signeddata.SignedData | None = None):
         """
         :param data: The ASN.1 structure of the SignerInfo.
         :param parent: The parent :class:`SignedData` object.
@@ -138,51 +128,50 @@ class SignerInfo(object):
         self.parent = parent
         self._parse()
 
-    def _parse(self):
-        if self.data['version'] != 1:
-            raise SignerInfoParseError("SignerInfo.version must be 1, not %d" % self.data['version'])
+    def _parse(self) -> None:
+        if self.data["version"] != 1:
+            raise SignerInfoParseError("SignerInfo.version must be 1, not %d" % self.data["version"])
 
         # We can handle several different rfc types here
         if isinstance(self.data, rfc2315.SignerInfo):
-            self.issuer = CertificateName(self.data['issuerAndSerialNumber']['issuer'][0])
-            self.serial_number = self.data['issuerAndSerialNumber']['serialNumber']
+            self.issuer = CertificateName(self.data["issuerAndSerialNumber"]["issuer"][0])
+            self.serial_number = self.data["issuerAndSerialNumber"]["serialNumber"]
 
             self.authenticated_attributes = self._parse_attributes(
-                self.data['authenticatedAttributes'],
-                required=self._required_authenticated_attributes
+                self.data["authenticatedAttributes"], required=self._required_authenticated_attributes
             )
-            self._encoded_authenticated_attributes = self._encode_attributes(self.data['authenticatedAttributes'])
+            self._encoded_authenticated_attributes = self._encode_attributes(self.data["authenticatedAttributes"])
 
-            self.unauthenticated_attributes = self._parse_attributes(self.data['unauthenticatedAttributes'])
+            self.unauthenticated_attributes = self._parse_attributes(self.data["unauthenticatedAttributes"])
 
             self.digest_encryption_algorithm = _get_encryption_algorithm(
-                self.data['digestEncryptionAlgorithm'],
-                location="SignerInfo.digestEncryptionAlgorithm"
+                self.data["digestEncryptionAlgorithm"], location="SignerInfo.digestEncryptionAlgorithm"
             )
-            self.encrypted_digest = bytes(self.data['encryptedDigest'])
+            self.encrypted_digest = bytes(self.data["encryptedDigest"])
 
         elif isinstance(self.data, rfc5652.SignerInfo):
             # TODO: handle case where sid contains key identifier
-            self.issuer = CertificateName(self.data['sid']['issuerAndSerialNumber']['issuer'][0])
-            self.serial_number = self.data['sid']['issuerAndSerialNumber']['serialNumber']
+            self.issuer = CertificateName(self.data["sid"]["issuerAndSerialNumber"]["issuer"][0])
+            self.serial_number = self.data["sid"]["issuerAndSerialNumber"]["serialNumber"]
 
             self.authenticated_attributes = self._parse_attributes(
-                self.data['signedAttrs'],
-                required=self._required_authenticated_attributes
+                self.data["signedAttrs"], required=self._required_authenticated_attributes
             )
-            self._encoded_authenticated_attributes = self._encode_attributes(self.data['signedAttrs'])
+            self._encoded_authenticated_attributes = self._encode_attributes(self.data["signedAttrs"])
 
-            self.unauthenticated_attributes = self._parse_attributes(self.data['unsignedAttrs'])
+            self.unauthenticated_attributes = self._parse_attributes(self.data["unsignedAttrs"])
 
-            self.digest_encryption_algorithm = _get_encryption_algorithm(self.data['signatureAlgorithm'],
-                                                                         location="SignerInfo.signatureAlgorithm")
-            self.encrypted_digest = bytes(self.data['signature'])
+            self.digest_encryption_algorithm = _get_encryption_algorithm(
+                self.data["signatureAlgorithm"], location="SignerInfo.signatureAlgorithm"
+            )
+            self.encrypted_digest = bytes(self.data["signature"])
 
         else:
             raise SignerInfoParseError("Unknown SignerInfo type %s" % type(self.data))
 
-        self.digest_algorithm = _get_digest_algorithm(self.data['digestAlgorithm'],
-                                                      location="SignerInfo.digestAlgorithm")
+        self.digest_algorithm = _get_digest_algorithm(
+            self.data["digestAlgorithm"], location="SignerInfo.digestAlgorithm"
+        )
 
         # Parse the content of the authenticated attributes
         # - The messageDigest
@@ -202,9 +191,10 @@ class SignerInfo(object):
             self.content_type = asn1.oids.get(self.authenticated_attributes[rfc2315.ContentType][0])
 
             if self._expected_content_type is not None and self.content_type is not self._expected_content_type:
-                raise SignerInfoParseError("Unexpected content type for SignerInfo, expected %s, got %s" %
-                                           (_print_type(self._expected_content_type),
-                                            _print_type(self.content_type)))
+                raise SignerInfoParseError(
+                    "Unexpected content type for SignerInfo, expected %s, got %s"
+                    % (_print_type(self._expected_content_type), _print_type(self.content_type))
+                )
 
         # - The signingTime (used by countersigner)
         self.signing_time = None
@@ -220,16 +210,22 @@ class SignerInfo(object):
             if len(self.unauthenticated_attributes[pkcs7.Countersignature]) != 1:
                 raise SignerInfoParseError("Only one CountersignInfo expected in SignerInfo.unauthenticatedAttributes")
 
+            assert self._countersigner_class is not None and not isinstance(self._countersigner_class, str)
             self.countersigner = self._countersigner_class(self.unauthenticated_attributes[pkcs7.Countersignature][0])
 
-    def check_message_digest(self, data):
+    def check_message_digest(self, data: bytes) -> bool:
         """Given the data, returns whether the hash_algorithm and message_digest match the data provided."""
 
-        auth_attr_hash = self.digest_algorithm(data).digest()
-        return auth_attr_hash == self.message_digest
+        auth_attr_hash = self.digest_algorithm()
+        auth_attr_hash.update(data)
+        return auth_attr_hash.digest() == self.message_digest
 
     @classmethod
-    def _parse_attributes(cls, data, required=()):
+    def _parse_attributes(
+        cls,
+        data: rfc2315.Attributes | rfc5652.SignedAttributes | rfc5652.UnsignedAttributes,
+        required: Iterable[univ.ObjectIdentifier] = (),
+    ) -> dict[OidTuple | Type[Asn1Type], list[Any]]:
         """Given a set of Attributes, parses them and returns them as a dict
 
         :param data: The authenticatedAttributes or unauthenticatedAttributes to process
@@ -237,13 +233,13 @@ class SignerInfo(object):
         """
 
         if isinstance(data, rfc2315.Attributes):
-            type_key, value_key = 'type', 'values'
+            type_key, value_key = "type", "values"
         elif isinstance(data, (rfc5652.SignedAttributes, rfc5652.UnsignedAttributes)):
-            type_key, value_key = 'attrType', 'attrValues'
+            type_key, value_key = "attrType", "attrValues"
 
-        result = {}
+        result: dict[tuple[int, ...] | Type[Asn1Type], list[Any]] = {}
         for attr in data:
-            typ = asn1.oids.get(attr[type_key])
+            typ = asn1.oids.get(attr[type_key], asn1.oids.OID_TO_CLASS)
             values = []
             for value in attr[value_key]:
                 if not isinstance(typ, tuple):
@@ -252,13 +248,17 @@ class SignerInfo(object):
             result[typ] = values
 
         if not all((x in result for x in required)):
-            raise SignerInfoParseError("Not all required attributes found. Required: %s; Found: %s" %
-                                       ([_print_type(x) for x in required], [_print_type(x) for x in result]))
+            raise SignerInfoParseError(
+                "Not all required attributes found. Required: %s; Found: %s"
+                % ([_print_type(x) for x in required], [_print_type(x) for x in result])
+            )
 
         return result
 
     @classmethod
-    def _encode_attributes(cls, data):
+    def _encode_attributes(
+        cls, data: rfc2315.Attributes | rfc5652.SignedAttributes | rfc5652.UnsignedAttributes
+    ) -> bytes:
         """Given a set of Attributes, prepares them for creating a digest. It used to sort them by their DER encoded
         values, now it is mostly a method to preserve the exact order they where in when they were encoded.
 
@@ -268,9 +268,9 @@ class SignerInfo(object):
         new_attrs = type(data)()
         for attribute in data:
             new_attrs.append(attribute)
-        return preserving_der_encoder.encode(new_attrs)
+        return cast(bytes, preserving_der_encoder.encode(new_attrs))
 
-    def _verify_issuer(self, issuer, context):
+    def _verify_issuer(self, issuer: Certificate, context: VerificationContext) -> None:
         """Verifies whether the given issuer is valid for the given context. Similar to
         :meth:`Certificate._verify_issuer`. Does not support legacy verification method.
 
@@ -281,16 +281,20 @@ class SignerInfo(object):
         issuer.verify(context)
 
         try:
-            issuer.verify_signature(self.encrypted_digest,
-                                    self._encoded_authenticated_attributes,
-                                    self.digest_algorithm,
-                                    allow_legacy=context.allow_legacy)
+            issuer.verify_signature(
+                self.encrypted_digest,
+                self._encoded_authenticated_attributes,
+                self.digest_algorithm,
+                allow_legacy=context.allow_legacy,
+            )
         except VerificationError as e:
-            raise SignerInfoVerificationError("Could not verify {cert} as the signer of the authenticated "
-                                              "attributes in {cls}: {exc}"
-                                              .format(cert=issuer, cls=type(self).__name__, exc=e))
+            raise SignerInfoVerificationError(
+                "Could not verify {cert} as the signer of the authenticated attributes in {cls}: {exc}".format(
+                    cert=issuer, cls=type(self).__name__, exc=e
+                )
+            )
 
-    def _build_chain(self, context):
+    def _build_chain(self, context: VerificationContext) -> Iterable[Iterable[Certificate]]:
         """Given a context, builds a chain up to a trusted certificate. This is a generator function, generating all
         valid chains.
 
@@ -309,7 +313,7 @@ class SignerInfo(object):
 
         # this loop was designed in the same way that Certificate._build_chain was built
         # first_error is None until the first iteration. When it becomes False, we do not need to raise anything.
-        first_error = None
+        first_error: VerificationError | None | Literal[False] = None
         for issuer in context.find_certificates(issuer=self.issuer, serial_number=self.serial_number):
             try:
                 # _verify_issuer may fail when it is not a valid issuer for this SignedInfo
@@ -326,7 +330,7 @@ class SignerInfo(object):
         if first_error:
             raise first_error
 
-    def verify(self, context):
+    def verify(self, context: VerificationContext) -> Iterable[Iterable[Certificate]]:
         """Verifies that this :class:`SignerInfo` verifies up to a chain with the root of a trusted certificate.
 
         :param VerificationContext context: The context for verifying the SignerInfo.
@@ -338,12 +342,13 @@ class SignerInfo(object):
         chains = list(self._build_chain(context))
 
         if not chains:
-            raise SignerInfoVerificationError("No valid certificate chain found to a trust anchor from {}"
-                                              .format(type(self).__name__))
+            raise SignerInfoVerificationError(
+                "No valid certificate chain found to a trust anchor from {}".format(type(self).__name__)
+            )
 
         return chains
 
-    def potential_chains(self, context):
+    def potential_chains(self, context: VerificationContext) -> Iterable[Iterable[Certificate]]:
         """Retrieves all potential chains from this SignerInfo instance.
 
         :param VerificationContext context: The context

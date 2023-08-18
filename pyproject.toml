@@ -1,0 +1,15 @@
+[tool.mypy]
+files = "signify"
+python_version = "3.8"
+strict = true
+disallow_incomplete_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "asn1crypto.*",
+    "certvalidator.*",
+    "oscrypto.*",
+    "pyasn1.*",
+    "pyasn1_modules.*"
+]
+ignore_missing_imports = true

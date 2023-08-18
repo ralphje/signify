@@ -6,10 +6,10 @@ from pyasn1.type import univ
 __all__ = ['encode']
 
 
-class SetOfEncoder(cer_encoder.SetOfEncoder):
+class SetOfEncoder(cer_encoder.SetOfEncoder):  # type: ignore[misc]
     """This class is identical to the one of the CER encoder, except that the sorting has been removed. """
 
-    def encodeValue(self, value, asn1Spec, encodeFun, **options):
+    def encodeValue(self, value, asn1Spec, encodeFun, **options):  # type: ignore[no-untyped-def]
         chunks = self._encodeComponents(
             value, asn1Spec, encodeFun, **options)
 
@@ -36,7 +36,7 @@ typeMap.update({
 })
 
 
-class Encoder(encoder.Encoder):
+class Encoder(encoder.Encoder):  # type: ignore[misc]
     fixedDefLengthMode = True
     fixedChunkSize = 0
 

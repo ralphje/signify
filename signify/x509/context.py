@@ -1,17 +1,34 @@
+from __future__ import annotations
+
+import datetime
 import logging
+import pathlib
+from typing import Any, Iterable, Iterator, List
+
+import asn1crypto.crl
+import asn1crypto.ocsp
+import asn1crypto.x509
+from typing_extensions import Literal
 
 from certvalidator import ValidationContext, CertificateValidator
 
-from signify.x509.certificates import Certificate
+from signify.authenticode import authroot
+from signify.x509.certificates import Certificate, CertificateName
 from signify.exceptions import VerificationError, CertificateVerificationError, CertificateNotTrustedVerificationError
 
 logger = logging.getLogger(__name__)
 
 
-class CertificateStore(list):
+class CertificateStore(List[Certificate]):
     """A list of :class:`Certificate` objects."""
 
-    def __init__(self, *args, trusted=False, ctl=None, **kwargs):
+    def __init__(
+        self,
+        *args: Certificate | Iterable[Certificate],
+        trusted: bool = False,
+        ctl: authroot.CertificateTrustList | None = None,
+        **kwargs: Any,
+    ):
         """
         :param bool trusted: If true, all certificates that are appended to this structure are set to trusted.
         :param CertificateTrustList ctl: The certificate trust list to use (if any)
@@ -20,10 +37,10 @@ class CertificateStore(list):
         self.trusted = trusted
         self.ctl = ctl
 
-    def append(self, elem):
+    def append(self, elem: Certificate) -> None:
         return super().append(elem)
 
-    def verify_trust(self, chain, context=None):
+    def verify_trust(self, chain: list[Certificate], context: VerificationContext | None = None) -> bool:
         """Verifies that the chain is trusted given the context."""
 
         if not self.is_trusted(chain[0]):
@@ -36,7 +53,7 @@ class CertificateStore(list):
 
         return True
 
-    def is_trusted(self, certificate):
+    def is_trusted(self, certificate: Certificate) -> bool:
         """Returns whether the provided certificate is trusted by this certificate store.
 
         .. warning::
@@ -48,7 +65,7 @@ class CertificateStore(list):
 
         return self.trusted and certificate in self
 
-    def find_certificate(self, **kwargs):
+    def find_certificate(self, **kwargs: Any) -> Certificate:
         """Finds the certificate as specified by the keyword arguments. See :meth:`find_certificates`
         for all possible arguments. If there is not exactly 1 certificate matching the parameters, i.e. there are zero
         or there are multiple, an error is raised.
@@ -66,7 +83,14 @@ class CertificateStore(list):
 
         return certificates[0]
 
-    def find_certificates(self, *, subject=None, serial_number=None, issuer=None, sha256_fingerprint=None):
+    def find_certificates(
+        self,
+        *,
+        subject: CertificateName | None = None,
+        serial_number: int | None = None,
+        issuer: CertificateName | None = None,
+        sha256_fingerprint: str | None = None,
+    ) -> Iterable[Certificate]:
         """Finds all certificates given by the specified properties. A property can be omitted by specifying
         :const:`None`. Calling this function without arguments is the same as iterating over this store
 
@@ -84,10 +108,8 @@ class CertificateStore(list):
                 continue
             if issuer is not None and certificate.issuer != issuer:
                 continue
-            if (
-                sha256_fingerprint is not None
-                and certificate.sha256_fingerprint.replace(" ", "").lower()
-                    != sha256_fingerprint.replace(" ", "").lower()
+            if sha256_fingerprint is not None and (
+                certificate.sha256_fingerprint.replace(" ", "").lower() != sha256_fingerprint.replace(" ", "").lower()
             ):
                 continue
             yield certificate
@@ -98,7 +120,7 @@ class FileSystemCertificateStore(CertificateStore):
 
     _loaded = False
 
-    def __init__(self, location, *args, **kwargs):
+    def __init__(self, location: pathlib.Path, *args: Any, **kwargs: Any):
         """
         :param pathlib.Path location: The file system location for the certificates.
         :param bool trusted: If true, all certificates that are appended to this structure are set to trusted.
@@ -107,15 +129,15 @@ class FileSystemCertificateStore(CertificateStore):
         super().__init__(*args, **kwargs)
         self.location = location
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Certificate]:
         self._load()  # TODO: load whenever needed.
         return super().__iter__()
 
-    def __len__(self):
+    def __len__(self) -> int:
         self._load()
         return super().__len__()
 
-    def _load(self):
+    def _load(self) -> None:
         if self._loaded:
             return
         self._loaded = True
@@ -130,9 +152,20 @@ class FileSystemCertificateStore(CertificateStore):
 
 
 class VerificationContext(object):
-    def __init__(self, *stores, timestamp=None, key_usages=None, extended_key_usages=None, optional_eku=True,
-                 allow_legacy=True, revocation_mode='soft-fail', allow_fetching=False, fetch_timeout=30,
-                 crls=None, ocsps=None):
+    def __init__(
+        self,
+        *stores: CertificateStore,
+        timestamp: datetime.datetime | None = None,
+        key_usages: Iterable[str] | None = None,
+        extended_key_usages: Iterable[str] | None = None,
+        optional_eku: bool = True,
+        allow_legacy: bool = True,
+        revocation_mode: Literal["soft-fail", "hard-fail", "require"] = "soft-fail",
+        allow_fetching: bool = False,
+        fetch_timeout: int = 30,
+        crls: Iterable[asn1crypto.crl.CertificateList] | None = None,
+        ocsps: Iterable[asn1crypto.ocsp.OCSPResponse] | None = None,
+    ):
         """A context holding properties about the verification of a signature or certificate.
 
         :param Iterable[CertificateStore] stores: A list of CertificateStore objects that contain certificates
@@ -170,12 +203,12 @@ class VerificationContext(object):
         self.crls = crls
         self.ocsps = ocsps
 
-    def add_store(self, store):
+    def add_store(self, store: CertificateStore) -> None:
         """Adds a certificate store to the VerificationContext"""
         self.stores.append(store)
 
     @property
-    def certificates(self):
+    def certificates(self) -> Iterator[Certificate]:
         """Iterates over all certificates in the associated stores.
 
         :rtype: Iterable[Certificate]
@@ -183,7 +216,7 @@ class VerificationContext(object):
         for store in self.stores:
             yield from store
 
-    def find_certificate(self, **kwargs):
+    def find_certificate(self, **kwargs: Any) -> Certificate:
         """Finds the certificate as specified by the keyword arguments. See :meth:`find_certificates`
         for all possible arguments. If there is not exactly 1 certificate matching the parameters, i.e. there are zero
         or there are multiple, an error is raised.
@@ -201,7 +234,7 @@ class VerificationContext(object):
 
         return certificates[0]
 
-    def find_certificates(self, **kwargs):
+    def find_certificates(self, **kwargs: Any) -> Iterator[Certificate]:
         """Finds all certificates given by the specified keyword arguments. See
         :meth:`CertificateStore.find_certificates` for a list of all supported arguments.
 
@@ -217,7 +250,7 @@ class VerificationContext(object):
                 seen_certs.append(certificate)
                 yield certificate
 
-    def potential_chains(self, certificate, depth=10):
+    def potential_chains(self, certificate: Certificate, depth: int = 10) -> Iterator[list[Certificate]]:
         """Returns all possible chains from the provided certificate, solely based on issuer/subject matching.
 
         **THIS METHOD DOES NOT VERIFY WHETHER A CHAIN IS ACTUALLY VALID**. Use :meth:`verify` for that.
@@ -247,7 +280,7 @@ class VerificationContext(object):
                 else:
                     yield chain + [certificate]
 
-    def verify(self, certificate):
+    def verify(self, certificate: Certificate) -> Iterable[Certificate]:
         """Verifies the certificate, and its chain.
 
         :param Certificate certificate: The certificate to verify
@@ -261,7 +294,8 @@ class VerificationContext(object):
         all_certs = {to_check_asn1cert: certificate}
 
         # we need to get lists of our intermediates and trusted certificates
-        intermediates, trust_roots = [], []
+        intermediates: list[asn1crypto.x509.Certificate] = []
+        trust_roots: list[asn1crypto.x509.Certificate] = []
         for store in self.stores:
             for cert in store:
                 asn1cert = cert.to_asn1crypto
@@ -277,15 +311,13 @@ class VerificationContext(object):
             weak_hash_algos=set() if self.allow_legacy else None,
             revocation_mode=self.revocation_mode,
             allow_fetching=self.allow_fetching,
-            crl_fetch_params={'timeout': self.fetch_timeout},
-            ocsp_fetch_params={'timeout': self.fetch_timeout},
+            crl_fetch_params={"timeout": self.fetch_timeout},
+            ocsp_fetch_params={"timeout": self.fetch_timeout},
             crls=self.crls,
-            ocsps=self.ocsps
+            ocsps=self.ocsps,
         )
         validator = CertificateValidator(
-            end_entity_cert=to_check_asn1cert,
-            intermediate_certs=list(intermediates),
-            validation_context=context
+            end_entity_cert=to_check_asn1cert, intermediate_certs=list(intermediates), validation_context=context
         )
 
         # verify the chain
@@ -293,7 +325,7 @@ class VerificationContext(object):
             chain = validator.validate_usage(
                 key_usage=set(self.key_usages) if self.key_usages else set(),
                 extended_key_usage=set(self.extended_key_usages) if self.extended_key_usages else set(),
-                extended_optional=self.optional_eku
+                extended_optional=self.optional_eku,
             )
         except Exception as e:
             raise CertificateVerificationError("Chain verification from %s failed: %s" % (certificate, e))
@@ -302,7 +334,7 @@ class VerificationContext(object):
         self.verify_trust(signify_chain)
         return signify_chain
 
-    def is_trusted(self, certificate):
+    def is_trusted(self, certificate: Certificate) -> bool:
         """Returns whether the provided certificate is trusted by a trusted certificate store.
 
         .. warning::
@@ -317,7 +349,7 @@ class VerificationContext(object):
                 return True
         return False
 
-    def verify_trust(self, chain):
+    def verify_trust(self, chain: list[Certificate]) -> bool:
         """Determines whether the given certificate chain is trusted by a trusted certificate store.
 
         :param List[Certificate] chain: The certificate chain to verify trust for.
@@ -338,5 +370,6 @@ class VerificationContext(object):
         if exc:
             raise exc
 
-        raise CertificateVerificationError("The trust for %s could not be verified, as it is not trusted by any store"
-                                           % chain)
+        raise CertificateVerificationError(
+            "The trust for %s could not be verified, as it is not trusted by any store" % chain
+        )

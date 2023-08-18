@@ -29,23 +29,29 @@ The actual parsing of this certificate is perfomed by :mod:`signify.authenticode
 .. _PECOFF: http://www.microsoft.com/whdc/system/platform/firmware/PECOFF.mspx
 """
 
+from __future__ import annotations
+
 import collections
 import hashlib
 import logging
 import os
 import struct
+from typing import BinaryIO, Iterator, Iterable, Any
+from typing_extensions import TypedDict, Literal
 
-from signify.pkcs7.signerinfo import ACCEPTED_DIGEST_ALGORITHMS
-from signify.authenticode import AuthenticodeVerificationResult
+from signify import fingerprinter
+from signify.asn1.hashing import ACCEPTED_DIGEST_ALGORITHMS
+from signify.authenticode import structures
 from signify.exceptions import SignedPEParseError, AuthenticodeNotSignedError
 
 logger = logging.getLogger(__name__)
 
-RelRange = collections.namedtuple('RelRange', 'start length')
+RelRange = collections.namedtuple("RelRange", "start length")
+ParsedCertTable = TypedDict("ParsedCertTable", {"revision": int, "type": int, "certificate": bytes})
 
 
-class SignedPEFile(object):
-    def __init__(self, file_obj):
+class SignedPEFile:
+    def __init__(self, file_obj: BinaryIO):
         """A PE file that is to be parsed to find the relevant sections for Authenticode parsing.
 
         :param file_obj: A PE file opened in binary file
@@ -56,7 +62,7 @@ class SignedPEFile(object):
         self.file.seek(0, os.SEEK_END)
         self._filelength = self.file.tell()
 
-    def get_authenticode_omit_sections(self):
+    def get_authenticode_omit_sections(self) -> dict[str, RelRange] | None:
         """Returns all ranges of the raw file that are relevant for exclusion for the calculation of the hash
         function used in Authenticode.
 
@@ -75,9 +81,9 @@ class SignedPEFile(object):
             locations = self._parse_pe_header_locations()
         except (SignedPEParseError, struct.error):
             return None
-        return {k: v for k, v in locations.items() if k in ['checksum', 'datadir_certtable', 'certtable']}
+        return {k: v for k, v in locations.items() if k in ["checksum", "datadir_certtable", "certtable"]}
 
-    def _parse_pe_header_locations(self):
+    def _parse_pe_header_locations(self) -> dict[str, RelRange]:
         """Parses a PE file to find the sections to exclude from the AuthentiCode hash.
 
         See http://www.microsoft.com/whdc/system/platform/firmware/PECOFF.mspx for information about the structure.
@@ -87,44 +93,48 @@ class SignedPEFile(object):
 
         # Check if file starts with MZ
         self.file.seek(0, os.SEEK_SET)
-        if self.file.read(2) != b'MZ':
+        if self.file.read(2) != b"MZ":
             raise SignedPEParseError("MZ header not found")
 
         # Offset to e_lfanew (which is the PE header) is at 0x3C of the MZ header
         self.file.seek(0x3C, os.SEEK_SET)
-        pe_offset = struct.unpack('<I', self.file.read(4))[0]
+        pe_offset = struct.unpack("<I", self.file.read(4))[0]
         if pe_offset >= self._filelength:
-            raise SignedPEParseError("PE header location is beyond file boundaries (%d >= %d)" %
-                                     (pe_offset, self._filelength))
+            raise SignedPEParseError(
+                "PE header location is beyond file boundaries (%d >= %d)" % (pe_offset, self._filelength)
+            )
 
         # Check if the PE header is PE
         self.file.seek(pe_offset, os.SEEK_SET)
-        if self.file.read(4) != b'PE\0\0':
+        if self.file.read(4) != b"PE\0\0":
             raise SignedPEParseError("PE header not found")
 
         # The COFF header contains the size of the optional header
         self.file.seek(pe_offset + 20, os.SEEK_SET)
-        optional_header_size = struct.unpack('<H', self.file.read(2))[0]
+        optional_header_size = struct.unpack("<H", self.file.read(2))[0]
         optional_header_offset = pe_offset + 24
         if optional_header_size + optional_header_offset > self._filelength:
             # This is not strictly a failure for windows, but such files better
             # be treated as generic files. They can not be carrying SignedData.
-            raise SignedPEParseError("The optional header exceeds the file length (%d + %d > %d)" %
-                                     (optional_header_size, optional_header_offset, self._filelength))
+            raise SignedPEParseError(
+                "The optional header exceeds the file length (%d + %d > %d)"
+                % (optional_header_size, optional_header_offset, self._filelength)
+            )
 
         if optional_header_size < 68:
             # We can't do authenticode-style hashing. If this is a valid binary,
             # which it can be, the header still does not even contain a checksum.
-            raise SignedPEParseError("The optional header size is %d < 68, which is insufficient for authenticode",
-                                     optional_header_size)
+            raise SignedPEParseError(
+                "The optional header size is %d < 68, which is insufficient for authenticode", optional_header_size
+            )
 
         # The optional header contains the signature of the image
         self.file.seek(optional_header_offset, os.SEEK_SET)
-        signature = struct.unpack('<H', self.file.read(2))[0]
-        if signature == 0x10b:  # IMAGE_NT_OPTIONAL_HDR32_MAGIC
+        signature = struct.unpack("<H", self.file.read(2))[0]
+        if signature == 0x10B:  # IMAGE_NT_OPTIONAL_HDR32_MAGIC
             rva_base = optional_header_offset + 92  # NumberOfRvaAndSizes
             cert_base = optional_header_offset + 128  # Certificate Table
-        elif signature == 0x20b:  # IMAGE_NT_OPTIONAL_HDR64_MAGIC
+        elif signature == 0x20B:  # IMAGE_NT_OPTIONAL_HDR64_MAGIC
             rva_base = optional_header_offset + 108  # NumberOfRvaAndSizes
             cert_base = optional_header_offset + 144  # Certificate Table
         else:
@@ -132,85 +142,96 @@ class SignedPEFile(object):
             raise SignedPEParseError("The PE Optional Header signature is %x, which is unknown", signature)
 
         # According to the specification, the checksum should not be hashed.
-        location['checksum'] = RelRange(optional_header_offset + 64, 4)
+        location["checksum"] = RelRange(optional_header_offset + 64, 4)
 
         # Read the RVA
         if optional_header_offset + optional_header_size < rva_base + 4:
             logger.debug("The PE Optional Header size can not accommodate for the NumberOfRvaAndSizes field")
             return location
         self.file.seek(rva_base, os.SEEK_SET)
-        number_of_rva = struct.unpack('<I', self.file.read(4))[0]
+        number_of_rva = struct.unpack("<I", self.file.read(4))[0]
         if number_of_rva < 5:
-            logger.debug("The PE Optional Header does not have a Certificate Table entry in its Data Directory; "
-                         "NumberOfRvaAndSizes = %d", number_of_rva)
+            logger.debug(
+                (
+                    "The PE Optional Header does not have a Certificate Table entry in its Data Directory; "
+                    "NumberOfRvaAndSizes = %d"
+                ),
+                number_of_rva,
+            )
             return location
         if optional_header_offset + optional_header_size < cert_base + 8:
-            logger.debug("The PE Optional Header size can not accommodate for a Certificate Table entry in its Data "
-                         "Directory")
+            logger.debug(
+                "The PE Optional Header size can not accommodate for a Certificate Table entry in its Data Directory"
+            )
             return location
 
         # According to the spec, the certificate table entry of the data directory should be omitted
-        location['datadir_certtable'] = RelRange(cert_base, 8)
+        location["datadir_certtable"] = RelRange(cert_base, 8)
 
         # Read the certificate table entry of the Data Directory
         self.file.seek(cert_base, os.SEEK_SET)
-        address, size = struct.unpack('<II', self.file.read(8))
+        address, size = struct.unpack("<II", self.file.read(8))
 
         if not size:
             logger.debug("The Certificate Table is empty")
             return location
 
         if address < optional_header_size + optional_header_offset or address + size > self._filelength:
-            logger.debug("The location of the Certificate Table in the binary makes no sense and is either beyond the "
-                         "boundaries of the file, or in the middle of the PE header; "
-                         "VirtualAddress: %x, Size: %x", address, size)
+            logger.debug(
+                (
+                    "The location of the Certificate Table in the binary makes no sense and is either beyond the "
+                    "boundaries of the file, or in the middle of the PE header; "
+                    "VirtualAddress: %x, Size: %x"
+                ),
+                address,
+                size,
+            )
             return location
 
-        location['certtable'] = RelRange(address, size)
+        location["certtable"] = RelRange(address, size)
         return location
 
-    def _parse_cert_table(self):
+    def _parse_cert_table(self) -> Iterator[ParsedCertTable]:
         """Parses the Certificate Table, iterates over all certificates"""
 
         locations = self.get_authenticode_omit_sections()
-        if not locations or 'certtable' not in locations:
+        if not locations or "certtable" not in locations:
             raise SignedPEParseError("The PE file does not contain a certificate table.")
 
-        position = locations['certtable'].start
-        while position < sum(locations['certtable']):
+        position = locations["certtable"].start
+        while position < sum(locations["certtable"]):
             # check if this position is viable, we need at least 8 bytes for our header
             if position + 8 > self._filelength:
                 raise SignedPEParseError("Position of certificate table is beyond length of file")
             self.file.seek(position, os.SEEK_SET)
-            length = struct.unpack('<I', self.file.read(4))[0]
-            revision = struct.unpack('<H', self.file.read(2))[0]
-            certificate_type = struct.unpack('<H', self.file.read(2))[0]
+            length = struct.unpack("<I", self.file.read(4))[0]
+            revision = struct.unpack("<H", self.file.read(2))[0]
+            certificate_type = struct.unpack("<H", self.file.read(2))[0]
 
             # check if we are not going to perform a negative read (and 0 bytes is weird as well)
             if length <= 8:
                 raise SignedPEParseError("Invalid length in certificate table header")
             certificate = self.file.read(length - 8)
 
-            yield {'revision': revision, 'type': certificate_type, 'certificate': certificate}
+            yield {"revision": revision, "type": certificate_type, "certificate": certificate}
             position += length + (8 - length % 8) % 8
 
-    def get_fingerprinter(self):
+    def get_fingerprinter(self) -> fingerprinter.AuthenticodeFingerprinter:
         """Returns a fingerprinter object for this file.
 
         :rtype: signify.fingerprinter.AuthenticodeFingerprinter
         """
-        from signify.fingerprinter import AuthenticodeFingerprinter
-        return AuthenticodeFingerprinter(self.file)
+        return fingerprinter.AuthenticodeFingerprinter(self.file)
 
     @property
-    def signed_datas(self):
+    def signed_datas(self) -> Iterator[structures.AuthenticodeSignedData]:
         """Returns an iterator over :class:`AuthenticodeSignedData` objects relevant for
         this PE file. See :meth:`iter_signed_datas`
         """
 
         yield from self.iter_signed_datas()
 
-    def iter_signed_datas(self, include_nested=True):
+    def iter_signed_datas(self, include_nested: bool = True) -> Iterator[structures.AuthenticodeSignedData]:
         """Returns an iterator over :class:`AuthenticodeSignedData` objects relevant for this PE file.
 
         :param include_nested: Boolean, if True, will also iterate over all nested SignedData structures
@@ -219,9 +240,9 @@ class SignedPEFile(object):
         :return: iterator of signify.authenticode.SignedData
         """
 
-        from signify.authenticode.structures import AuthenticodeSignedData
-
-        def recursive_nested(signed_data):
+        def recursive_nested(
+            signed_data: structures.AuthenticodeSignedData,
+        ) -> Iterator[structures.AuthenticodeSignedData]:
             yield signed_data
             if include_nested:
                 for nested in signed_data.signer_info.nested_signed_datas:
@@ -229,18 +250,23 @@ class SignedPEFile(object):
 
         found = False
         for certificate in self._parse_cert_table():
-            if certificate['revision'] != 0x200:
-                raise SignedPEParseError("Unknown certificate revision %x" % certificate['revision'])
+            if certificate["revision"] != 0x200:
+                raise SignedPEParseError(f"Unknown certificate revision {certificate['revision']!r}")
 
-            if certificate['type'] == 2:
-                yield from recursive_nested(AuthenticodeSignedData.from_envelope(certificate['certificate'],
-                                                                                 pefile=self))
+            if certificate["type"] == 2:
+                yield from recursive_nested(
+                    structures.AuthenticodeSignedData.from_envelope(certificate["certificate"], pefile=self)
+                )
                 found = True
 
         if not found:
             raise SignedPEParseError("A SignedData structure was not found in the PE file's Certificate Table")
 
-    def _calculate_expected_hashes(self, signed_datas, expected_hashes=None):
+    def _calculate_expected_hashes(
+        self,
+        signed_datas: Iterable[structures.AuthenticodeSignedData],
+        expected_hashes: dict[str, bytes] | None = None,
+    ) -> dict[str, bytes]:
         """Calculates the expected hashes that are needed for verification. This provides a small speed-up
         by pre-calculating all hashes, so that not each individual SignerInfo object is responsible for calculating
         their own hash.
@@ -259,18 +285,24 @@ class SignedPEFile(object):
             digest_algorithms.add(signed_data.digest_algorithm)
 
         # Calculate which hashes are needed
-        provided_hashes = {hashlib.new(t) for t in expected_hashes}
+        provided_hashes = {getattr(hashlib, t) for t in expected_hashes}
         needed_hashes = digest_algorithms - provided_hashes
 
         # Calculate the needed hashes
         if needed_hashes:
             fingerprinter = self.get_fingerprinter()
             fingerprinter.add_authenticode_hashers(*needed_hashes)
-            expected_hashes.update(fingerprinter.hashes()['authentihash'])
+            expected_hashes.update(fingerprinter.hashes()["authentihash"])
 
         return expected_hashes
 
-    def verify(self, *, multi_verify_mode='any', expected_hashes=None, **kwargs):
+    def verify(
+        self,
+        *,
+        multi_verify_mode: Literal["any", "first", "all", "best"] = "any",
+        expected_hashes: dict[str, bytes] | None = None,
+        **kwargs: Any,
+    ) -> bool:
         """Verifies the SignedData structures. This is a little bit more efficient than calling all verify-methods
         separately.
 
@@ -299,13 +331,12 @@ class SignedPEFile(object):
             raise AuthenticodeNotSignedError("No valid SignedData structure was found.")
 
         # only consider the first signed_data; by selecting it here we prevent calculating more hashes than needed
-        if multi_verify_mode == 'first':
+        if multi_verify_mode == "first":
             signed_datas = [signed_datas[0]]
-        elif multi_verify_mode == 'best':
+        elif multi_verify_mode == "best":
             # ACCEPTED_DIGEST_ALGORITHMS contains the algorithms in worst to best order
             best_algorithm = max(
-                (sd.digest_algorithm for sd in signed_datas),
-                key=lambda alg: ACCEPTED_DIGEST_ALGORITHMS.index(alg)
+                (sd.digest_algorithm for sd in signed_datas), key=lambda alg: ACCEPTED_DIGEST_ALGORITHMS.index(alg)
             )
             signed_datas = [sd for sd in signed_datas if sd.digest_algorithm == best_algorithm]
 
@@ -320,17 +351,19 @@ class SignedPEFile(object):
             except Exception as e:
                 # best and any are interpreted as any; first doesn't matter either way, but raising where it is raised
                 # is a little bit clearer
-                if multi_verify_mode in ('all', 'first'):
+                if multi_verify_mode in ("all", "first"):
                     raise
                 last_error = e
             else:
-                if multi_verify_mode not in ('all', 'first'):
+                if multi_verify_mode not in ("all", "first"):
                     return True
         if last_error is None:
             return True
         raise last_error
 
-    def explain_verify(self, *args, **kwargs):
+    def explain_verify(
+        self, *args: Any, **kwargs: Any
+    ) -> tuple[structures.AuthenticodeVerificationResult, Exception | None]:
         """This will return a value indicating the signature status of this PE file. This will not raise an error
         when the verification fails, but rather indicate this through the resulting enum
 
@@ -339,4 +372,4 @@ class SignedPEFile(object):
             more details (if available or None)
         """
 
-        return AuthenticodeVerificationResult.call(self.verify, *args, **kwargs)
+        return structures.AuthenticodeVerificationResult.call(self.verify, *args, **kwargs)

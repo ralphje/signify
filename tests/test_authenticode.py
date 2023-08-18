@@ -102,6 +102,12 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             pefile = SignedPEFile(f)
             pefile.verify(trusted_certificate_store=TRUSTED_CERTIFICATE_STORE_NO_CTL)
 
+    def test_provide_hash(self):
+        with open(str(root_dir / "test_data" / "0d8c2bcb575378f6a88d17b5f6ce70e794a264cdc8556c8e812f0b5f9c709198"), "rb") as f:
+            pefile = SignedPEFile(f)
+            with self.assertRaises(VerificationError):
+                pefile.verify(trusted_certificate_store=TRUSTED_CERTIFICATE_STORE_NO_CTL, expected_hashes={"sha1": b"asdf"})
+
     def test_19e8_expired(self):
         """this is an expired sample"""
         with open(str(root_dir / "test_data" / "19e818d0da361c4feedd456fca63d68d4b024fbbd3d9265f606076c7ee72e8f8.ViR"), "rb") as f:

@@ -18,6 +18,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
+from typing import cast
+
 """Authenticode-specific ASN.1 data structures."""
 
 from pyasn1.type import char
@@ -27,30 +31,30 @@ from pyasn1.type import univ
 from pyasn1_modules import rfc2459, rfc2315
 
 
-class SpcAttributeTypeAndOptionalValue(univ.Sequence):
+class SpcAttributeTypeAndOptionalValue(univ.Sequence):  # type: ignore[misc]
     componentType = namedtype.NamedTypes(
         namedtype.NamedType('type', rfc2459.AttributeType()),
         namedtype.OptionalNamedType('value', rfc2459.AttributeValue())
     )
 
 
-class SpcIndirectDataContent(univ.Sequence):
+class SpcIndirectDataContent(univ.Sequence):  # type: ignore[misc]
     componentType = namedtype.NamedTypes(
         namedtype.NamedType('data', SpcAttributeTypeAndOptionalValue()),
         namedtype.NamedType('messageDigest', rfc2315.DigestInfo()))
 
 
-class SpcUuid(univ.OctetString):
+class SpcUuid(univ.OctetString):  # type: ignore[misc]
     pass
 
 
-class SpcSerializedObject(univ.Sequence):
+class SpcSerializedObject(univ.Sequence):  # type: ignore[misc]
     componentType = namedtype.NamedTypes(
         namedtype.NamedType('classId', SpcUuid()),
         namedtype.NamedType('serializedData', univ.OctetString()))
 
 
-class SpcString(univ.Choice):
+class SpcString(univ.Choice):  # type: ignore[misc]
     componentType = namedtype.NamedTypes(
         namedtype.NamedType('unicode', char.BMPString().subtype(
             implicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatConstructed, 0)
@@ -60,14 +64,15 @@ class SpcString(univ.Choice):
         ))
     )
 
-    def to_python(self):
+    def to_python(self) -> str | None:
         if 'unicode' in self:
             return str(self['unicode'])
         elif 'ascii' in self:
             return str(self['ascii'])
+        return None
 
 
-class SpcLink(univ.Choice):
+class SpcLink(univ.Choice):  # type: ignore[misc]
     """According to Authenticode specification."""
     componentType = namedtype.NamedTypes(
         namedtype.NamedType('url', char.IA5String().subtype(
@@ -81,16 +86,18 @@ class SpcLink(univ.Choice):
         ))
     )
 
-    def to_python(self):
+    def to_python(self) -> str | None:
         if 'url' in self:
             return str(self['url'])
         elif 'moniker' in self:
             return None  # TODO
         elif 'file' in self:
-            return self['file'].to_python()
+            return cast(SpcString, self['file']).to_python()
+        else:
+            return None
 
 
-class SpcSpOpusInfo(univ.Sequence):
+class SpcSpOpusInfo(univ.Sequence):  # type: ignore[misc]
     componentType = namedtype.NamedTypes(
         namedtype.OptionalNamedType('programName', SpcString().subtype(
             explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatConstructed, 0)
@@ -101,13 +108,13 @@ class SpcSpOpusInfo(univ.Sequence):
     )
 
 
-class SpcStatementType(univ.Sequence):
+class SpcStatementType(univ.Sequence):  # type: ignore[misc]
     componentType = univ.ObjectIdentifier()
 
 
-class SpcRfc3161Timestamp(rfc2315.ContentInfo):
+class SpcRfc3161Timestamp(rfc2315.ContentInfo):  # type: ignore[misc]
     pass
 
 
-class SpcNestedSignature(rfc2315.ContentInfo):
+class SpcNestedSignature(rfc2315.ContentInfo):  # type: ignore[misc]
     pass
