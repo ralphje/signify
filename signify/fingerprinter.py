@@ -42,13 +42,16 @@ Range = collections.namedtuple("Range", "start end")
 class Finger:
     """A Finger defines how to hash a file to get specific fingerprints.
 
-    The Finger contains one or more hash functions, a set of ranges in the file that are to be processed with these
-    hash functions, and a description.
+    The Finger contains one or more hash functions, a set of ranges in the file that
+    are to be processed with these hash functions, and a description.
 
-    While one Finger provides potentially multiple hashers, they all get fed the same ranges of the file.
+    While one Finger provides potentially multiple hashers, they all get fed the
+    same ranges of the file.
     """
 
-    def __init__(self, hashers: list[hashlib._Hash], ranges: list[Range], description: str):
+    def __init__(
+        self, hashers: list[hashlib._Hash], ranges: list[Range], description: str
+    ):
         """
 
         :param hashers: A list of hashers to feed.
@@ -70,15 +73,18 @@ class Finger:
     def consume(self, start: int, end: int) -> None:
         """Consumes an entire range, or part thereof.
 
-        If the finger has no ranges left, or the current range start is higher than the end of the consumed block,
-        nothing happens. Otherwise, the current range is adjusted for the consumed block, or removed, if the entire
-        block is consumed. For things to work, the consumed range and the current finger starts must be equal, and the
-        length of the consumed range may not exceed the length of the current range.
+        If the finger has no ranges left, or the current range start is higher than
+        the end of the consumed block, nothing happens. Otherwise, the current range is
+        adjusted for the consumed block, or removed, if the entire block is consumed.
+        For things to work, the consumed range and the current finger starts must be
+        equal, and the length of the consumed range may not exceed the length of the
+        current range.
 
         :param start: Beginning of range to be consumed.
         :param end: First offset after the consumed range (end + 1).
-        :raises RuntimeError: if the start position of the consumed range is higher than the start of the current range
-                              in the finger, or if the consumed range cuts across block boundaries.
+        :raises RuntimeError: if the start position of the consumed range is higher
+            than the start of the current range in the finger, or if the consumed
+            range cuts across block boundaries.
         """
 
         old = self.current_range
@@ -109,8 +115,9 @@ class Fingerprinter:
     def __init__(self, file_obj: BinaryIO, block_size: int = 1000000):
         """A Fingerprinter is an interface to generate hashes of (parts) of a file.
 
-        It is passed in a file object and given a set of :class:`Finger` s that define how a file must be hashed. It is
-        a generic approach to not hashing parts of a file.
+        It is passed in a file object and given a set of :class:`Finger` s that define
+        how a file must be hashed. It is a generic approach to not hashing parts of a
+        file.
 
         :param file_obj: A file opened in bytes-mode
         :param block_size: The block size used to feed to the hashers.
@@ -125,14 +132,19 @@ class Fingerprinter:
         self._fingers: list[Finger] = []
 
     def add_hashers(
-        self, *hashers: HashFunction, ranges: list[Range] | None = None, description: str = "generic"
+        self,
+        *hashers: HashFunction,
+        ranges: list[Range] | None = None,
+        description: str = "generic",
     ) -> None:
         """Add hash methods to the fingerprinter.
 
-        :param hashers: A list of hashers to add to the Fingerprinter. This generally will be hashlib functions.
-        :param ranges: A list of Range objects that the hashers should hash. If set to :const:`None`, it is set to the
-                       entire file.
-        :param description: The name for the hashers. This name will return in :meth:`hashes`
+        :param hashers: A list of hashers to add to the Fingerprinter. This generally
+            will be hashlib functions.
+        :param ranges: A list of Range objects that the hashers should hash. If set
+            to :const:`None`, it is set to the entire file.
+        :param description: The name for the hashers. This name will return in
+            :meth:`hashes`
         """
         concrete_hashers = [x() for x in hashers]
         if not ranges:
@@ -149,8 +161,7 @@ class Fingerprinter:
         lowest uninterrupted range of interest. If the range is larger than
         self.block_size, truncate it.
 
-        Returns:
-          Next range of interest in a Range namedtuple.
+        :returns: Next range of interest in a Range namedtuple.
         """
         starts = set([x.current_range.start for x in self._fingers if x.current_range])
         ends = set([x.current_range.end for x in self._fingers if x.current_range])
@@ -177,13 +188,10 @@ class Fingerprinter:
         Start and end are used to validate the expected ranges, to catch
         unexpected use of that logic.
 
-        Args:
-          block: The data block.
-          start: Beginning offset of this block.
-          end: Offset of the next byte after the block.
-
-        Raises:
-          RuntimeError: If the provided and expected ranges don't match.
+        :param block: The data block.
+        :param start: Beginning offset of this block.
+        :param offset: Offset of the next byte after the block.
+        :raises RuntimeError: If the provided and expected ranges don't match.
         """
         for finger in self._fingers:
             expected_range = finger.current_range
@@ -205,13 +213,15 @@ class Fingerprinter:
     def hashes(self) -> dict[str, dict[str, bytes]]:
         """Finalizing function for the Fingerprint class.
 
-        This method applies all the different hash functions over the previously specified different ranges of the
-        input file, and computes the resulting hashes.
+        This method applies all the different hash functions over the previously
+        specified different ranges of the input file, and computes the resulting hashes.
 
-        After calling this function, the state of the object is reset to its  initial state, with no fingers defined.
+        After calling this function, the state of the object is reset to its  initial
+        state, with no fingers defined.
 
-        :returns: A dict of dicts, the outer dict being a mapping of the description (as set in :meth:`add_hashers`
-                  and the inner dict being a mapping of hasher name to digest.
+        :returns: A dict of dicts, the outer dict being a mapping of the description
+            (as set in :meth:`add_hashers` and the inner dict being a mapping of hasher
+            name to digest.
         :raises RuntimeError: when internal inconsistencies occur.
         """
         while True:
@@ -229,7 +239,9 @@ class Fingerprinter:
         for finger in self._fingers:
             leftover = finger.current_range
             if leftover and (
-                len(finger._ranges) > 1 or leftover.start != self._filelength or leftover.end != self._filelength
+                len(finger._ranges) > 1
+                or leftover.start != self._filelength
+                or leftover.end != self._filelength
             ):
                 raise RuntimeError("Non-empty range remains.")
 
@@ -243,9 +255,11 @@ class Fingerprinter:
         return results
 
     def hash(self) -> dict[str, bytes]:
-        """Very similar to :meth:`hashes`, but only returns a single dict of hash names to digests.
+        """Very similar to :meth:`hashes`, but only returns a single dict of hash names
+        to digests.
 
-        This method can only be called when the :meth:`add_hashers` method was called exactly once.
+        This method can only be called when the :meth:`add_hashers` method was called
+        exactly once.
         """
         hashes = self.hashes()
         if len(hashes) != 1:
@@ -255,11 +269,13 @@ class Fingerprinter:
 
 
 class AuthenticodeFingerprinter(Fingerprinter):
-    """An extension of the :class:`Fingerprinter` class that enables the calculation of authentihashes of PE Files."""
+    """An extension of the :class:`Fingerprinter` class that enables the calculation of
+    authentihashes of PE Files.
+    """
 
     def add_authenticode_hashers(self, *hashers: HashFunction) -> bool:
-        """Specialized method of :meth:`add_hashers` to add hashers with ranges limited to those that are needed to
-        calculate the hash of signed PE Files.
+        """Specialized method of :meth:`add_hashers` to add hashers with ranges limited
+        to those that are needed to calculate the hash of signed PE Files.
         """
 
         pefile = signed_pe.SignedPEFile(self.file)
@@ -284,8 +300,12 @@ def main(*filenames: str) -> None:
         print("{}:".format(filename))
         with open(filename, "rb") as file_obj:
             fingerprinter = AuthenticodeFingerprinter(file_obj)
-            fingerprinter.add_hashers(hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha512)
-            fingerprinter.add_authenticode_hashers(hashlib.md5, hashlib.sha1, hashlib.sha256)
+            fingerprinter.add_hashers(
+                hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha512
+            )
+            fingerprinter.add_authenticode_hashers(
+                hashlib.md5, hashlib.sha1, hashlib.sha256
+            )
             results = fingerprinter.hashes()
 
             for description, result in sorted(results.items()):
@@ -294,7 +314,11 @@ def main(*filenames: str) -> None:
                 for k, v in sorted(result.items()):
                     if k == "_":
                         continue
-                    print("    {k:<10}: {v}".format(k=k, v=binascii.hexlify(v).decode("ascii")))
+                    print(
+                        "    {k:<10}: {v}".format(
+                            k=k, v=binascii.hexlify(v).decode("ascii")
+                        )
+                    )
 
 
 if __name__ == "__main__":

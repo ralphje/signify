@@ -32,7 +32,9 @@ def guarded_ber_decode(data: Any, asn1_spec: _T | None = None) -> Asn1Type | _T:
     except Exception as e:
         raise ParseError("Error while parsing %s BER: %s" % (_print_type(asn1_spec), e))
     if rest:
-        raise ParseError("Extra information after parsing %s BER" % _print_type(asn1_spec))
+        raise ParseError(
+            "Extra information after parsing %s BER" % _print_type(asn1_spec)
+        )
     return result
 
 
@@ -56,5 +58,7 @@ def guarded_der_decode(data: Any, asn1_spec: _T | None = None) -> Asn1Type | _T:
     except Exception as e:
         raise ParseError("Error while parsing %s DER: %s" % (_print_type(asn1_spec), e))
     if rest:
-        raise ParseError("Extra information after parsing %s DER" % _print_type(asn1_spec))
+        raise ParseError(
+            "Extra information after parsing %s DER" % _print_type(asn1_spec)
+        )
     return result

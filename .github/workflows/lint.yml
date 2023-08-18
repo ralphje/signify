@@ -48,3 +48,13 @@ jobs:
         with:
           linters: mypy
           run: mypy
+
+  black:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: psf/black@stable
+        with:
+          options: "--check --verbose"
+          src: "./signify"
+          version: "~= 23.7"

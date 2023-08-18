@@ -8,7 +8,7 @@ def _print_type(t: Any) -> str:
         return ""
     elif isinstance(t, tuple):
         return ".".join(map(str, t))
-    elif callable(t) and hasattr(t(), 'name'):
+    elif callable(t) and hasattr(t(), "name"):
         return cast(str, t().name)  # used by hashlib
     elif hasattr(t, "__name__"):
         return cast(str, t.__name__)

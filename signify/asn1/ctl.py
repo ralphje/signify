@@ -6,9 +6,7 @@ from pyasn1_modules import rfc5280, rfc2315
 
 
 class CTLVersion(univ.Integer):  # type: ignore[misc]
-    namedValues = namedval.NamedValues(
-        ('v1', 0)
-    )
+    namedValues = namedval.NamedValues(("v1", 0))
 
 
 class SubjectUsage(rfc5280.ExtKeyUsageSyntax):  # type: ignore[misc]
@@ -25,8 +23,8 @@ class SubjectIdentifier(univ.OctetString):  # type: ignore[misc]
 
 class TrustedSubject(univ.Sequence):  # type: ignore[misc]
     componentType = namedtype.NamedTypes(
-        namedtype.NamedType('subjectIdentifier', SubjectIdentifier()),
-        namedtype.OptionalNamedType('subjectAttributes', rfc2315.Attributes()),
+        namedtype.NamedType("subjectIdentifier", SubjectIdentifier()),
+        namedtype.OptionalNamedType("subjectAttributes", rfc2315.Attributes()),
     )
 
 
@@ -36,16 +34,20 @@ class TrustedSubjects(univ.SequenceOf):  # type: ignore[misc]
 
 class CertificateTrustList(univ.Sequence):  # type: ignore[misc]
     componentType = namedtype.NamedTypes(
-        namedtype.DefaultedNamedType('version', CTLVersion('v1')),
-        namedtype.NamedType('subjectUsage', SubjectUsage()),
-        namedtype.OptionalNamedType('listIdentifier', ListIdentifier()),
-        namedtype.OptionalNamedType('sequenceNumber', univ.Integer()),
-        namedtype.NamedType('ctlThisUpdate', rfc5280.Time()),
-        namedtype.OptionalNamedType('ctlNextUpdate', rfc5280.Time()),
-        namedtype.NamedType('subjectAlgorithm', rfc5280.AlgorithmIdentifier()),
-        namedtype.OptionalNamedType('trustedSubjects', TrustedSubjects()),
-        namedtype.OptionalNamedType('ctlExtensions', rfc5280.Extensions().subtype(
-            explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 0)))
+        namedtype.DefaultedNamedType("version", CTLVersion("v1")),
+        namedtype.NamedType("subjectUsage", SubjectUsage()),
+        namedtype.OptionalNamedType("listIdentifier", ListIdentifier()),
+        namedtype.OptionalNamedType("sequenceNumber", univ.Integer()),
+        namedtype.NamedType("ctlThisUpdate", rfc5280.Time()),
+        namedtype.OptionalNamedType("ctlNextUpdate", rfc5280.Time()),
+        namedtype.NamedType("subjectAlgorithm", rfc5280.AlgorithmIdentifier()),
+        namedtype.OptionalNamedType("trustedSubjects", TrustedSubjects()),
+        namedtype.OptionalNamedType(
+            "ctlExtensions",
+            rfc5280.Extensions().subtype(
+                explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 0)
+            ),
+        ),
     )
 
 
