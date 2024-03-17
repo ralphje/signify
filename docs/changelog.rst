@@ -2,11 +2,13 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
-unreleased
-----------
-* Drop support for Python 3.7, as it is end-of-life since June 2023. The minimum required version is now 3.8.
+v0.6.0 (unreleased)
+-------------------
+* Drop support for Python 3.7, as it is end-of-life since June 2023. The minimum required version is now 3.8. Added
+  support for Python 3.12.
 * Changed some arguments of some methods to keyword-only arguments. This is a backwards-incompatible change.
 
+* Fix support for pyasn1 v0.5.1 and later
 * Added full typing support, with full and complete type annotations.
 * Added ``multi_verify_mode`` as argument to ``SignedPEFile.verify``. This allows you to specify how you'd like to
   handle the case of multiple signatures in the PE file, but not all signatures validate. The Windows default seems to
