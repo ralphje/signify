@@ -371,12 +371,12 @@ class CertificateName:
         return tuple(self.get_components())
 
     @overload
-    def get_components(self, component_type: None = None) -> Iterator[tuple[str, str]]:
-        ...
+    def get_components(
+        self, component_type: None = None
+    ) -> Iterator[tuple[str, str]]: ...
 
     @overload
-    def get_components(self, component_type: str | OidTuple) -> Iterator[str]:
-        ...
+    def get_components(self, component_type: str | OidTuple) -> Iterator[str]: ...
 
     def get_components(
         self, component_type: str | OidTuple | None = None

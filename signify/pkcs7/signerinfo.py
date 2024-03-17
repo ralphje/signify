@@ -289,9 +289,9 @@ class SignerInfo:
     @classmethod
     def _parse_attributes(
         cls,
-        data: rfc2315.Attributes
-        | rfc5652.SignedAttributes
-        | rfc5652.UnsignedAttributes,
+        data: (
+            rfc2315.Attributes | rfc5652.SignedAttributes | rfc5652.UnsignedAttributes
+        ),
         required: Iterable[univ.ObjectIdentifier] = (),
     ) -> dict[OidTuple | type[Asn1Type], list[Any]]:
         """Given a set of Attributes, parses them and returns them as a dict
@@ -327,9 +327,9 @@ class SignerInfo:
     @classmethod
     def _encode_attributes(
         cls,
-        data: rfc2315.Attributes
-        | rfc5652.SignedAttributes
-        | rfc5652.UnsignedAttributes,
+        data: (
+            rfc2315.Attributes | rfc5652.SignedAttributes | rfc5652.UnsignedAttributes
+        ),
     ) -> bytes:
         """Given a set of Attributes, prepares them for creating a digest. It used to
         sort them by their DER encoded values, now it is mostly a method to preserve

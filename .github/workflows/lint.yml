@@ -37,7 +37,7 @@ jobs:
         with:
           options: "--check --verbose"
           src: "./signify"
-          version: "~= 23.7"
+          version: "~= 24.3"
 
   ruff:
     runs-on: ubuntu-latest

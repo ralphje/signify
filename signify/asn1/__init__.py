@@ -13,13 +13,11 @@ _T = TypeVar("_T", bound=Asn1Type)
 
 
 @overload
-def guarded_ber_decode(data: Any, asn1_spec: _T) -> _T:
-    ...
+def guarded_ber_decode(data: Any, asn1_spec: _T) -> _T: ...
 
 
 @overload
-def guarded_ber_decode(data: Any, asn1_spec: None = None) -> Asn1Type:
-    ...
+def guarded_ber_decode(data: Any, asn1_spec: None = None) -> Asn1Type: ...
 
 
 def guarded_ber_decode(data: Any, asn1_spec: _T | None = None) -> Asn1Type | _T:
@@ -40,13 +38,11 @@ def guarded_ber_decode(data: Any, asn1_spec: _T | None = None) -> Asn1Type | _T:
 
 
 @overload
-def guarded_der_decode(data: Any, asn1_spec: _T) -> _T:
-    ...
+def guarded_der_decode(data: Any, asn1_spec: _T) -> _T: ...
 
 
 @overload
-def guarded_der_decode(data: Any, asn1_spec: None = None) -> Asn1Type:
-    ...
+def guarded_der_decode(data: Any, asn1_spec: None = None) -> Asn1Type: ...
 
 
 def guarded_der_decode(data: Any, asn1_spec: _T | None = None) -> Asn1Type | _T:

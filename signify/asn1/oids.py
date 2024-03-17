@@ -103,13 +103,11 @@ _V = TypeVar("_V")
 
 
 @overload
-def get(key: OidTuple, oids: None = None) -> type[Asn1Type] | OidTuple:
-    ...
+def get(key: OidTuple, oids: None = None) -> type[Asn1Type] | OidTuple: ...
 
 
 @overload
-def get(key: OidTuple, oids: dict[OidTuple, _V]) -> _V | OidTuple:
-    ...
+def get(key: OidTuple, oids: dict[OidTuple, _V]) -> _V | OidTuple: ...
 
 
 def get(key: OidTuple, oids: dict[OidTuple, _V] | None = None) -> _V | OidTuple:
