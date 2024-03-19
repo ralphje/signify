@@ -40,7 +40,7 @@ setup(
         "oscrypto>=1.1,<2",
         "pyasn1-modules>=0.2.8",
         "mscerts",
-        "typing_extensions",
+        "typing_extensions>=4.6.0",
     ],
     keywords=["authenticode", "authentihash", "fingerprinter", "pe"],
     classifiers=[
