@@ -2,6 +2,10 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
+v0.6.1 (2024-03-21)
+-------------------
+* Require at least version v4.6.0 for requirement ``typing_extensions`` to ensure compatibility.
+
 v0.6.0 (2024-03-17)
 -------------------
 * Drop support for Python 3.7, as it is end-of-life since June 2023. The minimum required version is now 3.8.

@@ -1,6 +1,6 @@
 from typing import Any, cast
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 
 
 def _print_type(t: Any) -> str:
