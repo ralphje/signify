@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import datetime
-from typing import Iterator, cast
+from typing import Iterator, cast, Any
 
 from pyasn1.type.useful import GeneralizedTime, UTCTime
 from pyasn1_modules import rfc3161, rfc5652
@@ -31,6 +31,21 @@ def accuracy_to_python(accuracy: rfc3161.Accuracy) -> datetime.timedelta:
 def bitstring_to_bytes(s: str) -> bytes:
     # based on https://stackoverflow.com/questions/32675679/convert-binary-string-to-bytearray-in-python-3
     return int(str(s), 2).to_bytes((len(s) + 7) // 8, byteorder="big")
+
+
+def x520_name_to_string(name: Any) -> str:
+    if "teletexString" in name:
+        return str(name["teletexString"])
+    elif "printableString" in name:
+        return str(name["printableString"])
+    elif "universalString" in name:
+        return str(name["universalString"])
+    elif "utf8String" in name:
+        return str(name["utf8String"])
+    elif "bmpString" in name:
+        return str(name["bmpString"])
+    else:
+        return str(name)
 
 
 @contextlib.contextmanager

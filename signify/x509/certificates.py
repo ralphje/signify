@@ -19,7 +19,7 @@ from pyasn1_modules import rfc2315, rfc5280, rfc5652
 from signify import asn1, x509
 from signify._typing import HashFunction, OidTuple
 from signify.asn1 import oids
-from signify.asn1.helpers import bitstring_to_bytes, time_to_python
+from signify.asn1.helpers import bitstring_to_bytes, time_to_python, x520_name_to_string
 from signify.exceptions import CertificateVerificationError
 
 logger = logging.getLogger(__name__)
@@ -392,7 +392,18 @@ class CertificateName:
             type = oids.OID_TO_RDN.get(
                 type_value["type"], ".".join(map(str, type_value["type"]))
             )
-            value = str(ber_decoder.decode(type_value["value"])[0])
+            if isinstance(
+                type_value["value"],
+                (
+                    bytes,
+                    rfc2315.AttributeValue,
+                    rfc5280.AttributeValue,
+                    rfc5652.AttributeValue,
+                ),
+            ):
+                value = str(ber_decoder.decode(type_value["value"])[0])
+            else:
+                value = x520_name_to_string(type_value["value"])
 
             if component_type is not None:
                 if component_type in (
