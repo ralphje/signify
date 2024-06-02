@@ -20,34 +20,7 @@
 
 import unittest
 
-import datetime
-from pyasn1.type import useful, univ
-from pyasn1_modules.rfc5652 import Time
-
-from signify.asn1 import guarded_ber_decode
-from signify.asn1.helpers import time_to_python
 from signify.authenticode import TRUSTED_CERTIFICATE_STORE
-from signify.exceptions import ParseError
-
-
-class TimeTest(unittest.TestCase):
-    def test_conversion_utc(self):
-        utctime = useful.UTCTime("120614235959Z")
-        t = Time()
-        t["utcTime"] = utctime
-        self.assertEqual(
-            time_to_python(t),
-            datetime.datetime(2012, 6, 14, 23, 59, 59, tzinfo=datetime.timezone.utc),
-        )
-
-    def test_conversion_gen(self):
-        gen_time = useful.GeneralizedTime("20120614235959Z")
-        t = Time()
-        t["generalTime"] = gen_time
-        self.assertEqual(
-            time_to_python(t),
-            datetime.datetime(2012, 6, 14, 23, 59, 59, tzinfo=datetime.timezone.utc),
-        )
 
 
 class RDNSequenceTest(unittest.TestCase):
@@ -113,18 +86,3 @@ class RDNSequenceTest(unittest.TestCase):
                 ("O", "VeriSign Trust Network"),
             ),
         )
-
-
-class GuardedBerDecodeTest(unittest.TestCase):
-    def test_normal_read(self):
-        self.assertTrue(guarded_ber_decode(univ.Any("\x01\x01\xff")))  # true
-        self.assertFalse(guarded_ber_decode(univ.Any("\x01\x01\x00")))  # false
-        self.assertIsInstance(
-            guarded_ber_decode(univ.Any("\x05\x00")), univ.Null
-        )  # null
-
-    def test_extra_read(self):
-        self.assertRaises(ParseError, guarded_ber_decode, univ.Any("\x05\x00\x01"))
-
-    def test_read_error(self):
-        self.assertRaises(ParseError, guarded_ber_decode, univ.Any("\x05"))

@@ -1,5 +1,5 @@
-import unittest
 import pathlib
+import unittest
 
 from signify.authenticode.authroot import CertificateTrustList
 

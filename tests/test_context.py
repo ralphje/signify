@@ -6,10 +6,10 @@ from signify.authenticode import (
     TRUSTED_CERTIFICATE_STORE,
     TRUSTED_CERTIFICATE_STORE_NO_CTL,
 )
-from signify.x509.certificates import Certificate
-from signify.x509.context import VerificationContext, FileSystemCertificateStore
-from signify.exceptions import VerificationError
 from signify.authenticode.signed_pe import SignedPEFile
+from signify.exceptions import VerificationError
+from signify.x509.certificates import Certificate
+from signify.x509.context import FileSystemCertificateStore, VerificationContext
 
 root_dir = pathlib.Path(__file__).parent
 

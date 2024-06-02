@@ -30,7 +30,7 @@ def main():
     for filename in pathlib.Path("tests/test_data").iterdir():
         if str(filename).endswith(".res") or str(filename).endswith(".rst"):
             continue
-        print("Updating {}...".format(filename))
+        print(f"Updating {filename}...")
         with open(str(filename), "rb") as file_obj:
             fingerprinter = AuthenticodeFingerprinter(file_obj)
             fingerprinter.add_hashers(

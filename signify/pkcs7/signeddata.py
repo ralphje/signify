@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any, Sequence, cast
 
-from pyasn1.codec.ber import decoder as ber_decoder
-from pyasn1.type import univ
-from pyasn1.type.base import Asn1Type
-from pyasn1_modules import rfc2315, rfc5652
+from asn1crypto import cms
+from asn1crypto.core import Asn1Value
 from typing_extensions import Self
 
-from signify import _print_type, asn1
-from signify._typing import HashFunction, OidTuple
-from signify.asn1 import guarded_ber_decode
+from signify._typing import HashFunction
 from signify.asn1.hashing import _get_digest_algorithm
 from signify.exceptions import ParseError
 from signify.pkcs7 import signerinfo
@@ -64,17 +60,17 @@ class SignedData:
        A list of all included SignerInfo objects
     """
 
-    data: rfc2315.SignedData | rfc5652.SignedData
+    data: cms.SignedData
     digest_algorithm: HashFunction
-    content_type: type[Asn1Type] | OidTuple
-    content: univ.Sequence
+    content_type: str
+    content: Asn1Value
     certificates: CertificateStore
     signer_infos: Sequence[signerinfo.SignerInfo]
 
-    _expected_content_type: type[univ.Sequence] | None = None
+    _expected_content_type: str | None = None
     _signerinfo_class: type[signerinfo.SignerInfo] | str | None = None
 
-    def __init__(self, data: rfc2315.SignedData | rfc5652.SignedData):
+    def __init__(self, data: cms.SignedData):
         """
 
         :param data: The ASN.1 structure of the SignedData object
@@ -92,57 +88,49 @@ class SignedData:
 
         :param data: The bytes to parse
         """
-        # This one is not guarded, which is intentional
-        content, rest = ber_decoder.decode(data, asn1Spec=rfc2315.ContentInfo())
-        if asn1.oids.get(content["contentType"]) is not rfc2315.SignedData:
+        content_info = cms.ContentInfo.load(data)
+
+        if content_info["content_type"].native != "signed_data":
             raise ParseError("ContentInfo does not contain SignedData")
 
-        data = guarded_ber_decode(content["content"], asn1_spec=rfc2315.SignedData())
-
-        signed_data = cls(data, *args, **kwargs)
-        signed_data._rest_data = rest  # type: ignore[attr-defined]
+        signed_data = cls(content_info["content"], *args, **kwargs)
         return signed_data
 
     def _parse(self) -> None:
+        #         ('version', CMSVersion),
+        #         ('digest_algorithms', DigestAlgorithms),
+        #         ('encap_content_info', None),
+        #         ('certificates', CertificateSet, {'implicit': 0, 'optional': True}),
+        #         ('crls', RevocationInfoChoices, {'implicit': 1, 'optional': True}),
+        #         ('signer_infos', SignerInfos),
+
         # digestAlgorithms
-        if len(self.data["digestAlgorithms"]) != 1:
+        if len(self.data["digest_algorithms"]) != 1:
             raise ParseError(
-                "SignedData.digestAlgorithms must contain exactly 1 algorithm, not %d"
-                % len(self.data["digestAlgorithms"])
+                f"SignedData.digestAlgorithms must contain"
+                f" exactly 1 algorithm, not {len(self.data['digestAlgorithms'])}"
             )
         self.digest_algorithm = _get_digest_algorithm(
-            self.data["digestAlgorithms"][0], "SignedData.digestAlgorithm"
+            self.data["digest_algorithms"][0], "SignedData.digestAlgorithm"
         )
 
-        # contentType
-        if isinstance(self.data, rfc2315.SignedData):
-            self.content_type = asn1.oids.get(self.data["contentInfo"]["contentType"])
-            content = self.data["contentInfo"]["content"]
-        elif isinstance(self.data, rfc5652.SignedData):
-            self.content_type = asn1.oids.get(
-                self.data["encapContentInfo"]["eContentType"]
-            )
-            content = self.data["encapContentInfo"]["eContent"]
-        else:
-            raise ParseError(f"Unknown SignedData data type {_print_type(self.data)}")
+        self.content_type = self.data["encap_content_info"]["content_type"].native
 
-        if self.content_type is not self._expected_content_type:
+        if self.content_type != self._expected_content_type:
             raise ParseError(
-                "SignedData.contentInfo does not contain %s"
-                % _print_type(self._expected_content_type)
+                f"SignedData.contentInfo contains {self.content_type},"
+                f" expected {self._expected_content_type}"
             )
 
-        # Content
-        self.content = guarded_ber_decode(
-            content, asn1_spec=self._expected_content_type()
-        )
+        self.content = self.data["encap_content_info"]["content"]
 
         # Certificates
         self.certificates = CertificateStore(
             [
                 Certificate(cert)
                 for cert in self.data["certificates"]
-                if Certificate.is_certificate(cert)
+                if not isinstance(cert, cms.CertificateChoices)
+                or cert.name == "certificate"
             ]
         )
 
@@ -151,5 +139,5 @@ class SignedData:
             assert not isinstance(self._signerinfo_class, str)
             self.signer_infos = [
                 self._signerinfo_class(si, parent=self)
-                for si in self.data["signerInfos"]
+                for si in self.data["signer_infos"]
             ]

@@ -3,17 +3,12 @@ from __future__ import annotations
 import datetime
 from typing import Any, Iterable, cast
 
-from pyasn1.type import univ
-from pyasn1.type.base import Asn1Type
-from pyasn1_modules import rfc2315, rfc5652
+from asn1crypto import cms
+from asn1crypto.core import Asn1Value
 from typing_extensions import Literal
 
-from signify import _print_type, asn1
-from signify._typing import HashFunction, OidTuple
-from signify.asn1 import guarded_ber_decode, pkcs7
-from signify.asn1 import preserving_der as preserving_der_encoder
-from signify.asn1.hashing import _get_digest_algorithm, _get_encryption_algorithm
-from signify.asn1.helpers import time_to_python
+from signify._typing import HashFunction
+from signify.asn1.hashing import _get_digest_algorithm
 from signify.exceptions import (
     SignerInfoParseError,
     SignerInfoVerificationError,
@@ -114,27 +109,25 @@ class SignerInfo:
 
     issuer: CertificateName
     serial_number: int
-    authenticated_attributes: dict[OidTuple | type[Asn1Type], list[Any]]
-    unauthenticated_attributes: dict[OidTuple | type[Asn1Type], list[Any]]
+    authenticated_attributes: dict[str, list[Any]]
+    unauthenticated_attributes: dict[str, list[Any]]
     digest_encryption_algorithm: str
     encrypted_digest: bytes
     digest_algorithm: HashFunction
     message_digest: bytes | None
-    content_type: OidTuple | type[Asn1Type] | None
+    content_type: str | None
     signing_time: datetime.datetime | None
     countersigner: CounterSignerInfo | None
 
     _countersigner_class: type[CounterSignerInfo] | str | None = "CounterSignerInfo"
-    _required_authenticated_attributes: Iterable[univ.ObjectIdentifier] = (
-        rfc2315.ContentType,
-        rfc2315.Digest,
+    _required_authenticated_attributes: Iterable[str] = (
+        "content_type",
+        "message_digest",
     )
-    _expected_content_type: type[univ.Sequence] | None = None
+    _expected_content_type: str | None = None
 
     def __init__(
-        self,
-        data: rfc2315.SignerInfo | rfc5652.SignerInfo,
-        parent: signeddata.SignedData | None = None,
+        self, data: cms.SignerInfo, parent: signeddata.SignedData | None = None
     ):
         """
         :param data: The ASN.1 structure of the SignerInfo.
@@ -148,123 +141,85 @@ class SignerInfo:
         self._parse()
 
     def _parse(self) -> None:
-        if self.data["version"] != 1:
+        if self.data["version"].native != "v1":
             raise SignerInfoParseError(
                 "SignerInfo.version must be 1, not %d" % self.data["version"]
             )
 
-        # We can handle several different rfc types here
-        if isinstance(self.data, rfc2315.SignerInfo):
-            self.issuer = CertificateName(
-                self.data["issuerAndSerialNumber"]["issuer"][0]
-            )
-            self.serial_number = self.data["issuerAndSerialNumber"]["serialNumber"]
-
-            self.authenticated_attributes = self._parse_attributes(
-                self.data["authenticatedAttributes"],
-                required=self._required_authenticated_attributes,
-            )
-            self._encoded_authenticated_attributes = self._encode_attributes(
-                self.data["authenticatedAttributes"]
+        if self.data["sid"].name == "subject_key_identifier":
+            raise SignerInfoParseError(
+                "Cannot handle SignerInfo.sid with a subject_key_identifier"
             )
 
-            self.unauthenticated_attributes = self._parse_attributes(
-                self.data["unauthenticatedAttributes"]
-            )
-
-            self.digest_encryption_algorithm = _get_encryption_algorithm(
-                self.data["digestEncryptionAlgorithm"],
-                location="SignerInfo.digestEncryptionAlgorithm",
-            )
-            self.encrypted_digest = bytes(self.data["encryptedDigest"])
-
-        elif isinstance(self.data, rfc5652.SignerInfo):
-            # TODO: handle case where sid contains key identifier
-            self.issuer = CertificateName(
-                self.data["sid"]["issuerAndSerialNumber"]["issuer"][0]
-            )
-            self.serial_number = self.data["sid"]["issuerAndSerialNumber"][
-                "serialNumber"
-            ]
-
-            self.authenticated_attributes = self._parse_attributes(
-                self.data["signedAttrs"],
-                required=self._required_authenticated_attributes,
-            )
-            self._encoded_authenticated_attributes = self._encode_attributes(
-                self.data["signedAttrs"]
-            )
-
-            self.unauthenticated_attributes = self._parse_attributes(
-                self.data["unsignedAttrs"]
-            )
-
-            self.digest_encryption_algorithm = _get_encryption_algorithm(
-                self.data["signatureAlgorithm"],
-                location="SignerInfo.signatureAlgorithm",
-            )
-            self.encrypted_digest = bytes(self.data["signature"])
-
-        else:
-            raise SignerInfoParseError("Unknown SignerInfo type %s" % type(self.data))
-
+        self.issuer = CertificateName(self.data["sid"].chosen["issuer"])
+        self.serial_number = self.data["sid"].chosen["serial_number"].native
+        self.authenticated_attributes = self._parse_attributes(
+            self.data["signed_attrs"],
+            required=self._required_authenticated_attributes,
+        )
+        self._encoded_authenticated_attributes = self._encode_attributes(
+            self.data["signed_attrs"]
+        )
+        self.unauthenticated_attributes = self._parse_attributes(
+            self.data["unsigned_attrs"]
+        )
+        self.digest_encryption_algorithm = self.data["signature_algorithm"][
+            "algorithm"
+        ].native
+        self.encrypted_digest = self.data["signature"].native
         self.digest_algorithm = _get_digest_algorithm(
-            self.data["digestAlgorithm"], location="SignerInfo.digestAlgorithm"
+            self.data["digest_algorithm"], location="SignerInfo.digestAlgorithm"
         )
 
         # Parse the content of the authenticated attributes
         # - The messageDigest
         self.message_digest = None
-        if rfc2315.Digest in self.authenticated_attributes:
-            if len(self.authenticated_attributes[rfc2315.Digest]) != 1:
+        if "message_digest" in self.authenticated_attributes:
+            if len(self.authenticated_attributes["message_digest"]) != 1:
                 raise SignerInfoParseError(
                     "Only one Digest expected in SignerInfo.authenticatedAttributes"
                 )
 
-            self.message_digest = bytes(
-                self.authenticated_attributes[rfc2315.Digest][0]
-            )
+            self.message_digest = self.authenticated_attributes["message_digest"][
+                0
+            ].native
 
         # - The contentType
         self.content_type = None
-        if rfc2315.ContentType in self.authenticated_attributes:
-            if len(self.authenticated_attributes[rfc2315.ContentType]) != 1:
+        if "content_type" in self.authenticated_attributes:
+            if len(self.authenticated_attributes["content_type"]) != 1:
                 raise SignerInfoParseError(
                     "Only one ContentType expected in"
                     " SignerInfo.authenticatedAttributes"
                 )
 
-            self.content_type = asn1.oids.get(
-                self.authenticated_attributes[rfc2315.ContentType][0]
-            )
+            self.content_type = self.authenticated_attributes["content_type"][0].native
 
             if (
                 self._expected_content_type is not None
-                and self.content_type is not self._expected_content_type
+                and self.content_type != self._expected_content_type
             ):
                 raise SignerInfoParseError(
                     "Unexpected content type for SignerInfo, expected"
-                    f" {_print_type(self._expected_content_type)}, got"
-                    f" {_print_type(self.content_type)}"
+                    f" {self._expected_content_type}, got"
+                    f" {self.content_type}"
                 )
 
         # - The signingTime (used by countersigner)
         self.signing_time = None
-        if rfc5652.SigningTime in self.authenticated_attributes:
-            if len(self.authenticated_attributes[rfc5652.SigningTime]) != 1:
+        if "signing_time" in self.authenticated_attributes:
+            if len(self.authenticated_attributes["signing_time"]) != 1:
                 raise SignerInfoParseError(
                     "Only one SigningTime expected in"
                     " SignerInfo.authenticatedAttributes"
                 )
 
-            self.signing_time = time_to_python(
-                self.authenticated_attributes[rfc5652.SigningTime][0]
-            )
+            self.signing_time = self.authenticated_attributes["signing_time"][0].native
 
         # - The countersigner
         self.countersigner = None
-        if pkcs7.Countersignature in self.unauthenticated_attributes:
-            if len(self.unauthenticated_attributes[pkcs7.Countersignature]) != 1:
+        if "counter_signature" in self.unauthenticated_attributes:
+            if len(self.unauthenticated_attributes["counter_signature"]) != 1:
                 raise SignerInfoParseError(
                     "Only one CountersignInfo expected in"
                     " SignerInfo.unauthenticatedAttributes"
@@ -272,9 +227,9 @@ class SignerInfo:
 
             assert self._countersigner_class is not None and not isinstance(
                 self._countersigner_class, str
-            )
+            )  # typing
             self.countersigner = self._countersigner_class(
-                self.unauthenticated_attributes[pkcs7.Countersignature][0]
+                self.unauthenticated_attributes["counter_signature"][0]
             )
 
     def check_message_digest(self, data: bytes) -> bool:
@@ -288,59 +243,35 @@ class SignerInfo:
 
     @classmethod
     def _parse_attributes(
-        cls,
-        data: (
-            rfc2315.Attributes | rfc5652.SignedAttributes | rfc5652.UnsignedAttributes
-        ),
-        required: Iterable[univ.ObjectIdentifier] = (),
-    ) -> dict[OidTuple | type[Asn1Type], list[Any]]:
+        cls, data: cms.CMSAttributes, required: Iterable[str] = ()
+    ) -> dict[str, list[Asn1Value]]:
         """Given a set of Attributes, parses them and returns them as a dict
 
         :param data: The authenticatedAttributes or unauthenticatedAttributes to process
         :param required: A list of required attributes
         """
 
-        if isinstance(data, rfc2315.Attributes):
-            type_key, value_key = "type", "values"
-        elif isinstance(data, (rfc5652.SignedAttributes, rfc5652.UnsignedAttributes)):
-            type_key, value_key = "attrType", "attrValues"
-
-        result: dict[tuple[int, ...] | type[Asn1Type], list[Any]] = {}
-        for attr in data:
-            typ = asn1.oids.get(attr[type_key], asn1.oids.OID_TO_CLASS)
-            values = []
-            for value in attr[value_key]:
-                if not isinstance(typ, tuple):
-                    value = guarded_ber_decode(value, asn1_spec=typ())
-                values.append(value)
-            result[typ] = values
+        result = {attr["type"].native: list(attr["values"]) for attr in data}
 
         if not all(x in result for x in required):
             raise SignerInfoParseError(
                 "Not all required attributes found."
-                f" Required: {[_print_type(x) for x in required]};"
-                f" Found: {[_print_type(x) for x in result]}"
+                f" Required: {required};"
+                f" Found: {result}"
             )
 
         return result
 
     @classmethod
-    def _encode_attributes(
-        cls,
-        data: (
-            rfc2315.Attributes | rfc5652.SignedAttributes | rfc5652.UnsignedAttributes
-        ),
-    ) -> bytes:
-        """Given a set of Attributes, prepares them for creating a digest. It used to
-        sort them by their DER encoded values, now it is mostly a method to preserve
-        the exact order they where in when they were encoded.
+    def _encode_attributes(cls, data: cms.CMSAttributes) -> bytes:
+        """Given a set of Attributes, prepares them for creating a digest. It as per
+        RFC 5652 section 5.2, this changes the tag from implicit to explicit.
 
-        :param data: The authenticatedAttributes or unauthenticatedAttributes to encode
+        :param data: The attributes to encode
         """
-        # sorting may not be necessary, as it is not in the spec
-        new_attrs = type(data)()
-        new_attrs.extend(data)
-        return cast(bytes, preserving_der_encoder.encode(new_attrs))
+
+        new_attrs = type(data)(contents=data.contents)
+        return cast(bytes, new_attrs.dump())
 
     def _verify_issuer(self, issuer: Certificate, context: VerificationContext) -> None:
         """Verifies whether the given issuer is valid for the given context. Similar to
@@ -457,7 +388,7 @@ class CounterSignerInfo(SignerInfo):
     """
 
     _required_authenticated_attributes = (
-        rfc2315.ContentType,
-        rfc5652.SigningTime,
-        rfc2315.Digest,
+        "content_type",
+        "signing_time",
+        "message_digest",
     )

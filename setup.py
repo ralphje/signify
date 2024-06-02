@@ -34,11 +34,9 @@ setup(
     description="Module to generate and verify PE signatures",
     long_description=long_description,
     install_requires=[
-        "pyasn1>=0.4.0,!=0.5.0",
         "certvalidator>=0.11",
         "asn1crypto>=1.3,<2",
         "oscrypto>=1.1,<2",
-        "pyasn1-modules>=0.2.8",
         "mscerts",
         "typing_extensions>=4.6.0",
     ],

@@ -384,7 +384,9 @@ class SignedPEFile:
             # ACCEPTED_DIGEST_ALGORITHMS contains the algorithms in worst to best order
             best_algorithm = max(
                 (sd.digest_algorithm for sd in signed_datas),
-                key=lambda alg: ACCEPTED_DIGEST_ALGORITHMS.index(alg),
+                key=lambda alg: [
+                    getattr(hashlib, alg) for alg in ACCEPTED_DIGEST_ALGORITHMS
+                ].index(alg),
             )
             signed_datas = [
                 sd for sd in signed_datas if sd.digest_algorithm == best_algorithm

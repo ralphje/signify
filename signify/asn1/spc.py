@@ -22,120 +22,94 @@
 
 from __future__ import annotations
 
-from typing import cast
+from asn1crypto.algos import DigestInfo
+from asn1crypto.cms import (
+    CMSAttribute,
+    CMSAttributeType,
+    ContentInfo,
+    ContentType,
+    EncapsulatedContentInfo,
+    SetOfContentInfo,
+)
+from asn1crypto.core import (
+    Any,
+    Asn1Value,
+    BMPString,
+    Choice,
+    IA5String,
+    ObjectIdentifier,
+    OctetString,
+    Sequence,
+    SetOf,
+)
 
-from pyasn1.type import char, namedtype, tag, univ
-from pyasn1_modules import rfc2315, rfc2459
+
+class SpcAttributeType(ObjectIdentifier):  # type: ignore[misc]
+    _map: dict[str, str] = {}
 
 
-class SpcAttributeTypeAndOptionalValue(univ.Sequence):  # type: ignore[misc]
-    componentType = namedtype.NamedTypes(
-        namedtype.NamedType("type", rfc2459.AttributeType()),
-        namedtype.OptionalNamedType("value", rfc2459.AttributeValue()),
-    )
+class SpcAttributeTypeAndOptionalValue(Sequence):  # type: ignore[misc]
+    _fields = [
+        ("type", SpcAttributeType),
+        ("value", Any, {"optional": True}),
+    ]
+
+    _oid_pair = ("type", "value")
+    _oid_specs: dict[str, type[Asn1Value]] = {}
 
 
-class SpcIndirectDataContent(univ.Sequence):  # type: ignore[misc]
-    componentType = namedtype.NamedTypes(
-        namedtype.NamedType("data", SpcAttributeTypeAndOptionalValue()),
-        namedtype.NamedType("messageDigest", rfc2315.DigestInfo()),
-    )
+class SpcIndirectDataContent(Sequence):  # type: ignore[misc]
+    _fields = [
+        ("data", SpcAttributeTypeAndOptionalValue),
+        ("message_digest", DigestInfo),
+    ]
 
 
-class SpcUuid(univ.OctetString):  # type: ignore[misc]
+class SpcUuid(OctetString):  # type: ignore[misc]
     pass
 
 
-class SpcSerializedObject(univ.Sequence):  # type: ignore[misc]
-    componentType = namedtype.NamedTypes(
-        namedtype.NamedType("classId", SpcUuid()),
-        namedtype.NamedType("serializedData", univ.OctetString()),
-    )
+class SpcSerializedObject(Sequence):  # type: ignore[misc]
+    _fields = [
+        ("class_id", SpcUuid),
+        ("serialized_data", OctetString),
+    ]
 
 
-class SpcString(univ.Choice):  # type: ignore[misc]
-    componentType = namedtype.NamedTypes(
-        namedtype.NamedType(
-            "unicode",
-            char.BMPString().subtype(
-                implicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatConstructed, 0)
-            ),
-        ),
-        namedtype.NamedType(
-            "ascii",
-            char.IA5String().subtype(
-                implicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatConstructed, 1)
-            ),
-        ),
-    )
-
-    def to_python(self) -> str | None:
-        if "unicode" in self:
-            return str(self["unicode"])
-        elif "ascii" in self:
-            return str(self["ascii"])
-        return None
+class SpcString(Choice):  # type: ignore[misc]
+    _alternatives = [
+        ("unicode", BMPString, {"implicit": 0}),
+        ("ascii", IA5String, {"implicit": 1}),
+    ]
 
 
-class SpcLink(univ.Choice):  # type: ignore[misc]
-    """According to Authenticode specification."""
-
-    componentType = namedtype.NamedTypes(
-        namedtype.NamedType(
-            "url",
-            char.IA5String().subtype(
-                implicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatConstructed, 0)
-            ),
-        ),
-        namedtype.NamedType(
-            "moniker",
-            SpcSerializedObject().subtype(
-                implicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatConstructed, 1)
-            ),
-        ),
-        namedtype.NamedType(
-            "file",
-            SpcString().subtype(
-                explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatConstructed, 2)
-            ),
-        ),
-    )
-
-    def to_python(self) -> str | None:
-        if "url" in self:
-            return str(self["url"])
-        elif "moniker" in self:
-            return None  # TODO
-        elif "file" in self:
-            return cast(SpcString, self["file"]).to_python()
-        else:
-            return None
+class SpcLink(Choice):  # type: ignore[misc]
+    _alternatives = [
+        ("url", IA5String, {"implicit": 0}),
+        ("moniker", SpcSerializedObject, {"implicit": 1}),
+        ("file", SpcString, {"implicit": 2}),
+    ]
 
 
-class SpcSpOpusInfo(univ.Sequence):  # type: ignore[misc]
-    componentType = namedtype.NamedTypes(
-        namedtype.OptionalNamedType(
-            "programName",
-            SpcString().subtype(
-                explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatConstructed, 0)
-            ),
-        ),
-        namedtype.OptionalNamedType(
-            "moreInfo",
-            SpcLink().subtype(
-                explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatConstructed, 1)
-            ),
-        ),
-    )
+class SpcSpOpusInfo(Sequence):  # type: ignore[misc]
+    _fields = [
+        ("program_name", SpcString, {"optional": True, "explicit": 0}),
+        ("more_info", SpcLink, {"optional": True, "explicit": 1}),
+    ]
 
 
-class SpcStatementType(univ.Sequence):  # type: ignore[misc]
-    componentType = univ.ObjectIdentifier()
+class SetOfSpcSpOpusInfo(SetOf):  # type: ignore[misc]
+    _child_spec = SpcSpOpusInfo
 
 
-class SpcRfc3161Timestamp(rfc2315.ContentInfo):  # type: ignore[misc]
-    pass
+class SpcStatementType(ObjectIdentifier):  # type: ignore[misc]
+    _map: dict[str, str] = {}
 
 
-class SpcNestedSignature(rfc2315.ContentInfo):  # type: ignore[misc]
-    pass
+ContentType._map["1.3.6.1.4.1.311.2.1.4"] = "microsoft_spc_indirect_data_content"
+EncapsulatedContentInfo._oid_specs["microsoft_spc_indirect_data_content"] = (
+    ContentInfo._oid_specs["microsoft_spc_indirect_data_content"]
+) = SpcIndirectDataContent
+
+CMSAttributeType._map["1.3.6.1.4.1.311.2.1.12"] = "microsoft_spc_sp_opus_info"
+CMSAttribute._oid_specs["microsoft_spc_sp_opus_info"] = SetOfSpcSpOpusInfo

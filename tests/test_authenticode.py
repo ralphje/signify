@@ -19,32 +19,30 @@
 # limitations under the License.
 
 
+import binascii
+import datetime
 import hashlib
 import io
-import unittest
 import pathlib
-
-import binascii
-
-import datetime
+import unittest
 
 from signify.authenticode import (
     CERTIFICATE_LOCATION,
     TRUSTED_CERTIFICATE_STORE,
     TRUSTED_CERTIFICATE_STORE_NO_CTL,
 )
-from signify.x509.context import (
-    VerificationContext,
-    FileSystemCertificateStore,
-    CertificateStore,
-)
+from signify.authenticode.signed_pe import SignedPEFile
 from signify.exceptions import (
-    VerificationError,
     AuthenticodeVerificationError,
     SignedPEParseError,
+    VerificationError,
 )
 from signify.fingerprinter import AuthenticodeFingerprinter
-from signify.authenticode.signed_pe import SignedPEFile
+from signify.x509.context import (
+    CertificateStore,
+    FileSystemCertificateStore,
+    VerificationContext,
+)
 
 root_dir = pathlib.Path(__file__).parent
 trusted_certificate_store = FileSystemCertificateStore(
@@ -74,8 +72,6 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             # blob to the binary. For our sample, there is only one blob.
             self.assertEqual(len(signed_datas), 1)
             signed_data = signed_datas[0]
-
-            self.assertEqual(signed_data._rest_data, b"\0")
 
             signed_data.verify()
 

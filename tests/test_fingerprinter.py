@@ -22,13 +22,13 @@
 import hashlib
 import io
 import json
-import unittest
 import pathlib
+import unittest
 
 from signify.fingerprinter import (
     AuthenticodeFingerprinter,
-    Fingerprinter,
     Finger,
+    Fingerprinter,
     Range,
 )
 
@@ -58,7 +58,7 @@ class FingerPrinterTestCase(unittest.TestCase):
                     for k, b in v.items():
                         v[k] = b.hex()
 
-                with open(str(filename) + ".res", "r") as res_obj:
+                with open(str(filename) + ".res") as res_obj:
                     expected_results = json.load(res_obj)
 
                 self.assertDictEqual(expected_results, results)
@@ -99,7 +99,7 @@ class FingerPrinterTestCase(unittest.TestCase):
         fp = Fingerprinter(io.BytesIO(dummy))
         big_finger = Finger([], [Range(0, len(dummy))], "")
 
-        class MockHasher(object):
+        class MockHasher:
             def __init__(self):
                 self.seen = b""
 

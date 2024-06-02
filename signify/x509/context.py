@@ -11,13 +11,12 @@ import asn1crypto.x509
 from certvalidator import CertificateValidator, ValidationContext
 from typing_extensions import Literal
 
-from signify.authenticode import authroot
 from signify.exceptions import (
     CertificateNotTrustedVerificationError,
     CertificateVerificationError,
     VerificationError,
 )
-from signify.x509.certificates import Certificate, CertificateName
+from signify.x509 import Certificate, CertificateName
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,7 @@ class CertificateStore(List[Certificate]):
         self,
         *args: Certificate | Iterable[Certificate],
         trusted: bool = False,
-        ctl: authroot.CertificateTrustList | None = None,
+        ctl: Any | None = None,
         **kwargs: Any,
     ):
         """
@@ -54,7 +53,7 @@ class CertificateStore(List[Certificate]):
             # VerificationContext.verify_trust to throw a better
             # exception
             raise CertificateNotTrustedVerificationError(
-                "The certificate %s is not trusted by the store." % chain[0]
+                f"The certificate {chain[0]} is not trusted by the store."
             )
 
         if self.ctl is not None:
@@ -323,7 +322,7 @@ class VerificationContext:
 
         # we keep track of our asn1 objects to make sure we return Certificate objects
         # when we're done
-        to_check_asn1cert = certificate.to_asn1crypto
+        to_check_asn1cert = certificate.data
         all_certs = {to_check_asn1cert: certificate}
 
         # we need to get lists of our intermediates and trusted certificates
@@ -331,7 +330,7 @@ class VerificationContext:
         trust_roots: list[asn1crypto.x509.Certificate] = []
         for store in self.stores:
             for cert in store:
-                asn1cert = cert.to_asn1crypto
+                asn1cert = cert.data
                 # we short-circuit the check here to ensure we do not check too much
                 # possibilities
                 (trust_roots if store.trusted else intermediates).append(asn1cert)
@@ -414,6 +413,6 @@ class VerificationContext:
             raise exc
 
         raise CertificateVerificationError(
-            "The trust for %s could not be verified, as it is not trusted by any store"
-            % chain
+            f"The trust for {chain} could not be verified, "
+            "as it is not trusted by any store"
         )

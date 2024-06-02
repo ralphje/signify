@@ -2,6 +2,11 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
+v0.7.0 (unreleased)
+-------------------
+* Remove dependency of ``pyasn1`` and ``pyasn1-modules`` entirely to provide more robust parsing. The replacement,
+  ``asn1crypto``, was already a dependency of this project, so we are mostly slimming down.
+
 v0.6.1 (2024-03-21)
 -------------------
 * Require at least version v4.6.0 for requirement ``typing_extensions`` to ensure compatibility.

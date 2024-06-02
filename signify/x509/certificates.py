@@ -5,21 +5,15 @@ import datetime
 import logging
 import re
 from functools import cached_property
-from typing import Any, Iterable, Iterator, cast, overload
+from typing import Any, ClassVar, Iterable, Iterator, cast, overload
 
 import asn1crypto.pem
 import asn1crypto.x509
+from asn1crypto import cms
 from oscrypto import asymmetric
-from pyasn1.codec.ber import decoder as ber_decoder
-from pyasn1.codec.der import decoder as der_decoder
-from pyasn1.codec.der import encoder as der_encoder
-from pyasn1.type.base import Asn1Type
-from pyasn1_modules import rfc2315, rfc5280, rfc5652
 
-from signify import asn1, x509
-from signify._typing import HashFunction, OidTuple
-from signify.asn1 import oids
-from signify.asn1.helpers import bitstring_to_bytes, time_to_python, x520_name_to_string
+from signify import x509
+from signify._typing import HashFunction
 from signify.exceptions import CertificateVerificationError
 
 logger = logging.getLogger(__name__)
@@ -70,7 +64,7 @@ class Certificate:
 
     signature_algorithm: Any
     signature_value: Any
-    version: int
+    version: str
     serial_number: int
     issuer: CertificateName
     valid_from: datetime.datetime
@@ -78,17 +72,11 @@ class Certificate:
     subject: CertificateName
     subject_public_algorithm: AlgorithmIdentifier
     subject_public_key: bytes
-    extensions: dict[type[Asn1Type] | OidTuple, Asn1Type]
+    extensions: dict[str, Any]
 
     def __init__(
         self,
-        data: (
-            rfc5652.CertificateChoices
-            | rfc2315.ExtendedCertificateOrCertificate
-            | rfc5652.ExtendedCertificateOrCertificate
-            | rfc2315.Certificate
-            | rfc5280.Certificate
-        ),
+        data: asn1crypto.x509.Certificate | cms.CertificateChoices,
     ):
         """
 
@@ -100,98 +88,48 @@ class Certificate:
         self.data = data
         self._parse()
 
-    @classmethod
-    def is_certificate(cls, data: Any) -> bool:
-        if isinstance(data, rfc5652.CertificateChoices) and "certificate" not in data:
-            return False
-        return True
-
     def _parse(self) -> None:
-        if isinstance(self.data, rfc5652.CertificateChoices):
-            if "extendedCertificate" in self.data:
-                raise NotImplementedError(
-                    "Support for extendedCertificate is not implemented"
-                )
-            if "certificate" not in self.data:
-                raise NotImplementedError(
-                    "This is not a certificate, probably an attribute certificate"
-                    " (containing no public key)"
-                )
-
-            certificate = self.data["certificate"]
-            self.signature_algorithm = certificate["signatureAlgorithm"]
-            self.signature_value = (
-                certificate["signatureValue"]
-                if "signatureValue" in certificate
-                else certificate["signature"]
+        if isinstance(self.data, cms.ExtendedCertificate):
+            raise NotImplementedError(
+                "Support for extendedCertificate is not implemented"
             )
-            tbs_certificate = certificate["tbsCertificate"]
 
-        elif isinstance(
-            self.data,
-            (
-                rfc2315.ExtendedCertificateOrCertificate,
-                rfc5652.ExtendedCertificateOrCertificate,
-            ),
-        ):
-            if "extendedCertificate" in self.data:
-                # TODO: Not sure if needed.
+        if isinstance(self.data, cms.CertificateChoices):
+            if self.data.name != "certificate":
                 raise NotImplementedError(
-                    "Support for extendedCertificate is not implemented"
+                    f"This is not a certificate, but a {self.data.name}"
                 )
+            self.data = self.data.chosen
 
-            certificate = self.data["certificate"]
-            self.signature_algorithm = certificate["signatureAlgorithm"]
-            self.signature_value = (
-                certificate["signatureValue"]
-                if "signatureValue" in certificate
-                else certificate["signature"]
-            )
-            tbs_certificate = certificate["tbsCertificate"]
+        self.signature_algorithm = self.data["signature_algorithm"].native
+        self.signature_value = self.data["signature_value"].native
+        tbs_certificate = self.data["tbs_certificate"]
 
-        elif isinstance(self.data, (rfc2315.Certificate, rfc5280.Certificate)):
-            certificate = self.data
-            self.signature_algorithm = certificate["signatureAlgorithm"]
-            self.signature_value = (
-                certificate["signatureValue"]
-                if "signatureValue" in certificate
-                else certificate["signature"]
-            )
-            tbs_certificate = certificate["tbsCertificate"]
-
-        else:
-            tbs_certificate = self.data
-
-        self.version = int(tbs_certificate["version"]) + 1
-        self.serial_number = int(tbs_certificate["serialNumber"])
-        self.issuer = CertificateName(tbs_certificate["issuer"][0])
-
-        # the following two ifs are here because time_to_python may return None and we
-        # want to prevent Nones in these keys
-        valid_from = time_to_python(tbs_certificate["validity"]["notBefore"])
-        if valid_from:
-            self.valid_from = valid_from
-        valid_to = time_to_python(tbs_certificate["validity"]["notAfter"])
-        if valid_to:
-            self.valid_to = valid_to
-        self.subject = CertificateName(tbs_certificate["subject"][0])
+        self.version = tbs_certificate["version"].native
+        self.serial_number = tbs_certificate["serial_number"].native
+        self.issuer = CertificateName(tbs_certificate["issuer"])
+        self.valid_from = tbs_certificate["validity"]["not_before"].native
+        self.valid_to = tbs_certificate["validity"]["not_after"].native
+        self.subject = CertificateName(tbs_certificate["subject"])
 
         self.subject_public_algorithm = AlgorithmIdentifier(
-            algorithm=tbs_certificate["subjectPublicKeyInfo"]["algorithm"]["algorithm"],
-            parameters=bytes(
-                tbs_certificate["subjectPublicKeyInfo"]["algorithm"]["parameters"]
-            ),
+            algorithm=tbs_certificate["subject_public_key_info"]["algorithm"][
+                "algorithm"
+            ].native,
+            parameters=tbs_certificate["subject_public_key_info"]["algorithm"][
+                "parameters"
+            ].native,
         )
-        self.subject_public_key = bitstring_to_bytes(
-            tbs_certificate["subjectPublicKeyInfo"]["subjectPublicKey"]
-        )
+        self.subject_public_key = tbs_certificate["subject_public_key_info"][
+            "public_key"
+        ].dump()
 
         self.extensions = {}
-        if "extensions" in tbs_certificate and tbs_certificate["extensions"].isValue:
+        if tbs_certificate["extensions"].native is not None:
             for extension in tbs_certificate["extensions"]:
-                self.extensions[asn1.oids.get(extension["extnID"])] = extension[
-                    "extnValue"
-                ]
+                self.extensions[extension["extn_id"].native] = extension[
+                    "extn_value"
+                ].native
 
     def __str__(self) -> str:
         return (
@@ -223,7 +161,7 @@ class Certificate:
     @classmethod
     def from_der(cls, content: bytes) -> Certificate:
         """Load the Certificate object from DER-encoded data"""
-        return cls(der_decoder.decode(content, asn1Spec=rfc5280.Certificate())[0])
+        return cls(asn1crypto.x509.Certificate.load(content))
 
     @classmethod
     def from_pem(cls, content: bytes) -> Certificate:
@@ -241,22 +179,15 @@ class Certificate:
     @cached_property
     def to_der(self) -> bytes:
         """Returns the DER-encoded data from this certificate."""
-        return cast(bytes, der_encoder.encode(self.data))
-
-    @cached_property
-    def to_asn1crypto(self) -> asn1crypto.x509.Certificate:
-        """Retrieves the :mod:`asn1crypto` x509 Certificate object."""
-        return cast(
-            asn1crypto.x509.Certificate, asn1crypto.x509.Certificate.load(self.to_der)
-        )
+        return cast(bytes, self.data.dump())
 
     @cached_property
     def sha256_fingerprint(self) -> str:
-        return cast(str, self.to_asn1crypto.sha256_fingerprint).replace(" ", "").lower()
+        return cast(str, self.data.sha256_fingerprint).replace(" ", "").lower()
 
     @cached_property
     def sha1_fingerprint(self) -> str:
-        return cast(str, self.to_asn1crypto.sha1_fingerprint).replace(" ", "").lower()
+        return cast(str, self.data.sha1_fingerprint).replace(" ", "").lower()
 
     def verify_signature(
         self,
@@ -282,7 +213,7 @@ class Certificate:
             https://mta.openssl.org/pipermail/openssl-users/2015-September/002053.html
         """
 
-        public_key = asymmetric.load_public_key(self.to_asn1crypto.public_key)
+        public_key = asymmetric.load_public_key(self.data.public_key)
         if public_key.algorithm == "rsa":
             verify_func = asymmetric.rsa_pkcs1v15_verify
         elif public_key.algorithm == "dsa":
@@ -327,7 +258,25 @@ class Certificate:
 
 
 class CertificateName:
-    def __init__(self, data: Any):
+    OID_TO_RDN: ClassVar[dict[str, str]] = {
+        "2.5.4.3": "CN",  # common name
+        "2.5.4.6": "C",  # country
+        "2.5.4.7": "L",  # locality
+        "2.5.4.8": "ST",  # stateOrProvince
+        "2.5.4.9": "STREET",  # street
+        "2.5.4.10": "O",  # organization
+        "2.5.4.11": "OU",  # organizationalUnit
+        "0.9.2342.19200300.100.1.25": "DC",  # domainComponent
+        "1.2.840.113549.1.9.1": "EMAIL",  # emailaddress
+    }
+
+    def __init__(self, data: asn1crypto.x509.Name | asn1crypto.x509.GeneralName):
+        if isinstance(data, asn1crypto.x509.GeneralName):
+            if data.name != "directory_name":
+                raise NotImplementedError(
+                    f"CertificateNames of type {data.name} not supported"
+                )
+            data = data.chosen
         self.data = data
 
     def __eq__(self, other: object) -> bool:
@@ -344,17 +293,11 @@ class CertificateName:
         """Returns an (almost) rfc2253 compatible string given a RDNSequence"""
 
         result = []
-        for n in self.data[::-1]:
-            type_value = n[0]  # get the AttributeTypeAndValue object
-
+        for type, value in self.get_components():
             #   If the AttributeType is in a published table of attribute types
             #   associated with LDAP [4], then the type name string from that table
             #   is used, otherwise it is encoded as the dotted-decimal encoding of
             #   the AttributeType's OBJECT IDENTIFIER.
-            type = oids.OID_TO_RDN.get(
-                type_value["type"], ".".join(map(str, type_value["type"]))
-            )
-            value = str(ber_decoder.decode(type_value["value"])[0])
 
             # Escaping according to RFC2253
             value = re.sub('([,+"<>;\\\\])', r"\\\1", value)
@@ -376,10 +319,10 @@ class CertificateName:
     ) -> Iterator[tuple[str, str]]: ...
 
     @overload
-    def get_components(self, component_type: str | OidTuple) -> Iterator[str]: ...
+    def get_components(self, component_type: str) -> Iterator[str]: ...
 
     def get_components(
-        self, component_type: str | OidTuple | None = None
+        self, component_type: str | None = None
     ) -> Iterator[tuple[str, str]] | Iterator[str]:
         """Get individual components of this CertificateName
 
@@ -387,28 +330,18 @@ class CertificateName:
             if not provided, yields tuples of (type, value)
         """
 
-        for n in self.data[::-1]:
+        for n in list(self.data.chosen)[::-1]:
             type_value = n[0]  # get the AttributeTypeAndValue object
-            type = oids.OID_TO_RDN.get(
-                type_value["type"], ".".join(map(str, type_value["type"]))
+
+            type = self.OID_TO_RDN.get(
+                type_value["type"].dotted, type_value["type"].dotted
             )
-            if isinstance(
-                type_value["value"],
-                (
-                    bytes,
-                    rfc2315.AttributeValue,
-                    rfc5280.AttributeValue,
-                    rfc5652.AttributeValue,
-                ),
-            ):
-                value = str(ber_decoder.decode(type_value["value"])[0])
-            else:
-                value = x520_name_to_string(type_value["value"])
+            value = type_value["value"].native
 
             if component_type is not None:
                 if component_type in (
-                    type_value["type"],
-                    ".".join(map(str, type_value["type"])),
+                    type_value["type"].dotted,
+                    type_value["type"].native,
                     type,
                 ):
                     yield value

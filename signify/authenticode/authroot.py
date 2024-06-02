@@ -3,58 +3,26 @@ from __future__ import annotations
 import datetime
 import hashlib
 import pathlib
-import struct
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterable
 
 import mscerts
-from pyasn1.codec.ber import decoder as ber_decoder
-from pyasn1.type import univ
-from pyasn1.type.base import Asn1Type
-from pyasn1_modules import rfc2315
+from asn1crypto import cms
 from typing_extensions import Self
 
 from signify import asn1
-from signify._typing import HashFunction, OidTuple
-from signify.asn1 import guarded_ber_decode
+from signify._typing import HashFunction
 from signify.asn1.hashing import _get_digest_algorithm
-from signify.asn1.helpers import time_to_python
 from signify.exceptions import (
     CertificateTrustListParseError,
     CTLCertificateVerificationError,
 )
-from signify.pkcs7.signeddata import SignedData
+from signify.pkcs7 import signeddata
 from signify.x509 import certificates, context
 
 AUTHROOTSTL_PATH = pathlib.Path(mscerts.where(stl=True))
 
 
-def _lookup_ekus(
-    extended_key_usages: Iterable[str] | None = None,
-) -> Iterator[OidTuple]:
-    """Normally we would be able to use certvalidator for this, but we simply can't
-    now we have done this all to ourselves. So we convert the arguments passed to the
-    function to a list of all object-ID tuples.
-    """
-
-    if not extended_key_usages:
-        return
-
-    # create an inverted map for the fancy names that are supported
-    from asn1crypto.x509 import KeyPurposeId
-
-    inverted_map = {
-        v: tuple(map(int, k.split("."))) for k, v in KeyPurposeId._map.items()
-    }
-
-    # now look for all values
-    for eku in extended_key_usages:
-        if eku in inverted_map:
-            yield inverted_map[eku]
-        else:
-            yield tuple(map(int, eku.split(".")))
-
-
-class CertificateTrustList(SignedData):
+class CertificateTrustList(signeddata.SignedData):
     """A subclass of :class:`signify.pkcs7.SignedData`, containing a list of trusted
     root certificates. It is based on the following ASN.1 structure::
 
@@ -113,9 +81,9 @@ class CertificateTrustList(SignedData):
 
     """
 
-    _expected_content_type = asn1.ctl.CertificateTrustList
+    _expected_content_type = "microsoft_ctl"
 
-    subject_usage: Any
+    subject_usage: list[str]
     list_identifier: bytes | None
     sequence_number: int
     this_update: datetime.datetime | None
@@ -125,23 +93,19 @@ class CertificateTrustList(SignedData):
     def _parse(self) -> None:
         super()._parse()
 
-        self.subject_usage = self.content["subjectUsage"][0]
-        self.list_identifier = (
-            bytes(self.content["listIdentifier"])
-            if self.content["listIdentifier"].isValue
-            else None
-        )
-        self.sequence_number = self.content["sequenceNumber"]
-        self.this_update = time_to_python(self.content["ctlThisUpdate"])
-        self.next_update = time_to_python(self.content["ctlNextUpdate"])
+        self.subject_usage = self.content["subject_usage"].native
+        self.list_identifier = self.content["list_identifier"].native
+        self.sequence_number = self.content["sequence_number"].native
+        self.this_update = self.content["ctl_this_update"].native
+        self.next_update = self.content["ctl_next_update"].native
         self.subject_algorithm = _get_digest_algorithm(
-            self.content["subjectAlgorithm"],
+            self.content["subject_algorithm"],
             location="CertificateTrustList.subjectAlgorithm",
         )
         self._subjects = {}
         for subj in (
             CertificateTrustSubject(subject)
-            for subject in self.content["trustedSubjects"]
+            for subject in self.content["trusted_subjects"]
         ):
             self._subjects[subj.identifier.hex().lower()] = subj
         # TODO: extensions??
@@ -165,7 +129,7 @@ class CertificateTrustList(SignedData):
         subject = self.find_subject(chain[0])
         if not subject:
             raise CTLCertificateVerificationError(
-                "The root %s is not in the certificate trust list" % chain[0]
+                f"The root {chain[0]} is not in the certificate trust list"
             )
         return subject.verify_trust(chain, *args, **kwargs)
 
@@ -195,20 +159,14 @@ class CertificateTrustList(SignedData):
         """Loads a :class:`CertificateTrustList` from a specified path."""
 
         with path.open("rb") as f:
-            content, rest = ber_decoder.decode(f.read(), asn1Spec=rfc2315.ContentInfo())
-        #
-        # from pyasn1 import debug
-        # debug.setLogger(debug.Debug('all'))
+            data = cms.ContentInfo.load(f.read())
 
-        if asn1.oids.get(content["contentType"]) is not rfc2315.SignedData:
+        if data["content_type"].native != "signed_data":
             raise CertificateTrustListParseError(
                 "ContentInfo does not contain SignedData"
             )
 
-        data = guarded_ber_decode(content["content"], asn1_spec=rfc2315.SignedData())
-
-        signed_data = cls(data)
-        signed_data._rest_data = rest  # type: ignore[attr-defined]
+        signed_data = cls(data["content"])
         return signed_data
 
 
@@ -287,77 +245,55 @@ class CertificateTrustSubject:
 
     """
 
-    extended_key_usages: list[OidTuple] | None
+    extended_key_usages: list[str] | None
     friendly_name: str | None
     key_identifier: bytes
     subject_name_md5: bytes
     auth_root_sha256: bytes
     disallowed_filetime: datetime.datetime | None
-    root_program_chain_policies: list[OidTuple] | None
-    disallowed_extended_key_usages: list[OidTuple] | None
+    root_program_chain_policies: list[str] | None
+    disallowed_extended_key_usages: list[str] | None
     not_before_filetime: datetime.datetime | None
-    not_before_extended_key_usages: list[OidTuple] | None
+    not_before_extended_key_usages: list[str] | None
 
     def __init__(self, data: asn1.ctl.TrustedSubject):
         self.data = data
         self._parse()
 
     def _parse(self) -> None:
-        self.identifier = bytes(self.data["subjectIdentifier"])
-        self.attributes = self._parse_attributes(self.data["subjectAttributes"])
+        self.identifier = self.data["subject_identifier"].native
+        self.attributes = {
+            attr["type"].native: attr["values"].native[0]
+            for attr in self.data["subject_attributes"]
+        }
 
-        self.extended_key_usages = None
-        if asn1.ctl.EnhkeyUsage in self.attributes:
-            self.extended_key_usages = [
-                tuple(x) for x in self.attributes[asn1.ctl.EnhkeyUsage][0]
-            ]
-
-        self.friendly_name = None
-        if asn1.ctl.FriendlyName in self.attributes:
-            self.friendly_name = bytes(
-                self.attributes[asn1.ctl.FriendlyName][0]
-            ).decode("utf-16")
-
-        self.key_identifier = bytes(
-            self.attributes.get(asn1.ctl.KeyIdentifier, [b""])[0]
+        self.extended_key_usages = self.attributes.get(
+            "microsoft_ctl_enhkey_usage", None
         )
-        self.subject_name_md5 = bytes(
-            self.attributes.get(asn1.ctl.SubjectNameMd5Hash, [b""])[0]
+        self.friendly_name = self.attributes.get("microsoft_ctl_friendly_name", None)
+        self.key_identifier = self.attributes.get("microsoft_ctl_key_identifier", b"")
+        self.subject_name_md5 = self.attributes.get(
+            "microsoft_ctl_subject_name_md5_hash", b""
         )
         # TODO: RootProgramCertPolicies not implemented
-        self.auth_root_sha256 = bytes(
-            self.attributes.get(asn1.ctl.AuthRootSha256Hash, [b""])[0]
+        self.auth_root_sha256 = self.attributes.get(
+            "microsoft_ctl_auth_root_sha256_hash", b""
         )
-
-        self.disallowed_filetime = None
-        if asn1.ctl.DisallowedFiletime in self.attributes:
-            self.disallowed_filetime = self._filetime_to_datetime(
-                self.attributes[asn1.ctl.DisallowedFiletime][0]
-            )
-
-        self.root_program_chain_policies = None
-        if asn1.ctl.RootProgramChainPolicies in self.attributes:
-            self.root_program_chain_policies = [
-                tuple(x) for x in self.attributes[asn1.ctl.RootProgramChainPolicies][0]
-            ]
-
-        self.disallowed_extended_key_usages = None
-        if asn1.ctl.DisallowedEnhkeyUsage in self.attributes:
-            self.disallowed_extended_key_usages = [
-                tuple(x) for x in self.attributes[asn1.ctl.DisallowedEnhkeyUsage][0]
-            ]
-
-        self.not_before_filetime = None
-        if asn1.ctl.NotBeforeFiletime in self.attributes:
-            self.not_before_filetime = self._filetime_to_datetime(
-                self.attributes[asn1.ctl.NotBeforeFiletime][0]
-            )
-
-        self.not_before_extended_key_usages = None
-        if asn1.ctl.NotBeforeEnhkeyUsage in self.attributes:
-            self.not_before_extended_key_usages = [
-                tuple(x) for x in self.attributes[asn1.ctl.NotBeforeEnhkeyUsage][0]
-            ]
+        self.disallowed_filetime = self.attributes.get(
+            "microsoft_ctl_disallowed_filetime", None
+        )
+        self.root_program_chain_policies = self.attributes.get(
+            "microsoft_ctl_root_program_chain_policies", None
+        )
+        self.disallowed_extended_key_usages = self.attributes.get(
+            "microsoft_ctl_disallowed_enhkey_usage", None
+        )
+        self.not_before_filetime = self.attributes.get(
+            "microsoft_ctl_not_before_filetime", None
+        )
+        self.not_before_extended_key_usages = self.attributes.get(
+            "microsoft_ctl_not_before_enhkey_usage", None
+        )
 
     def verify_trust(
         self,
@@ -380,7 +316,7 @@ class CertificateTrustSubject:
             extended_key_usages = ()
 
         # Start by converting the list of provided extended_key_usages to a list of OIDs
-        requested_extended_key_usages = set(_lookup_ekus(extended_key_usages))
+        requested_extended_key_usages = set(extended_key_usages)
 
         # Now check each of the properties
         if self.extended_key_usages and (
@@ -457,44 +393,3 @@ class CertificateTrustSubject:
             )
 
         return True
-
-    @classmethod
-    def _parse_attributes(
-        cls, data: rfc2315.Attributes
-    ) -> dict[OidTuple | type[Asn1Type], list[Any]]:
-        """Given a set of Attributes, parses them and returns them as a dict
-
-        :param data: The attributes to process
-        """
-
-        result = {}
-        for attr in data:
-            typ = asn1.oids.get(attr["type"])
-            values = []
-            for value in attr["values"]:
-                if not isinstance(typ, tuple):
-                    # This should transparently handle when the data is encapsulated in
-                    # an OctetString but we are not expecting an OctetString
-                    try:
-                        if not isinstance(type, univ.OctetString):
-                            _, v = ber_decoder.decode(value, recursiveFlag=0)
-                        else:
-                            v = value
-                        value = guarded_ber_decode(v, asn1_spec=typ())
-                    except Exception:
-                        value = guarded_ber_decode(value, asn1_spec=typ())
-                values.append(value)
-            result[typ] = values
-
-        return result
-
-    @classmethod
-    def _filetime_to_datetime(
-        cls, filetime: univ.OctetString
-    ) -> datetime.datetime | None:
-        if not filetime:
-            return None
-
-        epoch = datetime.datetime(1601, 1, 1, tzinfo=datetime.timezone.utc)
-        value = struct.unpack("<Q", bytes(filetime))[0]
-        return epoch + datetime.timedelta(microseconds=value / 10)
