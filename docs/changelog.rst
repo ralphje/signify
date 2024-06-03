@@ -5,7 +5,13 @@ This page contains the most significant changes in Signify between each release.
 v0.7.0 (unreleased)
 -------------------
 * Remove dependency of ``pyasn1`` and ``pyasn1-modules`` entirely to provide more robust parsing. The replacement,
-  ``asn1crypto``, was already a dependency of this project, so we are mostly slimming down.
+  ``asn1crypto``, was already a dependency of this project, so we are mostly slimming down. This does have a serious
+  impact if you use certain functions to deeply inspect the original data (as all these structures have now changed)
+  and on some parts of the API to better align with the new dependency. Most notably, all OIDs are now strings,
+  rather than integer tuples, and references to attributes and subclasses are now strings as well (such as in
+  attribute lists).
+
+* Add support for SignedData versions other than v1
 
 v0.6.1 (2024-03-21)
 -------------------

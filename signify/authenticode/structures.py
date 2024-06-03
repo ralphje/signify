@@ -345,12 +345,6 @@ class AuthenticodeSignedData(SignedData):
         super().__init__(data)
 
     def _parse(self) -> None:
-        # Parse the fields of the SignedData structure
-        if self.data["version"].native != "v1":
-            raise AuthenticodeParseError(
-                "SignedData.version must be 1, not %d" % self.data["version"]
-            )
-
         super()._parse()
         self.spc_info = SpcInfo(self.content)
 
@@ -485,13 +479,7 @@ class AuthenticodeSignedData(SignedData):
             )
 
         # 2. The hash of the spc blob
-        # According to RFC2315, 9.3, identifier (tag) and length need to be
-        # stripped for hashing. We do this by having the parser just strip
-        # out the SEQUENCE part of the spcIndirectData.
-        hashable_spc_blob = self.content.contents
-        spc_blob_hasher = self.digest_algorithm()
-        spc_blob_hasher.update(bytes(hashable_spc_blob))
-        if spc_blob_hasher.digest() != self.signer_info.message_digest:
+        if self.content_digest != self.signer_info.message_digest:
             raise AuthenticodeInvalidDigestError(
                 "The expected hash of the SpcInfo does not match SignerInfo"
             )
@@ -654,7 +642,7 @@ class RFC3161SignedData(SignedData):
         super()._parse()
 
         # Get the tst_info
-        self.tst_info = TSTInfo(self.content.parsed)
+        self.tst_info = TSTInfo(self.content)
 
         # signerInfos
         if len(self.signer_infos) != 1:
@@ -699,9 +687,7 @@ class RFC3161SignedData(SignedData):
         # content. This is similar to the normal verification process, where the
         # SpcInfo is verified. Note that the mapping between the RFC3161 SignedData
         # object is ensured by the verifier in SignedData
-        blob_hasher = self.digest_algorithm()
-        blob_hasher.update(self.content.contents)
-        if blob_hasher.digest() != self.signer_info.message_digest:
+        if self.content_digest != self.signer_info.message_digest:
             raise AuthenticodeCounterSignerError(
                 "The expected hash of the TstInfo does not match SignerInfo"
             )

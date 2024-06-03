@@ -313,6 +313,19 @@ class AuthenticodeParserTestCase(unittest.TestCase):
                 ):
                     pefile.verify(multi_verify_mode=mode)
 
+    def test_signeddata_v3(self):
+        """this tests a sample that has a v3 SignedData structure"""
+        with open(
+            str(
+                root_dir
+                / "test_data"
+                / "7dc674b46d51cb42963417a487ef8e88e547e3e0902a1e236ff13c3f1fdd60e4.exe"
+            ),
+            "rb",
+        ) as f:
+            pefile = SignedPEFile(f)
+            pefile.verify()
+
 
 class CertificateTestCase(unittest.TestCase):
     def test_all_trusted_certificates_are_trusted(self):

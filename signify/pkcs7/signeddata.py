@@ -122,7 +122,11 @@ class SignedData:
                 f" expected {self._expected_content_type}"
             )
 
-        self.content = self.data["encap_content_info"]["content"]
+        self._real_content = self.data["encap_content_info"]["content"]
+        if hasattr(self._real_content, "parsed"):
+            self.content = self._real_content.parsed
+        else:
+            self.content = self._real_content
 
         # Certificates
         self.certificates = CertificateStore(
@@ -141,3 +145,21 @@ class SignedData:
                 self._signerinfo_class(si, parent=self)
                 for si in self.data["signer_infos"]
             ]
+
+    @property
+    def content_digest(self) -> bytes:
+        """Returns the digest of the content of the SignedData object,
+        adhering to the specs in RFC2315, 9.3; the identifier (tag) and
+        length need to be stripped for hashing.
+        """
+
+        if hasattr(self._real_content, "parsed"):
+            # Handle the case where the content is a ParsableOctetString, and
+            # self.content.contents may refer to its children
+            hash_content = bytes(self._real_content)
+        else:
+            hash_content = self.content.contents
+
+        blob_hasher = self.digest_algorithm()
+        blob_hasher.update(hash_content)
+        return blob_hasher.digest()
