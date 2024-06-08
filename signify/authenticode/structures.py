@@ -156,6 +156,10 @@ class AuthenticodeSignerInfo(SignerInfo):
        This information is extracted from the SpcSpOpusInfo authenticated attribute,
        containing the program's name and an URL with more information.
 
+    .. attribute:: statement_types
+
+       Defines the key purpose of the signer. This is ignored by the verification.
+
     .. attribute:: nested_signed_datas
 
        It is possible for Authenticode SignerInfo objects to contain nested
@@ -192,6 +196,18 @@ class AuthenticodeSignerInfo(SignerInfo):
 
     def _parse(self) -> None:
         super()._parse()
+
+        # - Retrieve statement types
+        self.statement_types = None
+        if "microsoft_spc_statement_type" in self.authenticated_attributes:
+            if len(self.authenticated_attributes["microsoft_spc_statement_type"]) != 1:
+                raise AuthenticodeParseError(
+                    "Only one SpcStatementType expected in"
+                    " SignerInfo.authenticatedAttributes"
+                )
+            self.statement_types = self.authenticated_attributes[
+                "microsoft_spc_statement_type"
+            ][0].native
 
         # - Retrieve object from SpcSpOpusInfo from the authenticated attributes
         # (for normal signer)
@@ -283,17 +299,33 @@ class SpcInfo:
 
     .. attribute:: content_type
 
-       The contenttype class
+       The contenttype string
 
     .. attribute:: image_data
+
+       The image data object embedded in the ASN.1 object.
+
+    .. attribute:: image_flags
+
+       The flags used for signing. These flags are ignored during verification.
+
+    .. attribute:: image_publisher
+
+       Obsolete software publisher field (i.e. ``SpcPeImageData.file``). Should now
+       contain ``<<<Obsolete>>>``, although this value does not affect verification.
+
     .. attribute:: digest_algorithm
     .. attribute:: digest
 
 
     """
 
+    data: spc.SpcIndirectDataContent
+
     content_type: str
-    image_data: None
+    image_data: spc.SpcPeImageData
+    image_flags: set[str]
+    image_publisher: str
     digest_algorithm: HashFunction
     digest: bytes
 
@@ -304,7 +336,14 @@ class SpcInfo:
     def _parse(self) -> None:
         # The data attribute
         self.content_type = self.data["data"]["type"].native
-        self.image_data = None  # TODO: not parsed
+
+        if self.content_type != "microsoft_spc_pe_image_data":
+            raise AuthenticodeParseError("SpcInfo does not contain SpcPeImageData")
+
+        self.image_data = self.data["data"]["value"]
+        self.image_flags = self.image_data["flags"].native
+        self.image_publisher = self.image_data["file"].native
+
         self.digest_algorithm = _get_digest_algorithm(
             self.data["message_digest"]["digest_algorithm"],
             location="SpcIndirectDataContent.digestAlgorithm",
@@ -351,8 +390,8 @@ class AuthenticodeSignedData(SignedData):
         # signerInfos
         if len(self.signer_infos) != 1:
             raise AuthenticodeParseError(
-                "SignedData.signerInfos must contain exactly 1 signer, not %d"
-                % len(self.signer_infos)
+                "SignedData.signerInfos must contain exactly 1 signer,"
+                f" not {len(self.signer_infos)}"
             )
 
         self.signer_info = self.signer_infos[0]
@@ -605,7 +644,7 @@ class TSTInfo:
     def _parse(self) -> None:
         if self.data["version"].native != "v1":
             raise AuthenticodeParseError(
-                "TSTInfo.version must be 1, not %d" % self.data["version"]
+                f"TSTInfo.version must be v1, not {self.data['version'].native}"
             )
 
         self.policy = self.data["policy"].native
@@ -647,8 +686,8 @@ class RFC3161SignedData(SignedData):
         # signerInfos
         if len(self.signer_infos) != 1:
             raise AuthenticodeParseError(
-                "RFC3161 SignedData.signerInfos must contain exactly 1 signer, not %d"
-                % len(self.signer_infos)
+                "RFC3161 SignedData.signerInfos must contain exactly 1 signer,"
+                f" not {len(self.signer_infos)}"
             )
 
         self.signer_info = self.signer_infos[0]

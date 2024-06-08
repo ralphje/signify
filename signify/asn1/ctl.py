@@ -19,25 +19,51 @@ from asn1crypto.core import (
 from asn1crypto.util import utc_with_dst
 from asn1crypto.x509 import Extensions, ExtKeyUsageSyntax, Time
 
-# Based on http://download.microsoft.com/download/C/8/8/C8862966-5948-444D-87BD-07B976ADA28C/%5BMS-CAESO%5D.pdf
+# Based on https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/WinArchive/%5bMS-CAESO%5d.pdf
 
 
 class CTLVersion(Integer):  # type: ignore[misc]
+    """Version of the CTL structure.
+
+    Based on `MS-CAESO
+    <https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/WinArchive/%5bMS-CAESO%5d.pdf>`_::
+
+        CTLVersion ::= INTEGER {v1(0)}
+    """
+
     _map = {
         0: "v1",
     }
 
 
 class SubjectUsage(ExtKeyUsageSyntax):  # type: ignore[misc]
-    pass
+    """Subject usage of the CTL structure.
+
+    Based on `MS-CAESO
+    <https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/WinArchive/%5bMS-CAESO%5d.pdf>`_::
+
+        SubjectUsage ::= EnhancedKeyUsage
+    """
 
 
 class ListIdentifier(OctetString):  # type: ignore[misc]
-    pass
+    """List identifier of the CTL structure.
+
+    Based on `MS-CAESO
+    <https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/WinArchive/%5bMS-CAESO%5d.pdf>`_::
+
+         ListIdentifier ::= OCTETSTRING
+    """
 
 
 class SubjectIdentifier(OctetString):  # type: ignore[misc]
-    pass
+    """Subject identifier of the CTL structure.
+
+    Based on `MS-CAESO
+    <https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/WinArchive/%5bMS-CAESO%5d.pdf>`_::
+
+         SubjectIdentifier ::= OCTETSTRING
+    """
 
 
 class SubjectAttributeType(ObjectIdentifier):  # type: ignore[misc]
@@ -57,6 +83,10 @@ class SubjectAttributeType(ObjectIdentifier):  # type: ignore[misc]
 
 
 class SetOfSpecificOctetString(SetOf):  # type: ignore[misc]
+    """Specific implementation of a SetOf OctetString that allows parsing directly as
+    a value, or as a sequence, depending on the child type.
+    """
+
     _child_spec = OctetString
     children: Any
 
@@ -105,6 +135,12 @@ class FileTime(OctetString):  # type: ignore[misc]
 
 
 class SubjectAttribute(Sequence):  # type: ignore[misc]
+    """Subject attributes of the trusted subject in the CTL structure.
+
+    Based on `MS-CAESO
+    <https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/WinArchive/%5bMS-CAESO%5d.pdf>`_.
+    """
+
     _fields = [
         ("type", SubjectAttributeType),
         ("values", SetOfSpecificOctetString),
@@ -130,10 +166,27 @@ class SubjectAttribute(Sequence):  # type: ignore[misc]
 
 
 class SubjectAttributes(SetOf):  # type: ignore[misc]
+    """Subject attributes of the trusted subject in the CTL structure.
+
+    Based on `MS-CAESO
+    <https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/WinArchive/%5bMS-CAESO%5d.pdf>`_.
+    """
+
     _child_spec = SubjectAttribute
 
 
 class TrustedSubject(Sequence):  # type: ignore[misc]
+    """Trusted subject in the CTL structure.
+
+    Based on `MS-CAESO
+    <https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/WinArchive/%5bMS-CAESO%5d.pdf>`_::
+
+         TrustedSubject ::= SEQUENCE{
+            subjectIdentifier SubjectIdentifier,
+            subjectAttributes Attributes OPTIONAL
+         }
+    """
+
     _fields = [
         ("subject_identifier", SubjectIdentifier),
         ("subject_attributes", SubjectAttributes, {"optional": True}),
@@ -141,10 +194,36 @@ class TrustedSubject(Sequence):  # type: ignore[misc]
 
 
 class TrustedSubjects(SequenceOf):  # type: ignore[misc]
+    """Trusted subjects in the CTL structure.
+
+    Based on `MS-CAESO
+    <https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/WinArchive/%5bMS-CAESO%5d.pdf>`_::
+
+        TrustedSubjects ::= SEQUENCE OF TrustedSubject
+    """
+
     _child_spec = TrustedSubject
 
 
 class CertificateTrustList(Sequence):  # type: ignore[misc]
+    """CTL structure.
+
+    Based on `MS-CAESO
+    <https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/WinArchive/%5bMS-CAESO%5d.pdf>`_::
+
+         CertificateTrustList ::= SEQUENCE {
+             version CTLVersion DEFAULT v1,
+             subjectUsage SubjectUsage,
+             listIdentifier ListIdentifier OPTIONAL,
+             sequenceNumber HUGEINTEGER OPTIONAL,
+             ctlThisUpdate ChoiceOfTime,
+             ctlNextUpdate ChoiceOfTime OPTIONAL,
+             subjectAlgorithm AlgorithmIdentifier,
+             trustedSubjects TrustedSubjects OPTIONAL,
+             ctlExtensions [0] EXPLICIT Extensions OPTIONAL
+         }
+    """
+
     _fields = [
         ("version", CTLVersion, {"default": "v1"}),
         ("subject_usage", SubjectUsage),

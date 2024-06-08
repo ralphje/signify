@@ -114,8 +114,8 @@ class SignedPEFile:
         pe_offset = struct.unpack("<I", self.file.read(4))[0]
         if pe_offset >= self._filelength:
             raise SignedPEParseError(
-                "PE header location is beyond file boundaries (%d >= %d)"
-                % (pe_offset, self._filelength)
+                "PE header location is beyond file boundaries"
+                f"({pe_offset} >= {self._filelength})"
             )
 
         # Check if the PE header is PE
@@ -131,17 +131,16 @@ class SignedPEFile:
             # This is not strictly a failure for windows, but such files better
             # be treated as generic files. They can not be carrying SignedData.
             raise SignedPEParseError(
-                "The optional header exceeds the file length (%d + %d > %d)"
-                % (optional_header_size, optional_header_offset, self._filelength)
+                f"The optional header exceeds the file length ({optional_header_size} "
+                f"+ {optional_header_offset} > {self._filelength})"
             )
 
         if optional_header_size < 68:
             # We can't do authenticode-style hashing. If this is a valid binary,
             # which it can be, the header still does not even contain a checksum.
             raise SignedPEParseError(
-                "The optional header size is %d < 68, which is insufficient for"
-                " authenticode",
-                optional_header_size,
+                f"The optional header size is {optional_header_size} < 68, "
+                f"which is insufficient for authenticode",
             )
 
         # The optional header contains the signature of the image
