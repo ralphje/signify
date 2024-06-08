@@ -141,11 +141,6 @@ class SignerInfo:
         self._parse()
 
     def _parse(self) -> None:
-        if self.data["version"].native != "v1":
-            raise SignerInfoParseError(
-                "SignerInfo.version must be 1, not %d" % self.data["version"]
-            )
-
         if self.data["sid"].name == "subject_key_identifier":
             raise SignerInfoParseError(
                 "Cannot handle SignerInfo.sid with a subject_key_identifier"

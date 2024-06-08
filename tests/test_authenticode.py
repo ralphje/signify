@@ -326,6 +326,15 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             pefile = SignedPEFile(f)
             pefile.verify()
 
+    def test_signerinfo_v0(self):
+        """this tests a sample that has a v0 SignerInfo structure"""
+        with open(
+            str(root_dir / "test_data" / "spotify_sample.exe"),
+            "rb",
+        ) as f:
+            pefile = SignedPEFile(f)
+            pefile.verify()
+
 
 class CertificateTestCase(unittest.TestCase):
     def test_all_trusted_certificates_are_trusted(self):
