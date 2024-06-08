@@ -222,7 +222,8 @@ class SignedPEFile:
             )
 
         position = locations["certtable"].start
-        while position < sum(locations["certtable"]):
+        certtable_end = sum(locations["certtable"])
+        while position < certtable_end:
             # check if this position is viable, we need at least 8 bytes for our header
             if position + 8 > self._filelength:
                 raise SignedPEParseError(
@@ -235,7 +236,7 @@ class SignedPEFile:
 
             # check if we are not going to perform a negative read (and 0 bytes is
             # weird as well)
-            if length <= 8:
+            if length <= 8 or position + length > certtable_end:
                 raise SignedPEParseError("Invalid length in certificate table header")
             certificate = self.file.read(length - 8)
 
