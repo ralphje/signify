@@ -152,9 +152,11 @@ class AuthenticodeSignerInfo(SignerInfo):
 
     .. attribute:: program_name
                    more_info
+                   publisher_info
 
        This information is extracted from the SpcSpOpusInfo authenticated attribute,
-       containing the program's name and an URL with more information.
+       containing the program's name and an URL with more information. The
+       publisher_info is almost never set, but is defined in the ASN.1 structure.
 
     .. attribute:: statement_types
 
@@ -183,6 +185,7 @@ class AuthenticodeSignerInfo(SignerInfo):
 
     program_name: str | None
     more_info: str | None
+    publisher_info: str | None
     nested_signed_datas: list[AuthenticodeSignedData]
 
     parent: AuthenticodeSignedData
@@ -211,7 +214,7 @@ class AuthenticodeSignerInfo(SignerInfo):
 
         # - Retrieve object from SpcSpOpusInfo from the authenticated attributes
         # (for normal signer)
-        self.program_name = self.more_info = None
+        self.program_name = self.more_info = self.publisher_info = None
         if "microsoft_spc_sp_opus_info" in self.authenticated_attributes:
             if len(self.authenticated_attributes["microsoft_spc_sp_opus_info"]) != 1:
                 raise AuthenticodeParseError(
@@ -225,6 +228,9 @@ class AuthenticodeSignerInfo(SignerInfo):
             self.more_info = self.authenticated_attributes[
                 "microsoft_spc_sp_opus_info"
             ][0]["more_info"].native
+            self.publisher_info = self.authenticated_attributes[
+                "microsoft_spc_sp_opus_info"
+            ][0]["publisher_info"].native
 
         # - Authenticode can use nested signatures through OID 1.3.6.1.4.1.311.2.4.1
         self.nested_signed_datas = []

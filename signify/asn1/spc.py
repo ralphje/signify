@@ -18,7 +18,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Authenticode-specific ASN.1 data structures."""
+"""Authenticode-specific ASN.1 data structures, called
+Software Publishing Certificate (SPC).
+"""
 
 from __future__ import annotations
 
@@ -115,6 +117,22 @@ class SpcLink(Choice):  # type: ignore[misc]
     ]
 
 
+class SpcImage(Sequence):  # type: ignore[misc]
+    """SpcImage.
+
+    Based on the SPC_IMAGE struct in WinTrust.h, e.g. at
+    https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Security/WinTrust/struct.SPC_IMAGE.html
+    """
+
+    _fields = [
+        ("image_link", SpcLink, {"explicit": 0, "optional": True}),
+        ("bitmap", OctetString, {"implicit": 1, "optional": True}),
+        ("metafile", OctetString, {"implicit": 2, "optional": True}),
+        ("enhanced_metafile", OctetString, {"implicit": 3, "optional": True}),
+        ("gif_file", OctetString, {"implicit": 4, "optional": True}),
+    ]
+
+
 class SpcPeImageFlags(BitString):  # type: ignore[misc]
     """SpcPeImageFlags.
 
@@ -187,7 +205,7 @@ class SpcAttributeTypeAndOptionalValue(Sequence):  # type: ignore[misc]
 
     _fields = [
         ("type", SpcAttributeType),
-        ("value", Any),
+        ("value", Any, {"optional": True}),
     ]
 
     _oid_pair = ("type", "value")
@@ -218,22 +236,24 @@ class SpcIndirectDataContent(Sequence):  # type: ignore[misc]
 
 
 class SpcSpOpusInfo(Sequence):  # type: ignore[misc]
-    """SpcLink.
+    """SpcSpOpusInfo.
 
     Based on `Windows Authenticode Portable Executable Signature Format
     <https://download.microsoft.com/download/9/c/5/9c5b2167-8017-4bae-9fde-d599bac8184a/authenticode_pe.docx>`_::
 
-        SpcLink ::= CHOICE {
-            url [0] IMPLICIT IA5STRING,
-            moniker [1] IMPLICIT SpcSerializedObject,
-            file [2] EXPLICIT SpcString
+        SpcSpOpusInfo ::= SEQUENCE {
+            programName [0] EXPLICIT SpcString OPTIONAL,
+            moreInfo [1] EXPLICIT SpcLink OPTIONAL,
         }
 
+    In WinTrust.h, the value pPublisherInfo is also defined. See
+    https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Security/WinTrust/struct.SPC_SP_OPUS_INFO.html
     """
 
     _fields = [
         ("program_name", SpcString, {"optional": True, "explicit": 0}),
         ("more_info", SpcLink, {"optional": True, "explicit": 1}),
+        ("publisher_info", SpcLink, {"optional": True, "explicit": 2}),
     ]
 
 
@@ -279,7 +299,7 @@ CMSAttribute._oid_specs["microsoft_spc_statement_type"] = SetOfSpcStatementType
 # reverse-engineered certificate extensions
 
 
-class SpcSpAgencyInfo(Sequence):  # type: ignore[misc]
+class SpcSpAgencyInformation(Sequence):  # type: ignore[misc]
     """Reverse-engineered extension for certificates, indicating certain information
     on certificate policies. Based on
     https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Security/WinTrust/struct.SPC_SP_AGENCY_INFO.html
@@ -291,7 +311,7 @@ class SpcSpAgencyInfo(Sequence):  # type: ignore[misc]
     _fields = [
         ("policy_information", SpcLink, {"explicit": 0}),
         ("policy_display_text", SpcString, {"optional": True, "explicit": 1}),
-        ("logo_image", OctetString, {"optional": True, "explicit": 2}),  # TODO
+        ("logo_image", SpcImage, {"optional": True, "implicit": 2}),
         ("logo_link", SpcLink, {"optional": True, "explicit": 3}),
     ]
 
@@ -306,6 +326,6 @@ class SpcFinancialCriteria(Sequence):  # type: ignore[misc]
 
 
 ExtensionId._map["1.3.6.1.4.1.311.2.1.10"] = "microsoft_spc_sp_agency_info"
-Extension._oid_specs["microsoft_spc_sp_agency_info"] = SpcSpAgencyInfo
+Extension._oid_specs["microsoft_spc_sp_agency_info"] = SpcSpAgencyInformation
 ExtensionId._map["1.3.6.1.4.1.311.2.1.27"] = "microsoft_spc_financial_criteria"
 Extension._oid_specs["microsoft_spc_financial_criteria"] = SpcFinancialCriteria
