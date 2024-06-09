@@ -36,6 +36,7 @@ from signify.exceptions import (
     AuthenticodeVerificationError,
     SignedPEParseError,
     VerificationError,
+    AuthenticodeNotSignedError,
 )
 from signify.fingerprinter import AuthenticodeFingerprinter
 from signify.x509.context import (
@@ -101,8 +102,12 @@ class AuthenticodeParserTestCase(unittest.TestCase):
     def test_simple(self):
         with open(str(root_dir / "test_data" / "simple"), "rb") as f:
             pefile = SignedPEFile(f)
-            self.assertRaises(SignedPEParseError, list, pefile.signed_datas)
-            self.assertRaises(SignedPEParseError, pefile.verify)
+            self.assertRaises(AuthenticodeNotSignedError, pefile.verify)
+            self.assertRaises(
+                SignedPEParseError,
+                list,
+                pefile.iter_signed_datas(ignore_parse_errors=False),
+            )
 
     def test_2A6E(self):
         with open(str(root_dir / "test_data" / "___2A6E.tmp"), "rb") as f:

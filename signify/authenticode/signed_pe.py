@@ -263,13 +263,27 @@ class SignedPEFile:
         yield from self.iter_signed_datas()
 
     def iter_signed_datas(
-        self, include_nested: bool = True
+        self, *, include_nested: bool = True, ignore_parse_errors: bool = True
     ) -> Iterator[structures.AuthenticodeSignedData]:
         """Returns an iterator over :class:`AuthenticodeSignedData` objects relevant
         for this PE file.
 
         :param include_nested: Boolean, if True, will also iterate over all nested
             SignedData structures
+        :param ignore_parse_errors: Indicates how to handle
+            :exc:`SignedPEParseError` that may be raised while fetching
+            embedded :class:`structures.AuthenticodeSignedData` structures.
+
+            When :const:`True`,  which is the default and seems to be how Windows
+            handles this as well, this will fetch as many valid
+            :class:`structures.AuthenticodeSignedData` structures until an exception
+            occurs.
+
+            Note that this will also silence the :exc:`SignedPEParseError` that occurs
+            when there's no valid :class:`AuthenticodeSignedData` to fetch.
+
+            When :const:`False`, this will raise the :exc:`SignedPEParseError` as
+            soon as one occurs.
         :raises SignedPEParseError: For parse errors in the PEFile
         :raises signify.authenticode.AuthenticodeParseError: For parse errors in the
             SignedData
@@ -284,26 +298,30 @@ class SignedPEFile:
                 for nested in signed_data.signer_info.nested_signed_datas:
                     yield from recursive_nested(nested)
 
-        found = False
-        for certificate in self._parse_cert_table():
-            if certificate["revision"] != 0x200:
-                raise SignedPEParseError(
-                    f"Unknown certificate revision {certificate['revision']!r}"
-                )
-
-            if certificate["type"] == 2:
-                yield from recursive_nested(
-                    structures.AuthenticodeSignedData.from_envelope(
-                        certificate["certificate"], pefile=self
+        try:
+            found = False
+            for certificate in self._parse_cert_table():
+                if certificate["revision"] != 0x200:
+                    raise SignedPEParseError(
+                        f"Unknown certificate revision {certificate['revision']!r}"
                     )
-                )
-                found = True
 
-        if not found:
-            raise SignedPEParseError(
-                "A SignedData structure was not found in the PE file's Certificate"
-                " Table"
-            )
+                if certificate["type"] == 2:
+                    yield from recursive_nested(
+                        structures.AuthenticodeSignedData.from_envelope(
+                            certificate["certificate"], pefile=self
+                        )
+                    )
+                    found = True
+
+            if not found:
+                raise SignedPEParseError(
+                    "A SignedData structure was not found in the PE file's Certificate"
+                    " Table"
+                )
+        except SignedPEParseError:
+            if not ignore_parse_errors:
+                raise
 
     def _calculate_expected_hashes(
         self,
@@ -345,6 +363,7 @@ class SignedPEFile:
         *,
         multi_verify_mode: Literal["any", "first", "all", "best"] = "any",
         expected_hashes: dict[str, bytes] | None = None,
+        ignore_parse_errors: bool = True,
         **kwargs: Any,
     ) -> bool:
         """Verifies the SignedData structures. This is a little bit more efficient than
@@ -353,7 +372,7 @@ class SignedPEFile:
         :param expected_hashes: When provided, should be a mapping of hash names to
             digests. This could speed up the verification process.
         :param multi_verify_mode: Indicates how to verify when there are multiple
-            :cls:`AuthenticodeSignedData` objects in this PE file. Can be:
+            :class:`structures.AuthenticodeSignedData` objects in this PE file. Can be:
 
             * 'any' (default) to indicate that any of the signatures must validate
               correctly.
@@ -366,11 +385,27 @@ class SignedPEFile:
               any may verify
 
             This argument has no effect when only one signature is present.
+        :param ignore_parse_errors: Indicates how to handle :exc:`SignedPEParseError`
+            that may be raised during parsing of the PE file's certificate table.
+
+            When :const:`True`, which is the default and seems to be how Windows
+            handles this as well, this will verify based on all available
+            :class:`structures.AuthenticodeSignedData` before a parse error occurs.
+
+            :exc:`AuthenticodeNotSignedError` will be raised when no valid
+            :class:`structures.AuthenticodeSignedData` exists.
+
+            When :const:`False`, this will raise the :exc:`SignedPEParseError` as soon
+            as one occurs. This often occurs before :exc:`AuthenticodeNotSignedError`
+            is potentially raised.
         :raises AuthenticodeVerificationError: when the verification failed
+        :raises SignedPEParseError: for parse errors in the PEFile
         """
 
         # we need to iterate it twice, so we need to prefetch all signed_datas
-        signed_datas = list(self.signed_datas)
+        signed_datas = list(
+            self.iter_signed_datas(ignore_parse_errors=ignore_parse_errors)
+        )
 
         # if there are no signed_datas, the binary is not signed
         if not signed_datas:

@@ -8,16 +8,36 @@ v0.7.0 (unreleased)
   parsing of ASN.1 structures, adding the ability to parse structures independent of
   RFC version. Certain bugs bugs we've encountered in the past, have now been resolved
   as a result of this. On top of that, structures defined in the replacement,
-  ``asn1crypto`` are a lot more Pythonic, and parsing speed has been sliced in more
+  ``asn1crypto``, are a lot more Pythonic, and parsing speed has been sliced in more
   than half.
-* This does have a serious impact if you use certain functions to deeply inspect the
+
+  This does have a serious impact if you use certain functions to deeply inspect the
   original data (as all these structures have now changed) and on some parts of the API
   to better align with the new dependency. Most notably, all OIDs are now strings,
-  rather than integer tuples, and references to attributes and subclasses are now
-  strings as well (such as in attribute lists).
+  rather than integer tuples, and references to attributes or specific types are now
+  strings as well (such as in attribute lists). These strings can be in dotted form,
+  but most commonly are a representation as provided by ``asn1crypto`` or ourselves.
 
-* Add support for ``SignedData`` versions other than v1
+* Add (default) option to swallow ``SignedPEParseError`` while parsing a PE file's
+  certificate table. This allows checking certificates until such a parse error occurs,
+  better aligning with how Windows handles these cases.
+
+  ``SignedPEFile.signed_datas`` will no longer raise an exception when anything goes
+  wrong, and will simply stop without yielding anything if no valid
+  ``AuthenticodeSignedData`` is found.
+
+  ``SignedPEFile.verify`` will raise a ``AuthenticodeNotSignedError`` when there's no
+  valid ``AuthenticodeSignedData``, instead of a ``SignedPEParseError``.
+
+  The former behaviour can be restored with the ``ignore_parse_errors`` argument to
+  ``SignedPEFile.verify`` and ``SignedPEFile.iter_signed_datas``. The latter method
+  has been changed to keyword-arguments only.
+
+* Add support for ``AuthenticodeSignedData`` versions other than v1
 * Add support for ``SignerInfo`` versions other than v1
+* Fix bug that could cause out-of-bound reads during parsing of the PE file's
+  certificate table
+
 * Parse the ``SpcPeImageData`` as part of the SpcInfo. This adds the attributes
   ``image_flags`` and ``image_publisher``, although this information is never used.
 * Parse the ``SpcStatementType`` as part of the authenticated attributes of the
