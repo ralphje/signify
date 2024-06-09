@@ -310,7 +310,7 @@ class VerificationContext:
                 else:
                     yield [*chain, certificate]
 
-    def verify(self, certificate: Certificate) -> Iterable[Certificate]:
+    def verify(self, certificate: Certificate) -> list[Certificate]:
         """Verifies the certificate, and its chain.
 
         :param Certificate certificate: The certificate to verify

@@ -268,15 +268,16 @@ class SignerInfo:
         new_attrs = type(data)(contents=data.contents)
         return cast(bytes, new_attrs.dump())
 
-    def _verify_issuer(self, issuer: Certificate, context: VerificationContext) -> None:
-        """Verifies whether the given issuer is valid for the given context. Similar to
-        :meth:`Certificate._verify_issuer`. Does not support legacy verification method.
+    def _verify_issuer_signature(
+        self, issuer: Certificate, context: VerificationContext
+    ) -> None:
+        """Check the issuer signature against the information in the class. Use
+        :meth:`_verify_issuer` for full verification.
 
         :param Certificate issuer: The Certificate to verify
-        :param VerificationContext context: The
+        :param VerificationContext context: The context for verification
+        :raises SignerInfoVerificationError: If the issuer signature is invalid
         """
-
-        issuer.verify(context)
 
         try:
             issuer.verify_signature(
@@ -291,9 +292,31 @@ class SignerInfo:
                 f" attributes in {type(self).__name__}: {e}"
             )
 
+    def _verify_issuer(
+        self,
+        issuer: Certificate,
+        context: VerificationContext,
+        signing_time: datetime.datetime | None = None,
+    ) -> list[Certificate]:
+        """Verifies whether the given issuer is valid for this :class:`SignerInfo`,
+        and valid in the given context. Similar to :meth:`Certificate._verify_issuer`.
+
+        It adds the ``signing_time`` to the context if necessary.
+        """
+
+        # _verify_issuer_signature may fail when it is not a valid issuer for
+        # this SignedInfo
+        self._verify_issuer_signature(issuer, context)
+
+        if signing_time is not None:
+            context.timestamp = signing_time
+        return context.verify(issuer)
+
     def _build_chain(
-        self, context: VerificationContext
-    ) -> Iterable[Iterable[Certificate]]:
+        self,
+        context: VerificationContext,
+        signing_time: datetime.datetime | None = None,
+    ) -> Iterable[list[Certificate]]:
         """Given a context, builds a chain up to a trusted certificate. This is a
         generator function, generating all valid chains.
 
@@ -303,6 +326,7 @@ class SignerInfo:
         :param VerificationContext context: The context for building the chain. Most
             importantly, contains all certificates to build the chain from, but also
             their properties are relevant.
+        :param signing_time: The time to be used as timestamp when creating the chain
         :return: Iterable of all of the valid chains from this SignedInfo up to and
             including a trusted anchor. Note that this may be an empty iteration if no
             candidate parent certificate was found.
@@ -323,12 +347,8 @@ class SignerInfo:
             issuer=self.issuer, serial_number=self.serial_number
         ):
             try:
-                # _verify_issuer may fail when it is not a valid issuer for this
-                # SignedInfo
-                self._verify_issuer(issuer, context)
-
-                # _build_chain may fail when anywhere up its chain an error occurs
-                yield context.verify(issuer)
+                # may fail when anywhere up its chain an error occurs
+                yield self._verify_issuer(issuer, context, signing_time)
             except VerificationError as e:  # noqa: PERF203
                 if first_error is None:
                     first_error = e
@@ -338,18 +358,23 @@ class SignerInfo:
         if first_error:
             raise first_error
 
-    def verify(self, context: VerificationContext) -> Iterable[Iterable[Certificate]]:
+    def verify(
+        self,
+        context: VerificationContext,
+        signing_time: datetime.datetime | None = None,
+    ) -> Iterable[list[Certificate]]:
         """Verifies that this :class:`SignerInfo` verifies up to a chain with the root
         of a trusted certificate.
 
         :param VerificationContext context: The context for verifying the SignerInfo.
+        :param signing_time: The time to be used as timestamp when creating the chain
         :return: A list of valid certificate chains for this SignerInfo.
         :rtype: Iterable[Iterable[Certificate]]
         :raises AuthenticodeVerificationError: When the SignerInfo could not be
             verified.
         """
 
-        chains = list(self._build_chain(context))
+        chains = list(self._build_chain(context, signing_time))
 
         if not chains:
             raise SignerInfoVerificationError(
@@ -361,7 +386,7 @@ class SignerInfo:
 
     def potential_chains(
         self, context: VerificationContext
-    ) -> Iterable[Iterable[Certificate]]:
+    ) -> Iterable[list[Certificate]]:
         """Retrieves all potential chains from this SignerInfo instance.
 
         :param VerificationContext context: The context

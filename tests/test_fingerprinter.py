@@ -22,6 +22,7 @@
 import hashlib
 import io
 import json
+import os.path
 import pathlib
 import unittest
 
@@ -40,7 +41,9 @@ class FingerPrinterTestCase(unittest.TestCase):
 
     def test_entire_blobs(self):
         for filename in (root_dir / "test_data").iterdir():
-            if str(filename).endswith(".res") or str(filename).endswith("README.rst"):
+            if str(filename).endswith(".res") or not os.path.exists(
+                str(filename) + ".res"
+            ):
                 continue
             with self.subTest(filename):
                 with open(str(filename), "rb") as file_obj:

@@ -45,6 +45,7 @@ from signify import fingerprinter
 from signify.asn1.hashing import ACCEPTED_DIGEST_ALGORITHMS
 from signify.authenticode import structures
 from signify.exceptions import AuthenticodeNotSignedError, SignedPEParseError
+from signify.x509 import Certificate
 
 logger = logging.getLogger(__name__)
 
@@ -365,7 +366,7 @@ class SignedPEFile:
         expected_hashes: dict[str, bytes] | None = None,
         ignore_parse_errors: bool = True,
         **kwargs: Any,
-    ) -> bool:
+    ) -> list[tuple[structures.AuthenticodeSignedData, Iterable[list[Certificate]]]]:
         """Verifies the SignedData structures. This is a little bit more efficient than
         calling all verify-methods separately.
 
@@ -398,6 +399,8 @@ class SignedPEFile:
             When :const:`False`, this will raise the :exc:`SignedPEParseError` as soon
             as one occurs. This often occurs before :exc:`AuthenticodeNotSignedError`
             is potentially raised.
+        :return: the used structure(s) in validation, as a list of tuples, in the form
+            (signed data object, certificate chain)
         :raises AuthenticodeVerificationError: when the verification failed
         :raises SignedPEParseError: for parse errors in the PEFile
         """
@@ -430,13 +433,21 @@ class SignedPEFile:
         expected_hashes = self._calculate_expected_hashes(signed_datas, expected_hashes)
 
         # Now iterate over all SignedDatas
+        chains = []
         last_error = None
         assert signed_datas
         for signed_data in signed_datas:
             try:
-                signed_data.verify(
-                    expected_hash=expected_hashes[signed_data.digest_algorithm().name],
-                    **kwargs,
+                chains.append(
+                    (
+                        signed_data,
+                        signed_data.verify(
+                            expected_hash=expected_hashes[
+                                signed_data.digest_algorithm().name
+                            ],
+                            **kwargs,
+                        ),
+                    )
                 )
             except Exception as e:  # noqa: PERF203
                 # best and any are interpreted as any; first doesn't matter either way,
@@ -446,9 +457,10 @@ class SignedPEFile:
                 last_error = e
             else:
                 if multi_verify_mode not in ("all", "first"):
-                    return True
+                    # only return the last one, as we are in mode any/best
+                    return chains[-1:]
         if last_error is None:
-            return True
+            return chains
         raise last_error
 
     def explain_verify(

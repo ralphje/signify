@@ -275,6 +275,22 @@ class AuthenticodeSignerInfo(SignerInfo):
 
             self.countersigner = RFC3161SignedData(ts_data["content"])
 
+    def _verify_issuer(
+        self,
+        issuer: Certificate,
+        context: VerificationContext,
+        signing_time: datetime.datetime | None = None,
+    ) -> list[Certificate]:
+        """Check whether the lifetime signing EKU is set. if that is the case, we can
+        only use the timestamp for revocation checking, not for extending the lifetime
+        of the signature. Revocation checking currently does not work.
+        """
+        if "microsoft_lifetime_signing" in issuer.extensions.get(
+            "extended_key_usage", []
+        ):
+            signing_time = None
+        return super()._verify_issuer(issuer, context, signing_time)
+
 
 class SpcInfo:
     """The Authenticode's SpcIndirectDataContent information, and their children. This
@@ -417,7 +433,7 @@ class AuthenticodeSignedData(SignedData):
         trusted_certificate_store: CertificateStore = TRUSTED_CERTIFICATE_STORE,
         verification_context_kwargs: dict[str, Any] | None = None,
         countersignature_mode: Literal["strict", "permit", "ignore"] = "strict",
-    ) -> None:
+    ) -> Iterable[list[Certificate]]:
         """Verifies the SignedData structure:
 
         * Verifies that the digest algorithms match across the structure
@@ -468,7 +484,7 @@ class AuthenticodeSignedData(SignedData):
             checked, but when it errors, it is verified as if the countersignature was
             never set. When set to 'ignore', countersignatures are never checked.
         :raises AuthenticodeVerificationError: when the verification failed
-        :return: :const:`None`
+        :return: A list of valid certificate chains for this SignedData.
         """
 
         if verification_context_kwargs is None:
@@ -532,6 +548,7 @@ class AuthenticodeSignedData(SignedData):
         # Can't check authAttr hash against encrypted hash, done implicitly in
         # M2's pubkey.verify.
 
+        signing_time = None
         if self.signer_info.countersigner and countersignature_mode != "ignore":
             assert cs_verification_context is not None
 
@@ -565,11 +582,9 @@ class AuthenticodeSignedData(SignedData):
             else:
                 # If no errors occur, we should be fine setting the timestamp to the
                 # countersignature's timestamp
-                verification_context.timestamp = (
-                    self.signer_info.countersigner.signing_time
-                )
+                signing_time = self.signer_info.countersigner.signing_time
 
-        self.signer_info.verify(verification_context)
+        return self.signer_info.verify(verification_context, signing_time)
 
     def explain_verify(
         self, *args: Any, **kwargs: Any

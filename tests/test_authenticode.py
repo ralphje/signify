@@ -33,12 +33,13 @@ from signify.authenticode import (
 )
 from signify.authenticode.signed_pe import SignedPEFile
 from signify.exceptions import (
+    AuthenticodeNotSignedError,
     AuthenticodeVerificationError,
     SignedPEParseError,
     VerificationError,
-    AuthenticodeNotSignedError,
 )
 from signify.fingerprinter import AuthenticodeFingerprinter
+from signify.x509 import Certificate
 from signify.x509.context import (
     CertificateStore,
     FileSystemCertificateStore,
@@ -339,6 +340,45 @@ class AuthenticodeParserTestCase(unittest.TestCase):
         ) as f:
             pefile = SignedPEFile(f)
             pefile.verify()
+
+    def test_lifetime_signing(self):
+        """this tests a sample that has a valid countersignature and a lifetime signing
+        flag. it is self-signed, so we need to load that one as well
+        """
+        certificate_store = CertificateStore(
+            list(TRUSTED_CERTIFICATE_STORE_NO_CTL)
+            + list(
+                Certificate.from_pems(
+                    (root_dir / "test_data" / "kdbazis.dll.crt").read_bytes()
+                )
+            ),
+            trusted=True,
+        )
+
+        with open(
+            str(root_dir / "test_data" / "kdbazis.dll"),
+            "rb",
+        ) as f:
+            pefile = SignedPEFile(f)
+            # should verify on this date
+            pefile.verify(
+                trusted_certificate_store=certificate_store,
+                verification_context_kwargs={
+                    "timestamp": datetime.datetime(
+                        2024, 1, 1, tzinfo=datetime.timezone.utc
+                    )
+                },
+            )
+            # should not verify on this date
+            with self.assertRaises(VerificationError):
+                pefile.verify(
+                    trusted_certificate_store=certificate_store,
+                    verification_context_kwargs={
+                        "timestamp": datetime.datetime(
+                            2060, 1, 1, tzinfo=datetime.timezone.utc
+                        )
+                    },
+                )
 
 
 class CertificateTestCase(unittest.TestCase):

@@ -6,7 +6,7 @@ v0.7.0 (unreleased)
 -------------------
 * Remove dependency of ``pyasn1`` and ``pyasn1-modules`` entirely to provide more robust
   parsing of ASN.1 structures, adding the ability to parse structures independent of
-  RFC version. Certain bugs bugs we've encountered in the past, have now been resolved
+  RFC version. Certain bugs we've encountered in the past, have now been resolved
   as a result of this. On top of that, structures defined in the replacement,
   ``asn1crypto``, are a lot more Pythonic, and parsing speed has been sliced in more
   than half.
@@ -37,6 +37,12 @@ v0.7.0 (unreleased)
 * Add support for ``SignerInfo`` versions other than v1
 * Fix bug that could cause out-of-bound reads during parsing of the PE file's
   certificate table
+* Correctly handle the lifetime-signing EKU (OID 1.3.6.1.4.1.311.10.3.13) by ignoring
+  the countersignature's timestamp during verification of the certification chain when
+  this is set on the end-entity's certificate. Note that the private
+  ``SignerInfo._verify_issuer`` has slightly changed semantics based on this.
+* Return the certificate chain(s) in ``AuthenticodeSignedData.verify`` and
+  the used ``AuthenticodeSignedData`` and chains in ``SignedPEFile.verify``
 
 * Parse the ``SpcPeImageData`` as part of the SpcInfo. This adds the attributes
   ``image_flags`` and ``image_publisher``, although this information is never used.
