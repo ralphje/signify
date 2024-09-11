@@ -153,7 +153,7 @@ class SubjectAttribute(Sequence):  # type: ignore[misc]
         # "microsoft_ctl_root_program_cert_policies": ExtKeyUsageSyntax,
         # "microsoft_ctl_auth_root_sha256_hash": OctetString,
         "microsoft_ctl_disallowed_filetime": FileTime,
-        # "microsoft_ctl_root_program_chain_policies": ExtKeyUsageSyntax,
+        "microsoft_ctl_root_program_chain_policies": ExtKeyUsageSyntax,
         "microsoft_ctl_disallowed_enhkey_usage": ExtKeyUsageSyntax,
         "microsoft_ctl_not_before_filetime": FileTime,
         "microsoft_ctl_not_before_enhkey_usage": ExtKeyUsageSyntax,

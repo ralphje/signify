@@ -2,7 +2,11 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
-v0.7.0 (unreleased)
+v0.7.1 (2024-09-11)
+-------------------
+* Fix minor bug in parsing of ``CertificateTrustSubject.root_program_chain_policies``.
+
+v0.7.0 (2024-09-11)
 -------------------
 * Remove dependency of ``pyasn1`` and ``pyasn1-modules`` entirely to provide more robust
   parsing of ASN.1 structures, adding the ability to parse structures independent of
