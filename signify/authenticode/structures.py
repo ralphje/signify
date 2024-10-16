@@ -30,6 +30,7 @@ import datetime
 import enum
 import logging
 import pathlib
+import warnings
 from typing import Any, Callable, Iterable, Sequence
 
 import mscerts
@@ -359,12 +360,17 @@ class SpcInfo:
         # The data attribute
         self.content_type = self.data["data"]["type"].native
 
-        if self.content_type != "microsoft_spc_pe_image_data":
-            raise AuthenticodeParseError("SpcInfo does not contain SpcPeImageData")
-
-        self.image_data = self.data["data"]["value"]
-        self.image_flags = self.image_data["flags"].native
-        self.image_publisher = self.image_data["file"].native
+        if self.content_type == "microsoft_spc_pe_image_data":
+            self.image_data = self.data["data"]["value"]
+            self.image_flags = self.image_data["flags"].native
+            self.image_publisher = self.image_data["file"].native
+        elif self.content_type != "microsoft_spc_siginfo":
+            # XXX: more content types may exist, but we currently know of these
+            #      please open an issue so we can look into adding more :)
+            warnings.warn(
+                f"SpcInfo contains unknown content type {self.content_type!r}",
+                stacklevel=2,
+            )
 
         self.digest_algorithm = _get_digest_algorithm(
             self.data["message_digest"]["digest_algorithm"],

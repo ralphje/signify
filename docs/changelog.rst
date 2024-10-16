@@ -2,6 +2,13 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
+v0.7.2 (unreleased)
+-------------------
+* Add support (don't crash) for the ``microsoft_spc_siginfo`` OID in the
+  ``SpcIndirectDataContent`` structure, used in signing MSI files. We may improve
+  support for the attributes in this structure in a future release. Note that MSI files
+  are not (yet) supported.
+
 v0.7.1 (2024-09-11)
 -------------------
 * Fix minor bug in parsing of ``CertificateTrustSubject.root_program_chain_policies``.
