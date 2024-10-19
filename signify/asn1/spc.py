@@ -46,6 +46,7 @@ from asn1crypto.core import (
     Sequence,
     SequenceOf,
     SetOf,
+    UTF8String,
 )
 from asn1crypto.x509 import Extension, ExtensionId
 
@@ -324,15 +325,51 @@ class SetOfSpcStatementType(SetOf):  # type: ignore[misc]
     _child_spec = SpcStatementType
 
 
+class PlatformManifestBinaryID(UTF8String):  # type: ignore[misc]
+    """PlatformManifestBinaryID.
+
+    Present as OID 1.3.6.1.4.1.311.10.3.28, reversed as being a UTF8 string. The
+    purpose of this attribute is currently unknown.
+    """
+
+
+class SetOfPlatformManifestBinaryID(SetOf):  # type: ignore[misc]
+    _child_spec = PlatformManifestBinaryID
+
+
+class SpcRelaxedPeMarkerCheck(Integer):  # type: ignore[misc]
+    """SpcRelaxedPeMarkerCheck.
+
+    Present as OID 1.3.6.1.4.1.311.2.6.1, reversed as being an integer. The
+    purpose of this attribute is currently unknown.
+    """
+
+
+class SetOfSpcRelaxedPeMarkerCheck(SetOf):  # type: ignore[misc]
+    _child_spec = SpcRelaxedPeMarkerCheck
+
+
 ContentType._map["1.3.6.1.4.1.311.2.1.4"] = "microsoft_spc_indirect_data_content"
 EncapsulatedContentInfo._oid_specs["microsoft_spc_indirect_data_content"] = (
     ContentInfo._oid_specs["microsoft_spc_indirect_data_content"]
 ) = SpcIndirectDataContent
 
-CMSAttributeType._map["1.3.6.1.4.1.311.2.1.11"] = "microsoft_spc_statement_type"
-CMSAttributeType._map["1.3.6.1.4.1.311.2.1.12"] = "microsoft_spc_sp_opus_info"
-CMSAttribute._oid_specs["microsoft_spc_sp_opus_info"] = SetOfSpcSpOpusInfo
-CMSAttribute._oid_specs["microsoft_spc_statement_type"] = SetOfSpcStatementType
+CMSAttributeType._map.update(
+    {
+        "1.3.6.1.4.1.311.2.1.11": "microsoft_spc_statement_type",
+        "1.3.6.1.4.1.311.2.1.12": "microsoft_spc_sp_opus_info",
+        "1.3.6.1.4.1.311.2.6.1": "microsoft_spc_relaxed_pe_marker_check",
+        "1.3.6.1.4.1.311.10.3.28": "microsoft_platform_manifest_binary_id",
+    }
+)
+CMSAttribute._oid_specs.update(
+    {
+        "microsoft_spc_sp_opus_info": SetOfSpcSpOpusInfo,
+        "microsoft_spc_statement_type": SetOfSpcStatementType,
+        "microsoft_spc_relaxed_pe_marker_check": SetOfSpcRelaxedPeMarkerCheck,
+        "microsoft_platform_manifest_binary_id": SetOfPlatformManifestBinaryID,
+    }
+)
 
 
 # reverse-engineered certificate extensions
