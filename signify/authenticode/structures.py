@@ -31,10 +31,11 @@ import enum
 import logging
 import pathlib
 import warnings
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence, cast
 
 import mscerts
 from asn1crypto import cms, tsp
+from asn1crypto.core import Asn1Value
 from typing_extensions import Literal, ParamSpec
 
 from signify import asn1
@@ -148,107 +149,29 @@ class AuthenticodeCounterSignerInfo(CounterSignerInfo):
 
 class AuthenticodeSignerInfo(SignerInfo):
     """Subclass of :class:`SignerInfo` that is used by the verification of Authenticode.
-    Note that this will contain the same attributes as :class:`SignerInfo`, and
-    additionally the following:
-
-    .. attribute:: program_name
-                   more_info
-                   publisher_info
-
-       This information is extracted from the SpcSpOpusInfo authenticated attribute,
-       containing the program's name and an URL with more information. The
-       publisher_info is almost never set, but is defined in the ASN.1 structure.
-
-    .. attribute:: statement_types
-
-       Defines the key purpose of the signer. This is ignored by the verification.
-
-    .. attribute:: nested_signed_datas
-
-       It is possible for Authenticode SignerInfo objects to contain nested
-       :class:`signify.pkcs7.SignedData` objects. This is  similar to including
-       multiple SignedData structures in the :class:`signify.authenticode.SignedPEFile`.
-       This field  is extracted from  the unauthenticated attributes.
+    Note that this will contain the same attributes as :class:`SignerInfo`, with
+    some additions.
 
     The :attr:`countersigner` attribute can hold the same as in the normal
-    :class:`SignerInfo`, but may also contain a :class:`RFC3161SignedData` class:
-
-    .. attribute:: countersigner
-
-       Authenticode may use a different countersigning mechanism, rather than using a
-       nested :class:`AuthenticodeCounterSignerInfo`, it  may use a nested RFC-3161
-       response, which is a nested :class:`signify.pkcs7.SignedData` structure
-       (of type :class:`RFC3161SignedData`). This is also assigned to the countersigner
-       attribute if this is available.
-
-
+    :class:`SignerInfo`, but may also contain a :class:`RFC3161SignedData` class.
     """
 
-    program_name: str | None
-    more_info: str | None
-    publisher_info: str | None
-    nested_signed_datas: list[AuthenticodeSignedData]
-
     parent: AuthenticodeSignedData
-    # allow other countersigner as well
-    countersigner: (  # type: ignore[assignment]
-        AuthenticodeCounterSignerInfo | RFC3161SignedData | None
-    )
 
+    _singular_authenticated_attributes = (
+        *SignerInfo._singular_authenticated_attributes,
+        "microsoft_spc_statement_type",
+        "microsoft_spc_sp_opus_info",
+    )
+    _singular_unauthenticated_attributes = (
+        *SignerInfo._singular_unauthenticated_attributes,
+        "microsoft_time_stamp_token",
+    )
     _countersigner_class = AuthenticodeCounterSignerInfo
     _expected_content_type = "microsoft_spc_indirect_data_content"
 
-    def _parse(self) -> None:
-        super()._parse()
-
-        # - Retrieve statement types
-        self.statement_types = None
-        if "microsoft_spc_statement_type" in self.authenticated_attributes:
-            if len(self.authenticated_attributes["microsoft_spc_statement_type"]) != 1:
-                raise AuthenticodeParseError(
-                    "Only one SpcStatementType expected in"
-                    " SignerInfo.authenticatedAttributes"
-                )
-            self.statement_types = self.authenticated_attributes[
-                "microsoft_spc_statement_type"
-            ][0].native
-
-        # - Retrieve object from SpcSpOpusInfo from the authenticated attributes
-        # (for normal signer)
-        self.program_name = self.more_info = self.publisher_info = None
-        if "microsoft_spc_sp_opus_info" in self.authenticated_attributes:
-            if len(self.authenticated_attributes["microsoft_spc_sp_opus_info"]) != 1:
-                raise AuthenticodeParseError(
-                    "Only one SpcSpOpusInfo expected in"
-                    " SignerInfo.authenticatedAttributes"
-                )
-
-            self.program_name = self.authenticated_attributes[
-                "microsoft_spc_sp_opus_info"
-            ][0]["program_name"].native
-            self.more_info = self.authenticated_attributes[
-                "microsoft_spc_sp_opus_info"
-            ][0]["more_info"].native
-            self.publisher_info = self.authenticated_attributes[
-                "microsoft_spc_sp_opus_info"
-            ][0]["publisher_info"].native
-
-        # - Authenticode can use nested signatures through OID 1.3.6.1.4.1.311.2.4.1
-        self.nested_signed_datas = []
-        if "microsoft_nested_signature" in self.unauthenticated_attributes:
-            for sig_data in self.unauthenticated_attributes[
-                "microsoft_nested_signature"
-            ]:
-                content_type = sig_data["content_type"].native
-                if content_type != "signed_data":
-                    raise AuthenticodeParseError(
-                        "Nested signature is not a SignedData structure"
-                    )
-                self.nested_signed_datas.append(
-                    AuthenticodeSignedData(
-                        sig_data["content"], pefile=self.parent.pefile
-                    )
-                )
+    def _validate_asn1(self) -> None:
+        super()._validate_asn1()
 
         # - Authenticode can be signed using a RFC-3161 timestamp, so we discover this
         # possibility here
@@ -260,21 +183,111 @@ class AuthenticodeSignerInfo(SignerInfo):
                 "Countersignature and RFC-3161 timestamp present in"
                 " SignerInfo.unauthenticatedAttributes"
             )
-
         if "microsoft_time_stamp_token" in self.unauthenticated_attributes:
-            if len(self.unauthenticated_attributes["microsoft_time_stamp_token"]) != 1:
-                raise AuthenticodeParseError(
-                    "Only one RFC-3161 timestamp expected in"
-                    " SignerInfo.unauthenticatedAttributes"
-                )
-
             ts_data = self.unauthenticated_attributes["microsoft_time_stamp_token"][0]
             if ts_data["content_type"].native != "signed_data":
                 raise AuthenticodeParseError(
                     "RFC-3161 Timestamp does not contain SignedData structure"
                 )
 
-            self.countersigner = RFC3161SignedData(ts_data["content"])
+    @property
+    def statement_types(self) -> list[str] | None:
+        """Defines the key purpose of the signer. This is ignored by the
+        verification.
+        """
+        if "microsoft_spc_statement_type" not in self.authenticated_attributes:
+            return None
+        return cast(
+            list[str],
+            self.authenticated_attributes["microsoft_spc_statement_type"][0].native,
+        )
+
+    @property
+    def program_name(self) -> str | None:
+        """This information is extracted from the SpcSpOpusInfo authenticated attribute,
+        containing the program's name.
+        """
+        if "microsoft_spc_sp_opus_info" not in self.authenticated_attributes:
+            return None
+        return cast(
+            str,
+            self.authenticated_attributes["microsoft_spc_sp_opus_info"][0][
+                "program_name"
+            ].native,
+        )
+
+    @property
+    def more_info(self) -> str | None:
+        """This information is extracted from the SpcSpOpusInfo authenticated attribute,
+        containing the URL with more information.
+        """
+        if "microsoft_spc_sp_opus_info" not in self.authenticated_attributes:
+            return None
+        return cast(
+            str,
+            self.authenticated_attributes["microsoft_spc_sp_opus_info"][0][
+                "more_info"
+            ].native,
+        )
+
+    @property
+    def publisher_info(self) -> str | None:
+        """This information is extracted from the SpcSpOpusInfo authenticated attribute,
+        containing the publisher_info. It is almost never set, but is defined in the
+        ASN.1 structure.
+        """
+        if "microsoft_spc_sp_opus_info" not in self.authenticated_attributes:
+            return None
+        return cast(
+            str,
+            self.authenticated_attributes["microsoft_spc_sp_opus_info"][0][
+                "publisher_info"
+            ].native,
+        )
+
+    @property
+    def nested_signed_datas(self) -> list[AuthenticodeSignedData]:
+        """It is possible for Authenticode SignerInfo objects to contain nested
+        :class:`signify.pkcs7.SignedData` objects. This is  similar to including
+        multiple SignedData structures in the
+        :class:`signify.authenticode.SignedPEFile`.
+
+        This field is extracted from the unauthenticated attributes.
+        """
+        if "microsoft_nested_signature" not in self.unauthenticated_attributes:
+            return []
+
+        result = []
+        for sig_data in self.unauthenticated_attributes[
+            "microsoft_nested_signature"
+        ]:  # type: cms.SignedData
+            content_type = sig_data["content_type"].native
+            if content_type != "signed_data":
+                raise AuthenticodeParseError(
+                    "Nested signature is not a SignedData structure"
+                )
+            result.append(
+                AuthenticodeSignedData(sig_data["content"], pefile=self.parent.pefile)
+            )
+
+        return result
+
+    @property
+    def countersigner(self) -> AuthenticodeCounterSignerInfo | RFC3161SignedData | None:  # type: ignore[override]
+        """Authenticode may use a different countersigning mechanism, rather than using
+        a nested :class:`AuthenticodeCounterSignerInfo`, it may use a nested RFC-3161
+        response, which is a nested :class:`signify.pkcs7.SignedData` structure
+        (of type :class:`RFC3161SignedData`). This is also assigned to the countersigner
+        attribute if this is available.
+        """
+        if "microsoft_time_stamp_token" in self.unauthenticated_attributes:
+            ts_data = cast(
+                cms.ContentInfo,
+                self.unauthenticated_attributes["microsoft_time_stamp_token"][0],
+            )
+            return RFC3161SignedData(ts_data["content"])
+
+        return cast("AuthenticodeCounterSignerInfo | None", super().countersigner)
 
     def _verify_issuer(
         self,
@@ -311,72 +324,45 @@ class SpcInfo:
             digestAlgorithm  AlgorithmIdentifier,
             digest OCTETSTRING
         }
-        AlgorithmIdentifier ::= SEQUENCE {
-            algorithm ObjectID,
-            parameters [0] EXPLICIT ANY OPTIONAL
-        }
 
-    .. attribute:: data
+    .. attribute:: asn1
 
        The underlying ASN.1 data object
 
-    .. attribute:: content_type
-
-       The contenttype string
-
-    .. attribute:: image_data
-
-       The image data object embedded in the ASN.1 object.
-
-    .. attribute:: image_flags
-
-       The flags used for signing. These flags are ignored during verification.
-
-    .. attribute:: image_publisher
-
-       Obsolete software publisher field (i.e. ``SpcPeImageData.file``). Should now
-       contain ``<<<Obsolete>>>``, although this value does not affect verification.
-
-    .. attribute:: digest_algorithm
-    .. attribute:: digest
-
-
     """
 
-    data: spc.SpcIndirectDataContent
+    asn1: spc.SpcIndirectDataContent
 
-    content_type: str
-    image_data: spc.SpcPeImageData
-    image_flags: set[str]
-    image_publisher: str
-    digest_algorithm: HashFunction
-    digest: bytes
+    def __init__(self, asn1: spc.SpcIndirectDataContent):
+        self.asn1 = asn1
 
-    def __init__(self, data: spc.SpcIndirectDataContent):
-        self.data = data
-        self._parse()
+    @property
+    def content_type(self) -> str:
+        """The contenttype string"""
+        return cast(str, self.asn1["data"]["type"].native)
 
-    def _parse(self) -> None:
-        # The data attribute
-        self.content_type = self.data["data"]["type"].native
-
-        if self.content_type == "microsoft_spc_pe_image_data":
-            self.image_data = self.data["data"]["value"]
-            self.image_flags = self.image_data["flags"].native
-            self.image_publisher = self.image_data["file"].native
-        elif self.content_type != "microsoft_spc_siginfo":
-            # XXX: more content types may exist, but we currently know of these
-            #      please open an issue so we can look into adding more :)
+    @property
+    def content_asn1(self) -> Asn1Value:
+        if self.content_type not in {
+            "microsoft_spc_pe_image_data",
+            "microsoft_spc_siginfo",
+        }:
             warnings.warn(
                 f"SpcInfo contains unknown content type {self.content_type!r}",
                 stacklevel=2,
             )
+        return cast(Asn1Value, self.asn1["data"]["value"])
 
-        self.digest_algorithm = _get_digest_algorithm(
-            self.data["message_digest"]["digest_algorithm"],
+    @property
+    def digest_algorithm(self) -> HashFunction:
+        return _get_digest_algorithm(
+            self.asn1["message_digest"]["digest_algorithm"],
             location="SpcIndirectDataContent.digestAlgorithm",
         )
-        self.digest = self.data["message_digest"]["digest"].native
+
+    @property
+    def digest(self) -> bytes:
+        return cast(bytes, self.asn1["message_digest"]["digest"].native)
 
 
 class AuthenticodeSignedData(SignedData):
@@ -390,45 +376,40 @@ class AuthenticodeSignedData(SignedData):
 
     """
 
-    pefile: signed_pe.SignedPEFile | None
-    spc_info: SpcInfo
     signer_infos: Sequence[AuthenticodeSignerInfo]
     signer_info: AuthenticodeSignerInfo
+    content_asn1: asn1.spc.SpcIndirectDataContent
 
-    content: asn1.spc.SpcIndirectDataContent
     _expected_content_type = "microsoft_spc_indirect_data_content"
     _signerinfo_class = AuthenticodeSignerInfo
 
     def __init__(
         self,
-        data: cms.SignedData,
+        asn1: cms.SignedData,
         pefile: signed_pe.SignedPEFile | None = None,
     ):
         """
-        :param asn1.pkcs7.SignedData data: The ASN.1 structure of the SignedData object
+        :param asn1.pkcs7.SignedData asn1: The ASN.1 structure of the SignedData object
         :param pefile: The related PEFile.
         """
         self.pefile = pefile
-        super().__init__(data)
+        super().__init__(asn1)
 
-    def _parse(self) -> None:
-        super()._parse()
-        self.spc_info = SpcInfo(self.content)
-
-        # signerInfos
+    def _validate_asn1(self) -> None:
+        super()._validate_asn1()
         if len(self.signer_infos) != 1:
             raise AuthenticodeParseError(
                 "SignedData.signerInfos must contain exactly 1 signer,"
                 f" not {len(self.signer_infos)}"
             )
-
-        self.signer_info = self.signer_infos[0]
-
-        # CRLs
-        if self.data["crls"]:
+        if self.asn1["crls"]:
             raise AuthenticodeParseError(
                 "SignedData.crls is present, but that is unexpected."
             )
+
+    @property
+    def spc_info(self) -> SpcInfo:
+        return SpcInfo(self.content_asn1)
 
     def verify(
         self,
@@ -618,72 +599,58 @@ class RFC3161SignerInfo(SignerInfo):
 
 class TSTInfo:
     """This is an implementation of the TSTInfo class as defined by RFC3161, used as
-    content for a SignedData structure. The following properties are available:
-
-    .. attribute:: data
-
-       The underlying ASN.1 data object
-
-    .. attribute:: policy
-
-    .. attribute:: hash_algorithm
-
-       The hash algorithm of the message imprint.
-
-    .. attribute:: message_digest
-
-       The hashed message
-
-    .. attribute:: serial_number
-
-       The serial number of this signature
-
-    .. attribute:: signing_time
-
-       The time this signature was generated
-
-    .. attribute:: signing_time_accuracy
-
-       The accuracy of the above time
-
-    .. attribute:: signing_authority
-
-       The authority generating this signature
-
+    content for a SignedData structure.
     """
 
-    policy: str
-    hash_algorithm: HashFunction
-    message_digest: bytes
-    serial_number: int
-    signing_time: datetime.datetime
-    signing_time_accuracy: datetime.timedelta
-    signing_authority: CertificateName
-
-    def __init__(self, data: tsp.TSTInfo):
+    def __init__(self, asn1: tsp.TSTInfo):
         """
-
-        :param data: The ASN.1 structure of the TSTInfo object
+        :param asn1: The ASN.1 structure of the TSTInfo object
         """
-        self.data = data
-        self._parse()
+        self.asn1 = asn1
+        self._validate_asn1()
 
-    def _parse(self) -> None:
-        if self.data["version"].native != "v1":
+    def _validate_asn1(self) -> None:
+        if self.asn1["version"].native != "v1":
             raise AuthenticodeParseError(
-                f"TSTInfo.version must be v1, not {self.data['version'].native}"
+                f"TSTInfo.version must be v1, not {self.asn1['version'].native}"
             )
 
-        self.policy = self.data["policy"].native
-        self.hash_algorithm = _get_digest_algorithm(
-            self.data["message_imprint"]["hash_algorithm"],
+    @property
+    def policy(self) -> str:
+        return cast(str, self.asn1["policy"].native)
+
+    @property
+    def hash_algorithm(self) -> HashFunction:
+        """The hash algorithm of the message imprint."""
+        return _get_digest_algorithm(
+            self.asn1["message_imprint"]["hash_algorithm"],
             location="TSTInfo.messageImprint.hashAlgorithm",
         )
-        self.message_digest = self.data["message_imprint"]["hashed_message"].native
-        self.serial_number = self.data["serial_number"].native
-        self.signing_time = self.data["gen_time"].native
-        self.signing_time_accuracy = accuracy_to_python(self.data["accuracy"])
-        self.signing_authority = CertificateName(self.data["tsa"])
+
+    @property
+    def message_digest(self) -> bytes:
+        """The hashed message"""
+        return cast(bytes, self.asn1["message_imprint"]["hashed_message"].native)
+
+    @property
+    def serial_number(self) -> int:
+        """The serial number of this signature"""
+        return cast(int, self.asn1["serial_number"].native)
+
+    @property
+    def signing_time(self) -> datetime.datetime:
+        """The time this signature was generated"""
+        return cast(datetime.datetime, self.asn1["gen_time"].native)
+
+    @property
+    def signing_time_accuracy(self) -> datetime.timedelta:
+        """The accuracy of the above time"""
+        return accuracy_to_python(self.asn1["accuracy"])
+
+    @property
+    def signing_authority(self) -> CertificateName:
+        """The authority generating this signature"""
+        return CertificateName(self.asn1["tsa"])
 
 
 class RFC3161SignedData(SignedData):
@@ -693,31 +660,24 @@ class RFC3161SignedData(SignedData):
 
     This is a subclass of :class:`signify.pkcs7.SignedData`, containing a RFC3161
     TSTInfo in its content field.
-
-    .. attribute:: tst_info
-       :type: TSTInfo
-
-       Contains the :class:`TSTInfo` class for this SignedData.
     """
 
-    content: tsp.TSTInfo
+    content_asn1: tsp.TSTInfo
     _expected_content_type = "tst_info"
     _signerinfo_class = RFC3161SignerInfo
 
-    def _parse(self) -> None:
-        super()._parse()
-
-        # Get the tst_info
-        self.tst_info = TSTInfo(self.content)
-
-        # signerInfos
+    def _validate_asn1(self) -> None:
+        super()._validate_asn1()
         if len(self.signer_infos) != 1:
             raise AuthenticodeParseError(
                 "RFC3161 SignedData.signerInfos must contain exactly 1 signer,"
                 f" not {len(self.signer_infos)}"
             )
 
-        self.signer_info = self.signer_infos[0]
+    @property
+    def tst_info(self) -> TSTInfo:
+        """Contains the :class:`TSTInfo` class for this SignedData."""
+        return TSTInfo(self.content_asn1)
 
     @property
     def signing_time(self) -> datetime.datetime:
@@ -730,7 +690,6 @@ class RFC3161SignedData(SignedData):
         """Given the data, returns whether the hash_algorithm and message_digest match
         the data provided.
         """
-
         auth_attr_hasher = self.tst_info.hash_algorithm()
         auth_attr_hasher.update(data)
         return auth_attr_hasher.digest() == self.tst_info.message_digest

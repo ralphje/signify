@@ -322,7 +322,7 @@ class VerificationContext:
 
         # we keep track of our asn1 objects to make sure we return Certificate objects
         # when we're done
-        to_check_asn1cert = certificate.data
+        to_check_asn1cert = certificate.asn1
         all_certs = {to_check_asn1cert: certificate}
 
         # we need to get lists of our intermediates and trusted certificates
@@ -330,7 +330,7 @@ class VerificationContext:
         trust_roots: list[asn1crypto.x509.Certificate] = []
         for store in self.stores:
             for cert in store:
-                asn1cert = cert.data
+                asn1cert = cert.asn1
                 # we short-circuit the check here to ensure we do not check too much
                 # possibilities
                 (trust_roots if store.trusted else intermediates).append(asn1cert)

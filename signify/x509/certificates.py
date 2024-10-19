@@ -25,94 +25,73 @@ AlgorithmIdentifier = collections.namedtuple(
 
 
 class Certificate:
-    """Representation of a Certificate. It is built from an ASN.1 structure.
+    """Representation of a Certificate. It is built from an ASN.1 structure."""
 
-    .. attribute:: data
+    asn1: asn1crypto.x509.Certificate
 
-       The underlying ASN.1 data object
-
-    .. attribute:: signature_algorithm
-                   signature_value
-                   subject_public_algorithm
-                   subject_public_key
-
-       These values are considered part of the certificate, but not
-       fully parsed.
-
-    .. attribute:: version
-
-       This is the version of the certificate
-
-    .. attribute:: serial_number
-
-       The full integer serial number of the certificate
-
-    .. attribute:: issuer
-                   subject
-
-       The :class:`CertificateName` for the issuer and subject.
-
-    .. attribute:: valid_from
-                   valid_to
-
-       The datetime objects between which the certificate is valid.
-
-    .. attribute:: extensions
-
-       This is a list of extension objects.
-    """
-
-    signature_algorithm: Any
-    signature_value: Any
-    version: str
-    serial_number: int
-    issuer: CertificateName
-    valid_from: datetime.datetime
-    valid_to: datetime.datetime
-    subject: CertificateName
-    subject_public_algorithm: AlgorithmIdentifier
-    subject_public_key: bytes
-    extensions: dict[str, Any]
-
-    def __init__(
-        self,
-        data: asn1crypto.x509.Certificate | cms.CertificateChoices,
-    ):
+    def __init__(self, asn1: asn1crypto.x509.Certificate | cms.CertificateChoices):
+        """
+        :param asn1: The ASN.1 structure
         """
 
-        :type data: asn1.pkcs7.ExtendedCertificateOrCertificate or
-            asn1.x509.Certificate or asn1.x509.TBSCertificate
-        :param data: The ASN.1 structure
-        """
+        self.asn1 = asn1
 
-        self.data = data
-        self._parse()
-
-    def _parse(self) -> None:
-        if isinstance(self.data, cms.ExtendedCertificate):
+        if isinstance(self.asn1, cms.ExtendedCertificate):
             raise NotImplementedError(
                 "Support for extendedCertificate is not implemented"
             )
-
-        if isinstance(self.data, cms.CertificateChoices):
-            if self.data.name != "certificate":
+        elif isinstance(self.asn1, cms.CertificateChoices):
+            if self.asn1.name != "certificate":
                 raise NotImplementedError(
-                    f"This is not a certificate, but a {self.data.name}"
+                    f"This is not a certificate, but a {self.asn1.name}"
                 )
-            self.data = self.data.chosen
+            self.asn1 = self.asn1.chosen
 
-        self.signature_algorithm = self.data["signature_algorithm"].native
-        self.signature_value = self.data["signature_value"].native
-        tbs_certificate = self.data["tbs_certificate"]
+    @property
+    def signature_algorithm(self) -> str:
+        """These values are considered part of the certificate, but not fully parsed."""
+        return cast(str, self.asn1.signature_algo)
 
-        self.version = tbs_certificate["version"].native
-        self.serial_number = tbs_certificate["serial_number"].native
-        self.issuer = CertificateName(tbs_certificate["issuer"])
-        self.valid_from = tbs_certificate["validity"]["not_before"].native
-        self.valid_to = tbs_certificate["validity"]["not_after"].native
-        self.subject = CertificateName(tbs_certificate["subject"])
+    @property
+    def signature_value(self) -> bytes:
+        """These values are considered part of the certificate, but not fully parsed."""
+        return cast(bytes, self.asn1.signature)
 
-        self.subject_public_algorithm = AlgorithmIdentifier(
+    @property
+    def version(self) -> str:
+        """This is the version of the certificate"""
+        return cast(str, self.asn1["tbs_certificate"]["version"].native)
+
+    @property
+    def serial_number(self) -> int:
+        """The full integer serial number of the certificate"""
+        return cast(int, self.asn1.serial_number)
+
+    @property
+    def issuer(self) -> CertificateName:
+        """The :class:`CertificateName` for the issuer."""
+        return CertificateName(self.asn1.issuer)
+
+    @property
+    def subject(self) -> CertificateName:
+        """The :class:`CertificateName` for the subject."""
+        return CertificateName(self.asn1.subject)
+
+    @property
+    def valid_from(self) -> datetime.datetime:
+        """The datetime objects between which the certificate is valid."""
+        return cast(datetime.datetime, self.asn1.not_valid_before)
+
+    @property
+    def valid_to(self) -> datetime.datetime:
+        """The datetime objects between which the certificate is valid."""
+        return cast(datetime.datetime, self.asn1.not_valid_after)
+
+    @property
+    def subject_public_algorithm(self) -> AlgorithmIdentifier:
+        """These values are considered part of the certificate, but not fully parsed."""
+        tbs_certificate = self.asn1["tbs_certificate"]
+        return AlgorithmIdentifier(
             algorithm=tbs_certificate["subject_public_key_info"]["algorithm"][
                 "algorithm"
             ].native,
@@ -120,16 +99,26 @@ class Certificate:
                 "parameters"
             ].native,
         )
-        self.subject_public_key = tbs_certificate["subject_public_key_info"][
-            "public_key"
-        ].dump()
 
-        self.extensions = {}
+    @property
+    def subject_public_key(self) -> bytes:
+        """These values are considered part of the certificate, but not fully parsed."""
+        return cast(
+            bytes,
+            self.asn1["tbs_certificate"]["subject_public_key_info"][
+                "public_key"
+            ].dump(),
+        )
+
+    @property
+    def extensions(self) -> dict[str, Any]:
+        """This is a list of extension objects."""
+        result = {}
+        tbs_certificate = self.asn1["tbs_certificate"]
         if tbs_certificate["extensions"].native is not None:
             for extension in tbs_certificate["extensions"]:
-                self.extensions[extension["extn_id"].native] = extension[
-                    "extn_value"
-                ].native
+                result[extension["extn_id"].native] = extension["extn_value"].native
+        return result
 
     def __str__(self) -> str:
         return (
@@ -179,15 +168,15 @@ class Certificate:
     @cached_property
     def to_der(self) -> bytes:
         """Returns the DER-encoded data from this certificate."""
-        return cast(bytes, self.data.dump())
+        return cast(bytes, self.asn1.dump())
 
     @cached_property
     def sha256_fingerprint(self) -> str:
-        return cast(str, self.data.sha256_fingerprint).replace(" ", "").lower()
+        return cast(str, self.asn1.sha256_fingerprint).replace(" ", "").lower()
 
     @cached_property
     def sha1_fingerprint(self) -> str:
-        return cast(str, self.data.sha1_fingerprint).replace(" ", "").lower()
+        return cast(str, self.asn1.sha1_fingerprint).replace(" ", "").lower()
 
     def verify_signature(
         self,
@@ -213,7 +202,7 @@ class Certificate:
             https://mta.openssl.org/pipermail/openssl-users/2015-September/002053.html
         """
 
-        public_key = asymmetric.load_public_key(self.data.public_key)
+        public_key = asymmetric.load_public_key(self.asn1.public_key)
         if public_key.algorithm == "rsa":
             verify_func = asymmetric.rsa_pkcs1v15_verify
         elif public_key.algorithm == "dsa":
@@ -270,14 +259,14 @@ class CertificateName:
         "1.2.840.113549.1.9.1": "EMAIL",  # emailaddress
     }
 
-    def __init__(self, data: asn1crypto.x509.Name | asn1crypto.x509.GeneralName):
-        if isinstance(data, asn1crypto.x509.GeneralName):
-            if data.name != "directory_name":
+    def __init__(self, asn1: asn1crypto.x509.Name | asn1crypto.x509.GeneralName):
+        if isinstance(asn1, asn1crypto.x509.GeneralName):
+            if asn1.name != "directory_name":
                 raise NotImplementedError(
-                    f"CertificateNames of type {data.name} not supported"
+                    f"CertificateNames of type {asn1.name} not supported"
                 )
-            data = data.chosen
-        self.data = data
+            asn1 = asn1.chosen
+        self.asn1 = asn1
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, CertificateName) and self.rdns == other.rdns
@@ -330,7 +319,7 @@ class CertificateName:
             if not provided, yields tuples of (type, value)
         """
 
-        for n in list(self.data.chosen)[::-1]:
+        for n in list(self.asn1.chosen)[::-1]:
             type_value = n[0]  # get the AttributeTypeAndValue object
 
             type = self.OID_TO_RDN.get(

@@ -2,12 +2,17 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
-v0.7.2 (unreleased)
+v0.8.0 (unreleased)
 -------------------
 * Add support (don't crash) for the ``microsoft_spc_siginfo`` OID in the
   ``SpcIndirectDataContent`` structure, used in signing MSI files. We may improve
   support for the attributes in this structure in a future release. Note that MSI files
   are not (yet) supported.
+* Add support for ``SpcRelaxedPeMarkerCheck`` and ``PlatformManifestBinaryID`` as
+  SignerInfo attributes, although their exact purpose is currently unknown.
+* Refactor classes to store the ASN.1 object in the property ``asn1``, and use
+  property methods as data accessors, instead of assigning all attributes during class
+  initialization.
 
 v0.7.1 (2024-09-11)
 -------------------

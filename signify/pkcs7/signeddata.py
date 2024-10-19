@@ -30,57 +30,21 @@ class SignedData:
         }
 
     This class supports RFC2315 and RFC5652.
-
-    .. attribute:: data
-
-       The underlying ASN.1 data object
-
-    .. attribute:: digest_algorithm
-
-       The digest algorithm, i.e. the hash algorithm, that is used by the signers of
-       the data.
-
-    .. attribute:: content_type
-
-       The class of the type of the content in the object.
-
-    .. attribute:: content
-
-       The actual content, as parsed by the :attr:`content_type` spec.
-
-    .. attribute:: certificates
-       :type: CertificateStore
-
-       A list of all included certificates in the SignedData. These can be used to
-       determine a valid validation path from the signer to a root certificate.
-
-    .. attribute:: signer_infos
-       :type: List[SignerInfo]
-
-       A list of all included SignerInfo objects
     """
-
-    data: cms.SignedData
-    digest_algorithm: HashFunction
-    content_type: str
-    content: Asn1Value
-    certificates: CertificateStore
-    signer_infos: Sequence[signerinfo.SignerInfo]
 
     _expected_content_type: str | None = None
     _signerinfo_class: type[signerinfo.SignerInfo] | str | None = None
 
-    def __init__(self, data: cms.SignedData):
+    def __init__(self, asn1: cms.SignedData):
         """
-
-        :param data: The ASN.1 structure of the SignedData object
+        :param asn1: The ASN.1 structure of the SignedData object
         """
 
         if isinstance(self._signerinfo_class, str):
             self._signerinfo_class = globals()[self._signerinfo_class]
 
-        self.data = data
-        self._parse()
+        self.asn1 = asn1
+        self._validate_asn1()
 
     @classmethod
     def from_envelope(cls, data: bytes, *args: Any, **kwargs: Any) -> Self:
@@ -96,25 +60,12 @@ class SignedData:
         signed_data = cls(content_info["content"], *args, **kwargs)
         return signed_data
 
-    def _parse(self) -> None:
-        #         ('version', CMSVersion),
-        #         ('digest_algorithms', DigestAlgorithms),
-        #         ('encap_content_info', None),
-        #         ('certificates', CertificateSet, {'implicit': 0, 'optional': True}),
-        #         ('crls', RevocationInfoChoices, {'implicit': 1, 'optional': True}),
-        #         ('signer_infos', SignerInfos),
-
-        # digestAlgorithms
-        if len(self.data["digest_algorithms"]) != 1:
+    def _validate_asn1(self) -> None:
+        if len(self.asn1["digest_algorithms"]) != 1:
             raise ParseError(
                 f"SignedData.digestAlgorithms must contain"
-                f" exactly 1 algorithm, not {len(self.data['digestAlgorithms'])}"
+                f" exactly 1 algorithm, not {len(self.asn1['digestAlgorithms'])}"
             )
-        self.digest_algorithm = _get_digest_algorithm(
-            self.data["digest_algorithms"][0], "SignedData.digestAlgorithm"
-        )
-
-        self.content_type = self.data["encap_content_info"]["content_type"].native
 
         if self.content_type != self._expected_content_type:
             raise ParseError(
@@ -122,29 +73,66 @@ class SignedData:
                 f" expected {self._expected_content_type}"
             )
 
-        self._real_content = self.data["encap_content_info"]["content"]
-        if hasattr(self._real_content, "parsed"):
-            self.content = self._real_content.parsed
-        else:
-            self.content = self._real_content
+    @property
+    def digest_algorithm(self) -> HashFunction:
+        """The digest algorithm, i.e. the hash algorithm, that is used by the signers of
+        the data.
+        """
+        return _get_digest_algorithm(
+            self.asn1["digest_algorithms"][0], "SignedData.digestAlgorithm"
+        )
 
-        # Certificates
-        self.certificates = CertificateStore(
+    @property
+    def content_type(self) -> str:
+        """The class of the type of the content in the object."""
+        return cast(str, self.asn1["encap_content_info"]["content_type"].native)
+
+    @property
+    def _real_content(self) -> Asn1Value:
+        return self.asn1["encap_content_info"]["content"]
+
+    @property
+    def content_asn1(self) -> Asn1Value:
+        """The actual content, as parsed by the :attr:`content_type` spec."""
+        if hasattr(self._real_content, "parsed"):
+            return self._real_content.parsed
+        else:
+            return self._real_content
+
+    @property
+    def certificates(self) -> CertificateStore:
+        """A list of all included certificates in the SignedData. These can be used to
+        determine a valid validation path from the signer to a root certificate.
+        """
+        return CertificateStore(
             [
                 Certificate(cert)
-                for cert in self.data["certificates"]
+                for cert in self.asn1["certificates"]
                 if not isinstance(cert, cms.CertificateChoices)
                 or cert.name == "certificate"
             ]
         )
 
-        # SignerInfo
+    @property
+    def signer_infos(self) -> Sequence[signerinfo.SignerInfo]:
+        """A list of all included SignerInfo objects"""
         if self._signerinfo_class is not None:
             assert not isinstance(self._signerinfo_class, str)
-            self.signer_infos = [
+            return [
                 self._signerinfo_class(si, parent=self)
-                for si in self.data["signer_infos"]
+                for si in self.asn1["signer_infos"]
             ]
+        else:
+            raise AttributeError("No signer_infos expected")
+
+    @property
+    def signer_info(self) -> signerinfo.SignerInfo:
+        if len(self.signer_infos) == 1:
+            return self.signer_infos[0]
+        raise AttributeError(
+            "SignedData.signerInfos must contain exactly 1 signer,"
+            f" not {len(self.signer_infos)}"
+        )
 
     @property
     def content_digest(self) -> bytes:
@@ -158,7 +146,7 @@ class SignedData:
             # self.content.contents may refer to its children
             hash_content = bytes(self._real_content)
         else:
-            hash_content = self.content.contents
+            hash_content = self.content_asn1.contents
 
         blob_hasher = self.digest_algorithm()
         blob_hasher.update(hash_content)

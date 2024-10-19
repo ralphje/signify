@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import datetime
-from typing import Any, Iterable, cast
+from typing import Iterable, cast
 
 from asn1crypto import cms
 from asn1crypto.core import Asn1Value
@@ -37,7 +37,7 @@ class SignerInfo:
 
     This class supports RFC2315 and RFC5652.
 
-    .. attribute:: data
+    .. attribute:: asn1
 
        The underlying ASN.1 data object
 
@@ -46,84 +46,19 @@ class SignerInfo:
        The parent :class:`SignedData` object (or if other SignerInfos are present, it
        may be another object)
 
-    .. attribute:: issuer
-       :type: CertificateName
-
-       The issuer of the SignerInfo, i.e. the certificate of the signer of the
-       SignedData object.
-
-    .. attribute:: serial_number
-
-       The serial number as specified by the issuer.
-
-    .. attribute:: digest_algorithm
-
-       The digest algorithm, i.e. the hash algorithm, under which the content and the
-       authenticated attributes are
-       signed.
-
-    .. attribute:: authenticated_attributes
-                   unauthenticated_attributes
-
-       A SignerInfo object can contain both signed and unsigned attributes. These
-       contain additional information about the signature, but also the content type
-       and message digest. The difference between signed and unsigned is that unsigned
-       attributes are not validated.
-
-       The type of this attribute is a dictionary. You should not need to access this
-       value directly, rather using one of the attributes listed below.
-
-    .. attribute:: digest_encryption_algorithm
-
-       This is the algorithm used for signing the digest with the signer's key.
-
-    .. attribute:: encrypted_digest
-
-       The result of encrypting the message digest and associated information with the
-       signer's private key.
-
-
-    The following attributes are automatically parsed and added to the list of
-    attributes if present.
-
-    .. attribute:: message_digest
-
-       This is an authenticated attribute, containing the signed digest of the data.
-
-    .. attribute:: content_type
-
-       This is an authenticated attribute, containing the content type of the content
-       being signed.
-
-    .. attribute:: signing_time
-
-       This is an authenticated attribute, containing the timestamp of signing. Note
-       that this should only be present in countersigner objects.
-
-    .. attribute:: countersigner
-
-       This is an unauthenticated attribute, containing the countersigner of the
-       SignerInfo.
-
     """
-
-    issuer: CertificateName
-    serial_number: int
-    authenticated_attributes: dict[str, list[Any]]
-    unauthenticated_attributes: dict[str, list[Any]]
-    digest_encryption_algorithm: str
-    encrypted_digest: bytes
-    digest_algorithm: HashFunction
-    message_digest: bytes | None
-    content_type: str | None
-    signing_time: datetime.datetime | None
-    countersigner: CounterSignerInfo | None
 
     _countersigner_class: type[CounterSignerInfo] | str | None = "CounterSignerInfo"
     _required_authenticated_attributes: Iterable[str] = (
         "content_type",
         "message_digest",
     )
+    _singular_authenticated_attributes: Iterable[str] = (
+        "message_digest",
+        "content_type",
+        "signing_time",
+    )
+    _singular_unauthenticated_attributes: Iterable[str] = ("counter_signature",)
     _expected_content_type: str | None = None
 
     def __init__(
@@ -136,126 +71,92 @@ class SignerInfo:
         if isinstance(self._countersigner_class, str):
             self._countersigner_class = globals()[self._countersigner_class]
 
-        self.data = data
+        self.asn1 = data
         self.parent = parent
-        self._parse()
+        self._validate_asn1()
 
-    def _parse(self) -> None:
-        if self.data["sid"].name == "subject_key_identifier":
+    def _validate_asn1(self) -> None:
+        if self.asn1["sid"].name == "subject_key_identifier":
             raise SignerInfoParseError(
                 "Cannot handle SignerInfo.sid with a subject_key_identifier"
             )
 
-        self.issuer = CertificateName(self.data["sid"].chosen["issuer"])
-        self.serial_number = self.data["sid"].chosen["serial_number"].native
-        self.authenticated_attributes = self._parse_attributes(
-            self.data["signed_attrs"],
-            required=self._required_authenticated_attributes,
-        )
-        self._encoded_authenticated_attributes = self._encode_attributes(
-            self.data["signed_attrs"]
-        )
-        self.unauthenticated_attributes = self._parse_attributes(
-            self.data["unsigned_attrs"]
-        )
-        self.digest_encryption_algorithm = self.data["signature_algorithm"][
-            "algorithm"
-        ].native
-        self.encrypted_digest = self.data["signature"].native
-        self.digest_algorithm = _get_digest_algorithm(
-            self.data["digest_algorithm"], location="SignerInfo.digestAlgorithm"
-        )
-
-        # Parse the content of the authenticated attributes
-        # - The messageDigest
-        self.message_digest = None
-        if "message_digest" in self.authenticated_attributes:
-            if len(self.authenticated_attributes["message_digest"]) != 1:
-                raise SignerInfoParseError(
-                    "Only one Digest expected in SignerInfo.authenticatedAttributes"
-                )
-
-            self.message_digest = self.authenticated_attributes["message_digest"][
-                0
-            ].native
-
-        # - The contentType
-        self.content_type = None
-        if "content_type" in self.authenticated_attributes:
-            if len(self.authenticated_attributes["content_type"]) != 1:
-                raise SignerInfoParseError(
-                    "Only one ContentType expected in"
-                    " SignerInfo.authenticatedAttributes"
-                )
-
-            self.content_type = self.authenticated_attributes["content_type"][0].native
-
-            if (
-                self._expected_content_type is not None
-                and self.content_type != self._expected_content_type
-            ):
-                raise SignerInfoParseError(
-                    "Unexpected content type for SignerInfo, expected"
-                    f" {self._expected_content_type}, got"
-                    f" {self.content_type}"
-                )
-
-        # - The signingTime (used by countersigner)
-        self.signing_time = None
-        if "signing_time" in self.authenticated_attributes:
-            if len(self.authenticated_attributes["signing_time"]) != 1:
-                raise SignerInfoParseError(
-                    "Only one SigningTime expected in"
-                    " SignerInfo.authenticatedAttributes"
-                )
-
-            self.signing_time = self.authenticated_attributes["signing_time"][0].native
-
-        # - The countersigner
-        self.countersigner = None
-        if "counter_signature" in self.unauthenticated_attributes:
-            if len(self.unauthenticated_attributes["counter_signature"]) != 1:
-                raise SignerInfoParseError(
-                    "Only one CountersignInfo expected in"
-                    " SignerInfo.unauthenticatedAttributes"
-                )
-
-            assert self._countersigner_class is not None and not isinstance(
-                self._countersigner_class, str
-            )  # typing
-            self.countersigner = self._countersigner_class(
-                self.unauthenticated_attributes["counter_signature"][0]
+        # Check if all required attributes are defined.
+        if not all(
+            x in self.authenticated_attributes
+            for x in self._required_authenticated_attributes
+        ):
+            raise SignerInfoParseError(
+                "Not all required attributes found."
+                f" Required: {self._required_authenticated_attributes};"
+                f" Found: {self.authenticated_attributes}"
             )
 
-    def check_message_digest(self, data: bytes) -> bool:
-        """Given the data, returns whether the hash_algorithm and message_digest match
-        the data provided.
-        """
+        # Check that any defined singular authenticated attribute, is only present
+        # once.
+        for attribute in self._singular_authenticated_attributes:
+            if attribute in self.authenticated_attributes:
+                if len(self.authenticated_attributes[attribute]) != 1:
+                    raise SignerInfoParseError(
+                        f"Only one {attribute} expected in"
+                        f" SignerInfo.authenticatedAttributes, found"
+                        f" {len(self.authenticated_attributes[attribute])}"
+                    )
 
-        auth_attr_hash = self.digest_algorithm()
-        auth_attr_hash.update(data)
-        return auth_attr_hash.digest() == self.message_digest
+        # Check that any defined singular unauthenticated attribute, is only present
+        # once.
+        for attribute in self._singular_unauthenticated_attributes:
+            if attribute in self.unauthenticated_attributes:
+                if len(self.unauthenticated_attributes[attribute]) != 1:
+                    raise SignerInfoParseError(
+                        f"Only one {attribute} expected in"
+                        f" SignerInfo.unauthenticatedAttributes, found"
+                        f" {len(self.unauthenticated_attributes[attribute])}"
+                    )
+
+        # Verify the content type against the expected content type
+        if (
+            "content_type" in self.authenticated_attributes
+            and self._expected_content_type is not None
+            and self.content_type != self._expected_content_type
+        ):
+            raise SignerInfoParseError(
+                "Unexpected content type for SignerInfo, expected"
+                f" {self._expected_content_type}, got"
+                f" {self.content_type}"
+            )
+
+    @property
+    def issuer(self) -> CertificateName:
+        """The issuer of the SignerInfo, i.e. the certificate of the signer of the
+        SignedData object.
+        """
+        return CertificateName(self.asn1["sid"].chosen["issuer"])
+
+    @property
+    def serial_number(self) -> int:
+        """The serial number as specified by the issuer."""
+        return cast(int, self.asn1["sid"].chosen["serial_number"].native)
 
     @classmethod
-    def _parse_attributes(
-        cls, data: cms.CMSAttributes, required: Iterable[str] = ()
-    ) -> dict[str, list[Asn1Value]]:
+    def _parse_attributes(cls, data: cms.CMSAttributes) -> dict[str, list[Asn1Value]]:
         """Given a set of Attributes, parses them and returns them as a dict
 
         :param data: The authenticatedAttributes or unauthenticatedAttributes to process
-        :param required: A list of required attributes
         """
+        return {attr["type"].native: list(attr["values"]) for attr in data}
 
-        result = {attr["type"].native: list(attr["values"]) for attr in data}
+    @property
+    def authenticated_attributes(self) -> dict[str, list[Asn1Value]]:
+        """A SignerInfo object can contain both signed and unsigned attributes. These
+        contain additional information about the signature, but also the content type
+        and message digest. The difference between signed and unsigned is that unsigned
+        attributes are not validated.
 
-        if not all(x in result for x in required):
-            raise SignerInfoParseError(
-                "Not all required attributes found."
-                f" Required: {required};"
-                f" Found: {result}"
-            )
-
-        return result
+        The type of this attribute is a dictionary. You should not need to access this
+        value directly, rather using one of the attributes listed below.
+        """
+        return self._parse_attributes(self.asn1["signed_attrs"])
 
     @classmethod
     def _encode_attributes(cls, data: cms.CMSAttributes) -> bytes:
@@ -267,6 +168,101 @@ class SignerInfo:
 
         new_attrs = type(data)(contents=data.contents)
         return cast(bytes, new_attrs.dump())
+
+    @property
+    def _encoded_authenticated_attributes(self) -> bytes:
+        return self._encode_attributes(self.asn1["signed_attrs"])
+
+    @property
+    def unauthenticated_attributes(self) -> dict[str, list[Asn1Value]]:
+        """A SignerInfo object can contain both signed and unsigned attributes. These
+        contain additional information about the signature, but also the content type
+        and message digest. The difference between signed and unsigned is that unsigned
+        attributes are not validated.
+
+        The type of this attribute is a dictionary. You should not need to access this
+        value directly, rather using one of the attributes listed below.
+        """
+        return self._parse_attributes(self.asn1["unsigned_attrs"])
+
+    @property
+    def digest_encryption_algorithm(self) -> str:
+        """This is the algorithm used for signing the digest with the signer's key."""
+        return cast(str, self.asn1["signature_algorithm"]["algorithm"].native)
+
+    @property
+    def encrypted_digest(self) -> bytes:
+        """The result of encrypting the message digest and associated information with
+        the signer's private key."""
+        return cast(bytes, self.asn1["signature"].native)
+
+    @property
+    def digest_algorithm(self) -> HashFunction:
+        """The digest algorithm, i.e. the hash algorithm, under which the content and
+        the authenticated attributes are signed.
+        """
+        return _get_digest_algorithm(
+            self.asn1["digest_algorithm"], location="SignerInfo.digestAlgorithm"
+        )
+
+    ### parsed attributes
+    @property
+    def message_digest(self) -> bytes | None:
+        """This is an authenticated attribute, containing the signed digest of
+        the data.
+        """
+        if "message_digest" in self.authenticated_attributes:
+            return cast(
+                bytes, self.authenticated_attributes["message_digest"][0].native
+            )
+        return None
+
+    @property
+    def content_type(self) -> str | None:
+        """This is an authenticated attribute, containing the content type of the
+        content being signed.
+        """
+        if "content_type" in self.authenticated_attributes:
+            return cast(str, self.authenticated_attributes["content_type"][0].native)
+        return None
+
+    @property
+    def signing_time(self) -> datetime.datetime | None:
+        """This is an authenticated attribute, containing the timestamp of signing. Note
+        that this should only be present in countersigner objects.
+        """
+        if "signing_time" in self.authenticated_attributes:
+            return cast(
+                datetime.datetime,
+                self.authenticated_attributes["signing_time"][0].native,
+            )
+        return None
+
+    @property
+    def countersigner(self) -> CounterSignerInfo | None:
+        """This is an unauthenticated attribute, containing the countersigner of the
+        SignerInfo.
+        """
+        if "counter_signature" in self.unauthenticated_attributes:
+            assert self._countersigner_class is not None and not isinstance(
+                self._countersigner_class, str
+            )  # typing
+            return self._countersigner_class(
+                cast(
+                    cms.SignerInfo,
+                    self.unauthenticated_attributes["counter_signature"][0],
+                )
+            )
+        return None
+
+    def check_message_digest(self, data: bytes) -> bool:
+        """Given the data, returns whether the hash_algorithm and message_digest match
+        the data provided.
+        """
+
+        auth_attr_hash = self.digest_algorithm()
+        auth_attr_hash.update(data)
+        return auth_attr_hash.digest() == self.message_digest
 
     def _verify_issuer_signature(
         self, issuer: Certificate, context: VerificationContext
