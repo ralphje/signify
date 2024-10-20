@@ -10,6 +10,8 @@ from typing_extensions import Literal
 from signify._typing import HashFunction
 from signify.asn1.hashing import _get_digest_algorithm
 from signify.exceptions import (
+    CounterSignerError,
+    InvalidDigestError,
     SignerInfoParseError,
     SignerInfoVerificationError,
     VerificationError,
@@ -319,6 +321,49 @@ class SignerInfo:
             context.timestamp = signing_time
         return context.verify(issuer)
 
+    def _verify_countersigner(
+        self,
+        context: VerificationContext,
+        countersignature_mode: Literal["strict", "permit", "ignore"] = "strict",
+    ) -> datetime.datetime | None:
+        """Verifies the countersigner of the SignerInfo, if available.
+
+        Returns the verified signing time of the binary, if correct, or returns None.
+        """
+
+        if self.countersigner is None or countersignature_mode == "ignore":
+            return None
+
+        try:
+            # 3. Check the countersigner hash.
+            # Make sure to use the same digest_algorithm that the countersigner used
+            if not self.countersigner.check_message_digest(self.encrypted_digest):
+                raise CounterSignerError(
+                    "The expected hash of the encryptedDigest does not match"
+                    " countersigner's SignerInfo"
+                )
+
+            context.timestamp = self.countersigner.signing_time
+
+            # We could be calling SignerInfo.verify or RFC3161SignedData.verify
+            # here, but those have identical signatures. Note that
+            # RFC3161SignedData accepts a trusted_certificate_store argument, but
+            # we pass in an explicit context anyway
+            self.countersigner.verify(context)
+        except Exception as e:
+            if countersignature_mode != "strict":
+                pass
+            else:
+                raise CounterSignerError(
+                    f"An error occurred while validating the countersignature: {e}"
+                )
+        else:
+            # If no errors occur, we should be fine setting the timestamp to the
+            # countersignature's timestamp
+            return self.countersigner.signing_time
+
+        return None
+
     def _build_chain(
         self,
         context: VerificationContext,
@@ -368,18 +413,32 @@ class SignerInfo:
     def verify(
         self,
         context: VerificationContext,
-        signing_time: datetime.datetime | None = None,
+        *,
+        countersigner_context: VerificationContext | None = None,
+        countersignature_mode: Literal["strict", "permit", "ignore"] = "strict",
     ) -> Iterable[list[Certificate]]:
         """Verifies that this :class:`SignerInfo` verifies up to a chain with the root
         of a trusted certificate.
 
         :param VerificationContext context: The context for verifying the SignerInfo.
-        :param signing_time: The time to be used as timestamp when creating the chain
+        :param countersigner_context: The VerificationContext for
+            verifying the chain of the :class:`CounterSignerInfo`.
+        :param str countersignature_mode: Changes how countersignatures are handled.
+            Defaults to 'strict', which means that errors in the countersignature
+            result in verification failure. If set to 'permit', the countersignature is
+            checked, but when it errors, it is verified as if the countersignature was
+            never set. When set to 'ignore', countersignatures are never checked.
         :return: A list of valid certificate chains for this SignerInfo.
         :rtype: Iterable[Iterable[Certificate]]
         :raises AuthenticodeVerificationError: When the SignerInfo could not be
             verified.
         """
+
+        signing_time = None
+        if countersigner_context and countersignature_mode != "ignore":
+            signing_time = self._verify_countersigner(
+                countersigner_context, countersignature_mode
+            )
 
         chains = list(self._build_chain(context, signing_time))
 

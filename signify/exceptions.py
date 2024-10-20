@@ -34,6 +34,14 @@ class SignerInfoVerificationError(VerificationError):
     pass
 
 
+class InvalidDigestError(VerificationError):
+    pass
+
+
+class CounterSignerError(VerificationError):
+    pass
+
+
 class AuthenticodeVerificationError(VerificationError):
     """Raised when any exception regarding verifying Authenticode structures occurs."""
 
@@ -46,7 +54,7 @@ class AuthenticodeInconsistentDigestAlgorithmError(AuthenticodeVerificationError
     pass
 
 
-class AuthenticodeInvalidDigestError(AuthenticodeVerificationError):
+class AuthenticodeInvalidDigestError(InvalidDigestError, AuthenticodeVerificationError):
     pass
 
 
@@ -54,7 +62,7 @@ class AuthenticodeInvalidPageHashError(AuthenticodeVerificationError):
     pass
 
 
-class AuthenticodeCounterSignerError(AuthenticodeVerificationError):
+class AuthenticodeCounterSignerError(CounterSignerError, AuthenticodeVerificationError):
     pass
 
 

@@ -56,6 +56,8 @@ from signify.exceptions import (
     AuthenticodeNotSignedError,
     AuthenticodeParseError,
     CertificateVerificationError,
+    CounterSignerError,
+    InvalidDigestError,
     ParseError,
     SignedPEParseError,
     VerificationError,
@@ -621,18 +623,19 @@ class AuthenticodeSignedData(SignedData):
     def indirect_data(self) -> IndirectData:
         return self.content
 
-    def verify(
+    def verify(  # type: ignore[override]
         self,
+        verification_context: VerificationContext | None = None,
         *,
         expected_hash: bytes | None = None,
-        verification_context: VerificationContext | None = None,
+        verify_page_hashes: bool = True,
         cs_verification_context: VerificationContext | None = None,
         trusted_certificate_store: CertificateStore = TRUSTED_CERTIFICATE_STORE,
         verification_context_kwargs: dict[str, Any] | None = None,
-        verify_page_hashes: bool = True,
         countersignature_mode: Literal["strict", "permit", "ignore"] = "strict",
     ) -> Iterable[list[Certificate]]:
-        """Verifies the SignedData structure:
+        """Verifies the SignedData structure, adds this to the base methods of
+        :class:`SignedData`:
 
         * Verifies that the digest algorithms match across the structure
           (:class:`SpcInfo`, :class:`AuthenticodeSignedData` and
@@ -640,80 +643,19 @@ class AuthenticodeSignedData(SignedData):
         * Ensures that the hash in :attr:`SpcInfo.digest` matches the expected hash.
           If no expected hash is provided to this function, it is calculated using
           the :class:`Fingerprinter` obtained from the :class:`SignedPEFile` object.
-        * Verifies that the :class:`SpcInfo`, when hashed, is the same as the value in
-          :attr:`SignerInfo.message_digest`
-        * In the case of a countersigner, calls :meth:`check_message_digest` on the
-          countersigner to verify that the hashed value of
-          :attr:`AuthenticodeSignerInfo.encrypted_digest` is contained in the
-          countersigner.
-        * Verifies the chain of the countersigner up to a trusted root, see
-          :meth:`SignerInfo.verify` and :meth:`RFC3161SignedData.verify`
-        * Verifies the chain of the signer up to a trusted root, see
-          :meth:`SignerInfo.verify`
 
-        In the case of a countersigner, the verification is performed using the
-        timestamp of the :class:`CounterSignerInfo`, otherwise now is assumed. If there
-        is no countersigner, you can override this by specifying a different timestamp
-        in the :class:`VerificationContext`. Note that you cannot set a timestamp when
-        checking against the CRL; this is not permitted by the underlying library. If
-        you need to do this, you must therefore set countersignature_mode to ``ignore``.
-
-        :param bytes expected_hash: The expected hash digest of the
+        :param expected_hash: The expected hash digest of the
             :class:`SignedPEFile`.
-        :param VerificationContext verification_context: The VerificationContext for
-            verifying the chain of the :class:`SignerInfo`. The timestamp is overridden
-            in the case of a countersigner. Default stores are TRUSTED_CERTIFICATE_STORE
-            and the certificates of this :class:`SignedData` object. EKU is code_signing
-        :param VerificationContext cs_verification_context: The VerificationContext for
-            verifying the chain of the :class:`CounterSignerInfo`. The timestamp is
-            overridden in the case of a countersigner. Default stores are
-            TRUSTED_CERTIFICATE_STORE and the certificates of this :class:`SignedData`
-            object. EKU is time_stamping
-        :param CertificateStore trusted_certificate_store: A :class:`CertificateStore`
-            object that contains a list of trusted certificates to be used when
-            :const:`None` is passed to either ``verification_context`` or
-            ``cs_verification_context`` and a :class:`VerificationContext` is created.
-        :param dict verification_context_kwargs: If provided, keyword arguments that
-            are passed to the instantiation of :class:`VerificationContext` s created
-            in this function. Used for e.g. providing a timestamp.
-        :param str verify_page_hashes: Defines whether page hashes should be verified,
+        :param verify_page_hashes: Defines whether page hashes should be verified,
             if present.
-        :param str countersignature_mode: Changes how countersignatures are handled.
-            Defaults to 'strict', which means that errors in the countersignature
-            result in verification failure. If set to 'permit', the countersignature is
-            checked, but when it errors, it is verified as if the countersignature was
-            never set. When set to 'ignore', countersignatures are never checked.
+        :param verification_context: See :meth:`SignedData.verify`
+        :param cs_verification_context: See :meth:`SignedData.verify`
+        :param trusted_certificate_store: See :meth:`SignedData.verify`
+        :param verification_context_kwargs: See :meth:`SignedData.verify`
+        :param countersignature_mode: See :meth:`SignedData.verify`
         :raises AuthenticodeVerificationError: when the verification failed
         :return: A list of valid certificate chains for this SignedData.
         """
-
-        if verification_context_kwargs is None:
-            verification_context_kwargs = {}
-        if verification_context is None:
-            verification_context = VerificationContext(
-                trusted_certificate_store,
-                self.certificates,
-                extended_key_usages=["code_signing"],
-                **verification_context_kwargs,
-            )
-
-        if (
-            cs_verification_context is None
-            and self.signer_info.countersigner
-            and countersignature_mode != "ignore"
-        ):
-            cs_verification_context = VerificationContext(
-                trusted_certificate_store,
-                self.certificates,
-                extended_key_usages=["time_stamping"],
-                **verification_context_kwargs,
-            )
-            # Add the local certificate store for the countersignature
-            # (in the case of RFC3161SignedData)
-            if hasattr(self.signer_info.countersigner, "certificates"):
-                cs_verification_context.add_store(
-                    self.signer_info.countersigner.certificates
-                )
 
         # Check that the digest algorithms match
         if self.digest_algorithm != self.indirect_data.digest_algorithm:
@@ -737,26 +679,24 @@ class AuthenticodeSignedData(SignedData):
                 "The expected hash does not match the digest in SpcInfo"
             )
 
-        # 2. The hash of the spc blob
-        if self.content_digest != self.signer_info.message_digest:
-            raise AuthenticodeInvalidDigestError(
-                "The expected hash of the SpcInfo does not match SignerInfo"
-            )
-
         if verify_page_hashes:
             self._verify_page_hashes()
 
-        # Can't check authAttr hash against encrypted hash, done implicitly in
-        # M2's pubkey.verify.
-
-        signing_time = None
-        if self.signer_info.countersigner and countersignature_mode != "ignore":
-            assert cs_verification_context is not None
-            signing_time = self._verify_countersigner(
-                cs_verification_context, countersignature_mode
+        try:
+            return super().verify(
+                verification_context=verification_context,
+                cs_verification_context=cs_verification_context,
+                trusted_certificate_store=(
+                    trusted_certificate_store or TRUSTED_CERTIFICATE_STORE
+                ),
+                extended_key_usages=["code_signing"],
+                verification_context_kwargs=verification_context_kwargs,
+                countersignature_mode=countersignature_mode,
             )
-
-        return self.signer_info.verify(verification_context, signing_time)
+        except InvalidDigestError as e:
+            raise AuthenticodeInvalidDigestError(str(e))
+        except CounterSignerError as e:
+            raise AuthenticodeCounterSignerError(str(e))
 
     def _verify_page_hashes(self) -> None:
         """Verifies the page hashes (if available) in the SpcPeImageData field."""
@@ -779,51 +719,6 @@ class AuthenticodeSignedData(SignedData):
                 raise AuthenticodeInvalidPageHashError(
                     f"The page hash for page {start}-{end} is invalid."
                 )
-
-    def _verify_countersigner(
-        self,
-        verification_context: VerificationContext,
-        countersignature_mode: Literal["strict", "permit", "ignore"] = "strict",
-    ) -> datetime.datetime | None:
-        """Verifies the countersigner of the SignerInfo, if available.
-
-        Returns the verified signing time of the binary, if correct, or returns None.
-        """
-
-        assert self.signer_info.countersigner is not None
-        assert countersignature_mode != "ignore"
-
-        try:
-            # 3. Check the countersigner hash.
-            # Make sure to use the same digest_algorithm that the countersigner used
-            if not self.signer_info.countersigner.check_message_digest(
-                self.signer_info.encrypted_digest
-            ):
-                raise AuthenticodeCounterSignerError(
-                    "The expected hash of the encryptedDigest does not match"
-                    " countersigner's SignerInfo"
-                )
-
-            verification_context.timestamp = self.signer_info.countersigner.signing_time
-
-            # We could be calling SignerInfo.verify or RFC3161SignedData.verify
-            # here, but those have identical signatures. Note that
-            # RFC3161SignedData accepts a trusted_certificate_store argument, but
-            # we pass in an explicit context anyway
-            self.signer_info.countersigner.verify(verification_context)
-        except Exception as e:
-            if countersignature_mode != "strict":
-                pass
-            else:
-                raise AuthenticodeCounterSignerError(
-                    f"An error occurred while validating the countersignature: {e}"
-                )
-        else:
-            # If no errors occur, we should be fine setting the timestamp to the
-            # countersignature's timestamp
-            return self.signer_info.countersigner.signing_time
-
-        return None
 
     def explain_verify(
         self, *args: Any, **kwargs: Any
@@ -950,11 +845,12 @@ class RFC3161SignedData(SignedData):
         auth_attr_hasher.update(data)
         return auth_attr_hasher.digest() == self.tst_info.message_digest
 
-    def verify(
+    def verify(  # type: ignore[override]
         self,
-        context: VerificationContext | None = None,
+        verification_context: VerificationContext | None = None,
         *,
-        trusted_certificate_store: CertificateStore = TRUSTED_CERTIFICATE_STORE,
+        trusted_certificate_store: CertificateStore | None = None,
+        verification_context_kwargs: dict[str, Any] | None = None,
     ) -> Iterable[Iterable[Certificate]]:
         """Verifies the RFC3161 SignedData object. The context that is passed in must
         account for the certificate store of this object, or be left None.
@@ -968,21 +864,13 @@ class RFC3161SignedData(SignedData):
         # content. This is similar to the normal verification process, where the
         # SpcInfo is verified. Note that the mapping between the RFC3161 SignedData
         # object is ensured by the verifier in SignedData
-        if self.content_digest != self.signer_info.message_digest:
-            raise AuthenticodeCounterSignerError(
-                "The expected hash of the TstInfo does not match SignerInfo"
-            )
 
-        if context is None:
-            context = VerificationContext(
-                trusted_certificate_store,
-                self.certificates,
-                extended_key_usages=["time_stamping"],
-            )
-
-        # The context is set correctly by the 'verify' function, including the current
-        # certificate store
-        return self.signer_info.verify(context)
+        return super().verify(
+            verification_context=verification_context,
+            trusted_certificate_store=trusted_certificate_store,
+            verification_context_kwargs=verification_context_kwargs,
+            extended_key_usages=["time_stamping"],
+        )
 
 
 if __name__ == "__main__":

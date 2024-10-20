@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Sequence, cast
+import datetime
+from typing import Any, Iterable, Literal, Sequence, cast
 
 from asn1crypto import cms
 from asn1crypto.core import Asn1Value
@@ -8,10 +9,10 @@ from typing_extensions import Self
 
 from signify._typing import HashFunction
 from signify.asn1.hashing import _get_digest_algorithm
-from signify.exceptions import ParseError
+from signify.exceptions import CounterSignerError, InvalidDigestError, ParseError
 from signify.pkcs7 import signerinfo
 from signify.x509.certificates import Certificate
-from signify.x509.context import CertificateStore
+from signify.x509.context import CertificateStore, VerificationContext
 
 
 class SignedData:
@@ -160,3 +161,113 @@ class SignedData:
         blob_hasher = self.digest_algorithm()
         blob_hasher.update(hash_content)
         return blob_hasher.digest()
+
+    def _verify_message_digest(self) -> None:
+        """Check that the message digest is correct.
+
+        :raises InvalidDigestError: If the digest is invalid
+        """
+        if self.content_digest != self.signer_info.message_digest:
+            raise InvalidDigestError(
+                "The expected hash of the content does not match SignerInfo"
+            )
+
+    def verify(
+        self,
+        verification_context: VerificationContext | None = None,
+        *,
+        cs_verification_context: VerificationContext | None = None,
+        trusted_certificate_store: CertificateStore | None = None,
+        extended_key_usages: list[str] | None = None,
+        verification_context_kwargs: dict[str, Any] | None = None,
+        countersignature_mode: Literal["strict", "permit", "ignore"] = "strict",
+    ) -> Iterable[list[Certificate]]:
+        """Verifies the SignedData structure:
+
+        * Verifies that the content, when hashed, is the same as the value in
+          :attr:`SignerInfo.message_digest`
+        * In the case of a countersigner, calls :meth:`check_message_digest` on the
+          countersigner to verify that the hashed value of
+          :attr:`SignerInfo.encrypted_digest` is contained in the
+          countersigner.
+        * Verifies the chain of the countersigner up to a trusted root, see
+          :meth:`SignerInfo.verify` and :meth:`RFC3161SignedData.verify`
+        * Verifies the chain of the signer up to a trusted root, see
+          :meth:`SignerInfo.verify`
+
+        In the case of a countersigner, the verification is performed using the
+        timestamp of the :class:`CounterSignerInfo`, otherwise now is assumed. If there
+        is no countersigner, you can override this by specifying a different timestamp
+        in the :class:`VerificationContext`. Note that you cannot set a timestamp when
+        checking against the CRL; this is not permitted by the underlying library. If
+        you need to do this, you must therefore set countersignature_mode to ``ignore``.
+
+        :param verification_context: The VerificationContext for
+            verifying the chain of the :class:`SignerInfo`. The timestamp is overridden
+            in the case of a countersigner. Default stores are
+            ``trusted_certificate_store`` and the certificates of this
+            :class:`SignedData` object. Required EKU is provided as
+            ``extended_key_usages``
+        :param cs_verification_context: The VerificationContext for
+            verifying the chain of the :class:`CounterSignerInfo`. The timestamp is
+            overridden in the case of a countersigner. Default stores are
+            ``trusted_certificate_store`` and the certificates of this
+            :class:`SignedData` object. Required EKU is ``time_stamping``.
+        :param trusted_certificate_store: A :class:`CertificateStore`
+            object that contains a list of trusted certificates to be used when
+            :const:`None` is passed to either ``verification_context`` or
+            ``cs_verification_context`` and a :class:`VerificationContext` is created.
+        :param extended_key_usages: EKU's to check for in the verification context
+            of this :class:`SignedData` object.
+        :param dict verification_context_kwargs: If provided, keyword arguments that
+            are passed to the instantiation of :class:`VerificationContext` s created
+            in this function. Used for e.g. providing a timestamp.
+        :param str countersignature_mode: Changes how countersignatures are handled.
+            Defaults to 'strict', which means that errors in the countersignature
+            result in verification failure. If set to 'permit', the countersignature is
+            checked, but when it errors, it is verified as if the countersignature was
+            never set. When set to 'ignore', countersignatures are never checked.
+        :raises VerificationError: when the verification failed
+        :return: A list of valid certificate chains for this SignedData.
+        """
+
+        self._verify_message_digest()
+
+        if verification_context_kwargs is None:
+            verification_context_kwargs = {}
+        if trusted_certificate_store is None:
+            trusted_certificate_store = CertificateStore()
+        if verification_context is None:
+            verification_context = VerificationContext(
+                trusted_certificate_store,
+                self.certificates,
+                extended_key_usages=extended_key_usages,
+                **verification_context_kwargs,
+            )
+
+        if (
+            cs_verification_context is None
+            and self.signer_info.countersigner
+            and countersignature_mode != "ignore"
+        ):
+            cs_verification_context = VerificationContext(
+                trusted_certificate_store,
+                self.certificates,
+                extended_key_usages=["time_stamping"],
+                **verification_context_kwargs,
+            )
+            # Add the local certificate store for the countersignature
+            # (in the case of RFC3161SignedData)
+            if hasattr(self.signer_info.countersigner, "certificates"):
+                cs_verification_context.add_store(
+                    self.signer_info.countersigner.certificates
+                )
+
+        # Can't check authAttr hash against encrypted hash, done implicitly in
+        # M2's pubkey.verify.
+
+        return self.signer_info.verify(
+            verification_context,
+            countersigner_context=cs_verification_context,
+            countersignature_mode=countersignature_mode,
+        )
