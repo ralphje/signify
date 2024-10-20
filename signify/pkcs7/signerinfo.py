@@ -35,7 +35,18 @@ class SignerInfo:
           unauthenticatedAttributes [1] IMPLICIT Attributes OPTIONAL
         }
 
-    This class supports RFC2315 and RFC5652.
+    The most important part of this structure are the authenticated attributes. These
+    will at least contain the hash of the content of the :class:`SignedData` structure.
+    We can verify this hash by hashing the same content using the hash in
+    :attr:`digest_algorithm`
+
+    The :attr:`encrypted_digest` contains a signature by the issuer over these
+    authenticated attributes (the authenticated attributes are hashed and verified
+    using the :attr:`digest_encryption_algorithm`). The :attr:`issuer` and
+    :attr:`serial_number` contains a reference to the certificate of the issuer, that
+    is used for this signature.
+
+    This class defines how a certain signer, (identified by their :attr:`issuer`)
 
     .. attribute:: asn1
 
@@ -62,16 +73,16 @@ class SignerInfo:
     _expected_content_type: str | None = None
 
     def __init__(
-        self, data: cms.SignerInfo, parent: signeddata.SignedData | None = None
+        self, asn1: cms.SignerInfo, parent: signeddata.SignedData | None = None
     ):
         """
-        :param data: The ASN.1 structure of the SignerInfo.
+        :param asn1: The ASN.1 structure of the SignerInfo.
         :param parent: The parent :class:`SignedData` object.
         """
         if isinstance(self._countersigner_class, str):
             self._countersigner_class = globals()[self._countersigner_class]
 
-        self.asn1 = data
+        self.asn1 = asn1
         self.parent = parent
         self._validate_asn1()
 
@@ -397,9 +408,11 @@ class SignerInfo:
 
 
 class CounterSignerInfo(SignerInfo):
-    """The class CounterSignerInfo is a subclass of :class:`SignerInfo`. It is used as
-    the SignerInfo of a SignerInfo, containing the timestamp the SignerInfo was created
-    on. This normally works by sending the digest of the SignerInfo to an external
+    """A counter-signer provides information about when a :class:`SignerInfo` was
+    signed. It basically acts as the SignerInfo of the SignerInfo, linking the
+    message digest to the original SignerInfo's encrypted_digest.
+
+    This normally works by sending the digest of the SignerInfo to an external
     trusted service, that will include a signed time in its response.
     """
 

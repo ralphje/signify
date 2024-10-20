@@ -37,11 +37,13 @@ import hashlib
 import logging
 import os
 import struct
-from typing import Any, BinaryIO, Iterable, Iterator
+from functools import cached_property
+from typing import Any, BinaryIO, Iterable, Iterator, cast
 
 from typing_extensions import Literal, TypedDict
 
 from signify import fingerprinter
+from signify._typing import HashFunction
 from signify.asn1.hashing import ACCEPTED_DIGEST_ALGORITHMS
 from signify.authenticode import structures
 from signify.exceptions import AuthenticodeNotSignedError, SignedPEParseError
@@ -96,14 +98,10 @@ class SignedPEFile:
             if k in ["checksum", "datadir_certtable", "certtable"]
         }
 
-    def _parse_pe_header_locations(self) -> dict[str, RelRange]:
-        """Parses a PE file to find the sections to exclude from the AuthentiCode hash.
-
-        See http://www.microsoft.com/whdc/system/platform/firmware/PECOFF.mspx for
-        information about the structure.
+    def _seek_start_of_pe(self) -> int:
+        """Seeks in the file to the start of the PE header. After this method,
+        the file header should be after ``b"PE\0\0"``.
         """
-
-        location = {}
 
         # Check if file starts with MZ
         self.file.seek(0, os.SEEK_SET)
@@ -112,7 +110,7 @@ class SignedPEFile:
 
         # Offset to e_lfanew (which is the PE header) is at 0x3C of the MZ header
         self.file.seek(0x3C, os.SEEK_SET)
-        pe_offset = struct.unpack("<I", self.file.read(4))[0]
+        pe_offset = cast(int, struct.unpack("<I", self.file.read(4))[0])
         if pe_offset >= self._filelength:
             raise SignedPEParseError(
                 "PE header location is beyond file boundaries"
@@ -124,7 +122,16 @@ class SignedPEFile:
         if self.file.read(4) != b"PE\0\0":
             raise SignedPEParseError("PE header not found")
 
-        # The COFF header contains the size of the optional header
+        return pe_offset
+
+    def _seek_optional_header(self) -> tuple[int, int]:
+        """Seeks in the file for the start and size of the optional COFF header.
+        After this method, the file header should be at the start of the optional
+        header.
+        """
+
+        pe_offset = self._seek_start_of_pe()
+
         self.file.seek(pe_offset + 20, os.SEEK_SET)
         optional_header_size = struct.unpack("<H", self.file.read(2))[0]
         optional_header_offset = pe_offset + 24
@@ -144,8 +151,20 @@ class SignedPEFile:
                 f"which is insufficient for authenticode",
             )
 
-        # The optional header contains the signature of the image
         self.file.seek(optional_header_offset, os.SEEK_SET)
+        return optional_header_offset, optional_header_size
+
+    def _parse_pe_header_locations(self) -> dict[str, RelRange]:
+        """Parses a PE file to find the sections to exclude from the AuthentiCode hash.
+
+        See http://www.microsoft.com/whdc/system/platform/firmware/PECOFF.mspx for
+        information about the structure.
+        """
+
+        location = {}
+        optional_header_offset, optional_header_size = self._seek_optional_header()
+
+        # The optional header contains the signature of the image
         signature = struct.unpack("<H", self.file.read(2))[0]
         if signature == 0x10B:  # IMAGE_NT_OPTIONAL_HDR32_MAGIC
             rva_base = optional_header_offset + 92  # NumberOfRvaAndSizes
@@ -248,12 +267,44 @@ class SignedPEFile:
             }
             position += length + (8 - length % 8) % 8
 
+    @cached_property
+    def page_size(self) -> int:
+        """Gets the page size from the optional COFF header, or if not available,
+        returns 4096 as best guess.
+        """
+        optional_header_offset, optional_header_size = self._seek_optional_header()
+
+        if optional_header_size < 36:
+            return 4096
+
+        self.file.seek(optional_header_offset + 32, os.SEEK_SET)
+        return cast(int, struct.unpack("<I", self.file.read(4))[0])
+
     def get_fingerprinter(self) -> fingerprinter.AuthenticodeFingerprinter:
         """Returns a fingerprinter object for this file.
 
         :rtype: signify.fingerprinter.AuthenticodeFingerprinter
         """
         return fingerprinter.AuthenticodeFingerprinter(self.file)
+
+    def get_fingerprint(
+        self,
+        digest_algorithm: HashFunction,
+        start: int = 0,
+        end: int = -1,
+        aligned: bool = False,
+    ) -> bytes:
+        """Gets the fingerprint for this file, with the provided start and end,
+        and optionally aligned to the PE file's alignment.
+        """
+        fingerprinter = self.get_fingerprinter()
+        fingerprinter.add_authenticode_hashers(
+            digest_algorithm,
+            start=start,
+            end=end,
+            block_size=self.page_size if aligned else None,
+        )
+        return fingerprinter.hash()[digest_algorithm().name]
 
     @property
     def signed_datas(self) -> Iterator[structures.AuthenticodeSignedData]:

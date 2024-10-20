@@ -51,18 +51,27 @@ class Finger:
     """
 
     def __init__(
-        self, hashers: list[hashlib._Hash], ranges: list[Range], description: str
+        self,
+        hashers: list[hashlib._Hash],
+        ranges: list[Range],
+        description: str,
+        block_size: int | None = None,
     ):
         """
 
         :param hashers: A list of hashers to feed.
         :param ranges: A list of Ranges that are hashed.
         :param description: The description of this Finger.
+        :param block_size: Defines a virtual block size that should be used to
+            complement the provided ranges with NULL bytes.
         """
 
         self._ranges = ranges
         self.hashers = hashers
         self.description = description
+        self.block_size = block_size
+
+        self._virtual_range = self._ranges[-1].end - self._ranges[0].start
 
     @property
     def current_range(self) -> Range | None:
@@ -111,6 +120,17 @@ class Finger:
         for hasher in self.hashers:
             hasher.update(block)
 
+    def update_block_size(self) -> None:
+        """Feed the hashes NULL bytes to ensure that a certain (virtual) block size is
+        read. Note that this is calculated by using the first offset in the provided
+        ranges, and the last offset in the provided ranges, and not the actual amount
+        of bytes read.
+        """
+        if self.block_size is None or (self._virtual_range % self.block_size) == 0:
+            return
+
+        self.update(b"\0" * (self.block_size - (self._virtual_range % self.block_size)))
+
 
 class Fingerprinter:
     def __init__(self, file_obj: BinaryIO, block_size: int = 1000000):
@@ -132,11 +152,46 @@ class Fingerprinter:
 
         self._fingers: list[Finger] = []
 
+    def _adjust_ranges(
+        self, ranges: list[Range], start: int = 0, end: int = -1
+    ) -> list[Range]:
+        """Adjusts provided ranges to all be between the provided start and end
+        intervals.
+
+        :param ranges: A list of Ranges to limit between start and end.
+        :param start: The start interval for the ranges to be limited to.
+        :param end: The end interval for the ranges to be limited to. If negative,
+            equals to the end of the file.
+        """
+        if end < 0:
+            end = self._filelength
+
+        result = []
+        for range in ranges:
+            if range.end < start or range.start > end:
+                # ignore any ranges that are outside of the allowed range
+                continue
+            if range.start >= start and range.end <= end:
+                # directly append anything that is within the provided range
+                result.append(range)
+            else:
+                # otherwise, only append the limited range for the provided range
+                result.append(
+                    Range(
+                        max(start, range.start),
+                        min(end, range.end),
+                    )
+                )
+        return result
+
     def add_hashers(
         self,
         *hashers: HashFunction,
         ranges: list[Range] | None = None,
         description: str = "generic",
+        start: int = 0,
+        end: int = -1,
+        block_size: int | None = None,
     ) -> None:
         """Add hash methods to the fingerprinter.
 
@@ -146,12 +201,22 @@ class Fingerprinter:
             to :const:`None`, it is set to the entire file.
         :param description: The name for the hashers. This name will return in
             :meth:`hashes`
+        :param start: Beginning of range to be hashed, limiting the provided ranges to
+            the provided value.
+        :param end: End of range to be hashed. If -1, this is equal to the entire file.
+        :param block_size: When set, adds NULL bytes to the end of the range to ensure
+            a certain block size is read.
         """
         concrete_hashers = [x() for x in hashers]
         if not ranges:
             ranges = [Range(0, self._filelength)]
 
-        finger = Finger(concrete_hashers, ranges, description)
+        finger = Finger(
+            concrete_hashers,
+            self._adjust_ranges(ranges, start, end),
+            description,
+            block_size,
+        )
         self._fingers.append(finger)
 
     @property
@@ -180,7 +245,7 @@ class Fingerprinter:
         return Range(min_start, min_end)
 
     def _hash_block(self, block: bytes, start: int, end: int) -> None:
-        """_HashBlock feeds data blocks into the hashers of fingers.
+        """Feed data blocks into the hashers of fingers.
 
         This function must be called before adjusting fingers for next
         interval, otherwise the lack of remaining ranges will cause the
@@ -191,7 +256,7 @@ class Fingerprinter:
 
         :param block: The data block.
         :param start: Beginning offset of this block.
-        :param offset: Offset of the next byte after the block.
+        :param end: Next byte after the block.
         :raises RuntimeError: If the provided and expected ranges don't match.
         """
         for finger in self._fingers:
@@ -246,6 +311,8 @@ class Fingerprinter:
             ):
                 raise RuntimeError("Non-empty range remains.")
 
+            finger.update_block_size()
+
             res = {}
             for hasher in finger.hashers:
                 res[hasher.name] = hasher.digest()
@@ -274,7 +341,13 @@ class AuthenticodeFingerprinter(Fingerprinter):
     authentihashes of PE Files.
     """
 
-    def add_authenticode_hashers(self, *hashers: HashFunction) -> bool:
+    def add_authenticode_hashers(
+        self,
+        *hashers: HashFunction,
+        start: int = 0,
+        end: int = -1,
+        block_size: int | None = None,
+    ) -> bool:
         """Specialized method of :meth:`add_hashers` to add hashers with ranges limited
         to those that are needed to calculate the hash of signed PE Files.
         """
@@ -286,13 +359,20 @@ class AuthenticodeFingerprinter(Fingerprinter):
             return False
 
         ranges = []
-        start = 0
+        range_start = 0
         for start_length in sorted(omit.values()):
-            ranges.append(Range(start, start_length.start))
-            start = sum(start_length)
-        ranges.append(Range(start, self._filelength))
+            ranges.append(Range(range_start, start_length.start))
+            range_start = sum(start_length)
+        ranges.append(Range(range_start, self._filelength))
 
-        self.add_hashers(*hashers, ranges=ranges, description="authentihash")
+        self.add_hashers(
+            *hashers,
+            ranges=ranges,
+            description="authentihash",
+            start=start,
+            end=end,
+            block_size=block_size,
+        )
         return True
 
 

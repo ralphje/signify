@@ -24,6 +24,8 @@ Software Publishing Certificate (SPC).
 
 from __future__ import annotations
 
+import uuid
+
 from asn1crypto.algos import DigestInfo
 from asn1crypto.cms import (
     CMSAttribute,
@@ -31,6 +33,7 @@ from asn1crypto.cms import (
     ContentInfo,
     ContentType,
     EncapsulatedContentInfo,
+    SetOfOctetString,
 )
 from asn1crypto.core import (
     Any,
@@ -43,6 +46,7 @@ from asn1crypto.core import (
     Integer,
     ObjectIdentifier,
     OctetString,
+    ParsableOctetString,
     Sequence,
     SequenceOf,
     SetOf,
@@ -62,6 +66,20 @@ class SpcUuid(OctetString):  # type: ignore[misc]
         SpcUuid ::= OCTETSTRING
     """
 
+    def set(self, value: uuid.UUID | str) -> None:
+        if not isinstance(value, uuid.UUID):
+            value = uuid.UUID(value)
+        super().set(value.bytes)
+        self._native = str(value)
+
+    @property
+    def native(self) -> str | None:
+        if self.contents is None:
+            return None
+        if self._native is None:
+            self._native = str(uuid.UUID(bytes=self._merge_chunks()))
+        return self._native
+
 
 class SpcSerializedObject(Sequence):  # type: ignore[misc]
     """SpcSerializedObject.
@@ -77,8 +95,10 @@ class SpcSerializedObject(Sequence):  # type: ignore[misc]
 
     _fields = [
         ("class_id", SpcUuid),
-        ("serialized_data", OctetString),
+        ("serialized_data", ParsableOctetString),
     ]
+    _oid_pair = ("class_id", "serialized_data")
+    _oid_specs: dict[str, type[Asn1Value]] = {}
 
 
 class SpcString(Choice):  # type: ignore[misc]
@@ -222,6 +242,8 @@ class SpcAttributeType(ObjectIdentifier):  # type: ignore[misc]
     _map: dict[str, str] = {
         "1.3.6.1.4.1.311.2.1.15": "microsoft_spc_pe_image_data",
         "1.3.6.1.4.1.311.2.1.30": "microsoft_spc_siginfo",
+        "1.3.6.1.4.1.311.2.3.1": "microsoft_spc_pe_image_page_hashes_v1",
+        "1.3.6.1.4.1.311.2.3.2": "microsoft_spc_pe_image_page_hashes_v2",
     }
 
 
@@ -251,7 +273,14 @@ class SpcAttributeTypeAndOptionalValue(Sequence):  # type: ignore[misc]
     _oid_specs: dict[str, type[Asn1Value]] = {
         "microsoft_spc_pe_image_data": SpcPeImageData,
         "microsoft_spc_siginfo": SpcSigInfo,
+        # used as content in SpcLink.moniker's SpcSerializedObject.serializedData
+        "microsoft_spc_pe_image_page_hashes_v1": SetOfOctetString,
+        "microsoft_spc_pe_image_page_hashes_v2": SetOfOctetString,
     }
+
+
+class SetOfSpcAttributeTypeAndOptionalValue(SetOf):  # type: ignore[misc]
+    _child_spec = SpcAttributeTypeAndOptionalValue
 
 
 class SpcIndirectDataContent(Sequence):  # type: ignore[misc]
@@ -348,6 +377,10 @@ class SpcRelaxedPeMarkerCheck(Integer):  # type: ignore[misc]
 class SetOfSpcRelaxedPeMarkerCheck(SetOf):  # type: ignore[misc]
     _child_spec = SpcRelaxedPeMarkerCheck
 
+
+SpcSerializedObject._oid_specs["a6b586d5-b4a1-2466-ae05-a217da8e60d6"] = (
+    SetOfSpcAttributeTypeAndOptionalValue
+)
 
 ContentType._map["1.3.6.1.4.1.311.2.1.4"] = "microsoft_spc_indirect_data_content"
 EncapsulatedContentInfo._oid_specs["microsoft_spc_indirect_data_content"] = (

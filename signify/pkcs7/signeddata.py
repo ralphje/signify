@@ -29,7 +29,16 @@ class SignedData:
           signerInfos SignerInfos
         }
 
-    This class supports RFC2315 and RFC5652.
+    In general, it describes some form of data, that is (obviously) signed. In the
+    ASN.1 structure, you see the ``contentInfo``, which describes the signed content.
+    (See :attr:`content_type` and :attr:`content_asn1`.
+
+    Each :class:`SignedData` object may contain multiple signers. Information about
+    these is found in :attr:`signer_infos`, pointing to one or more :class:`SignerInfo`
+    classes.
+
+    Additionally, :attr:`certificates` contains any additional (intermediate)
+    certificates that may be required to verify these signers.
     """
 
     _expected_content_type: str | None = None
@@ -136,7 +145,7 @@ class SignedData:
 
     @property
     def content_digest(self) -> bytes:
-        """Returns the digest of the content of the SignedData object,
+        """Returns the actual digest of the content of the SignedData object,
         adhering to the specs in RFC2315, 9.3; the identifier (tag) and
         length need to be stripped for hashing.
         """

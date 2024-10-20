@@ -4,9 +4,12 @@ This page contains the most significant changes in Signify between each release.
 
 v0.8.0 (unreleased)
 -------------------
+* Add support for page hashes contained within the ``SpcPeImageData`` structure.
+
+* Renamed ``SpcInfo`` to ``IndirectData``, and split off ``PeImageData`` into a
+  separate class.
 * Add support (don't crash) for the ``microsoft_spc_siginfo`` OID in the
-  ``SpcIndirectDataContent`` structure, used in signing MSI files. We may improve
-  support for the attributes in this structure in a future release. Note that MSI files
+  ``SpcIndirectDataContent`` structure, used in signing MSI files. Note that MSI files
   are not (yet) supported.
 * Add support for ``SpcRelaxedPeMarkerCheck`` and ``PlatformManifestBinaryID`` as
   SignerInfo attributes, although their exact purpose is currently unknown.

@@ -8,9 +8,9 @@ from .structures import (
     AuthenticodeSignedData,
     AuthenticodeSignerInfo,
     AuthenticodeVerificationResult,
+    IndirectData,
     RFC3161SignedData,
     RFC3161SignerInfo,
-    SpcInfo,
     TSTInfo,
 )
 
@@ -21,7 +21,7 @@ __all__ = [
     "AuthenticodeVerificationResult",
     "AuthenticodeCounterSignerInfo",
     "AuthenticodeSignerInfo",
-    "SpcInfo",
+    "IndirectData",
     "AuthenticodeSignedData",
     "RFC3161SignerInfo",
     "TSTInfo",

@@ -28,10 +28,12 @@ from __future__ import annotations
 
 import datetime
 import enum
+import hashlib
 import logging
 import pathlib
+import struct
 import warnings
-from typing import Any, Callable, Iterable, Sequence, cast
+from typing import Any, Callable, ClassVar, Iterable, Sequence, cast
 
 import mscerts
 from asn1crypto import cms, tsp
@@ -43,12 +45,14 @@ from signify._typing import HashFunction
 from signify.asn1 import spc
 from signify.asn1.hashing import _get_digest_algorithm
 from signify.asn1.helpers import accuracy_to_python
+from signify.asn1.spc import SpcPeImageData
 from signify.authenticode import signed_pe
 from signify.authenticode.authroot import CertificateTrustList
 from signify.exceptions import (
     AuthenticodeCounterSignerError,
     AuthenticodeInconsistentDigestAlgorithmError,
     AuthenticodeInvalidDigestError,
+    AuthenticodeInvalidPageHashError,
     AuthenticodeNotSignedError,
     AuthenticodeParseError,
     CertificateVerificationError,
@@ -114,6 +118,9 @@ class AuthenticodeVerificationResult(enum.Enum):
     """
     COUNTERSIGNER_ERROR = enum.auto()
     """Something went wrong when verifying the countersignature."""
+    INVALID_PAGE_HASH = enum.auto()
+    """The page hash does not match the calculated page hash for the section.
+    """
 
     @classmethod
     def call(
@@ -127,6 +134,8 @@ class AuthenticodeVerificationResult(enum.Enum):
             return cls.INCONSISTENT_DIGEST_ALGORITHM, exc
         except AuthenticodeInvalidDigestError as exc:
             return cls.INVALID_DIGEST, exc
+        except AuthenticodeInvalidPageHashError as exc:
+            return cls.INVALID_PAGE_HASH, exc
         except AuthenticodeCounterSignerError as exc:
             return cls.COUNTERSIGNER_ERROR, exc
         except CertificateVerificationError as exc:
@@ -306,7 +315,204 @@ class AuthenticodeSignerInfo(SignerInfo):
         return super()._verify_issuer(issuer, context, signing_time)
 
 
-class SpcInfo:
+class PeImageData:
+    """Information about the PE file, as provided in the :class:`IndirectData`. It
+    is based on the following structure::
+
+        SpcPeImageData ::= SEQUENCE {
+            flags SpcPeImageFlags DEFAULT { includeResources },
+            file SpcLink
+        }
+        SpcPeImageFlags ::= BIT STRING {
+            includeResources            (0),
+            includeDebugInfo            (1),
+            includeImportAddressTable   (2)
+        }
+        SpcLink ::= CHOICE {
+            url      [0] IMPLICIT IA5STRING,
+            moniker  [1] IMPLICIT SpcSerializedObject,
+            file     [2] EXPLICIT SpcString
+        }
+        SpcSerializedObject ::= SEQUENCE {
+            classId SpcUuid,
+            serializedData OCTETSTRING
+        }
+
+    This structure contains flags, which define which parts of the PE file are hashed.
+    It is always ignored.
+
+    The file attribute originally contained information that describes the software
+    publisher, but can now be a URL (which is ignored), a file, which is set to a
+    SpcString set to ``<<<Obsolete>>>``, or the moniker setting a SpcSerializedObject.
+
+    If used, the moniker always has UUID a6b586d5-b4a1-2466-ae05-a217da8e60d6
+    (bytes ``a6 b5 86 d5 b4 a1 24 66  ae 05 a2 17 da 8e 60 d6``), and a binary
+    structure. Ominously, this is left outside of scope of the Authenticode
+    documentation, noting that it contains a binary structure that contains page hashes.
+
+    """
+
+    def __init__(self, asn1: spc.SpcPeImageData):
+        self.asn1 = asn1
+
+    @property
+    def flags(self) -> set[str]:
+        """Defines which parts of the PE file are hashed. It is always ignored."""
+        return cast("set[str]", self.asn1["flags"].native)
+
+    @property
+    def file_link_type(self) -> Literal["url", "moniker", "file"]:
+        """Describes which of the options is used in this content."""
+        return cast(Literal["url", "moniker", "file"], self.asn1["file"].name)
+
+    @property
+    def publisher(self) -> str:
+        """Available if :attr:`file_link_type` is ``url`` or ``file``.
+        Contains the information in the attribute in string form.
+        """
+        if self.file_link_type not in {"url", "file"}:
+            raise AttributeError(
+                "Property only available when file_link_type is url or file."
+            )
+        return cast(str, self.asn1["file"].native)
+
+    @property
+    def class_id(self) -> str:
+        """Available if :attr:`file_link_type` is ``moniker``.
+        Contains the class ID. Should be a6b586d5-b4a1-2466-ae05-a217da8e60d6.
+        """
+        if self.file_link_type != "moniker":
+            raise AttributeError(
+                "Property only available when file_link_type is moniker."
+            )
+        return cast(str, self.asn1["file"].chosen["class_id"].native)
+
+    @property
+    def serialized_data(self) -> bytes:
+        """Available if :attr:`file_link_type` is ``moniker``.
+        Raw serialized data as bytes.
+        """
+        if self.file_link_type != "moniker":
+            raise AttributeError(
+                "Property only available when file_link_type is moniker."
+            )
+        return bytes(self.asn1["file"].chosen["serialized_data"])
+
+    @property
+    def serialized_data_asn1_available(self) -> bool:
+        """Defines whether the property :attr:`serialized_data_asn1` is available."""
+        return (
+            self.file_link_type == "moniker"
+            and self.class_id == "a6b586d5-b4a1-2466-ae05-a217da8e60d6"
+        )
+
+    @property
+    def serialized_data_asn1(self) -> list[spc.SpcAttributeTypeAndOptionalValue]:
+        """Available if :attr:`serialized_data_asn1_available` is :const:`True`.
+        Return the data in ASN.1 form.
+        """
+        if not self.serialized_data_asn1_available:
+            raise AttributeError("Serialized data unavailable.")
+        return cast(
+            "list[spc.SpcAttributeTypeAndOptionalValue]",
+            self.asn1["file"].chosen["serialized_data"].parsed,
+        )
+
+    @property
+    def content_pairs(self) -> Iterable[tuple[str, list[bytes]]]:
+        """Available if :attr:`serialized_data_asn1_available` is :const:`True`."""
+        for attr in self.serialized_data_asn1:
+            yield attr["type"].native, attr["value"].native
+
+    @property
+    def content_types(self) -> list[str]:
+        """Available if :attr:`serialized_data_asn1_available` is :const:`True`."""
+        return [c["type"].native for c in self.serialized_data_asn1]
+
+    @property
+    def content_type(self) -> str:
+        """Available if :attr:`serialized_data_asn1_available` is :const:`True`."""
+        if len(self.content_types) == 1:
+            return self.content_type[0]
+        raise AttributeError(
+            "SpcPeImageData.content_types contained multiple content types"
+        )
+
+    @property
+    def contents(self) -> list[list[bytes]]:
+        """Available if :attr:`serialized_data_asn1_available` is :const:`True`."""
+        return [c["value"].native for c in self.serialized_data_asn1]
+
+    @property
+    def content(self) -> list[bytes]:
+        """Available if :attr:`serialized_data_asn1_available` is :const:`True`."""
+        if len(self.contents) == 1:
+            return self.contents[0]
+        raise AttributeError("SpcPeImageData.contents contained multiple entries")
+
+    @property
+    def page_hashes(self) -> Iterable[tuple[int, int, bytes, HashFunction]]:
+        """Iterates over all page hash ranges, and their hash digests, as defined
+        in the SpcSerializedObject. If not available, will simply return an empty list.
+        """
+        if not self.serialized_data_asn1_available:
+            return
+        for content_type, contents in self.content_pairs:
+            hash_algorithm = self.page_hash_algorithm(content_type)
+            for content in contents:
+                for start, end, digest in self.parse_page_hash_content(
+                    hash_algorithm, content
+                ):
+                    yield start, end, digest, hash_algorithm
+
+    PAGE_HASH_ALGORITHMS: ClassVar[dict[str, HashFunction]] = {
+        "microsoft_spc_pe_image_page_hashes_v1": hashlib.sha1,
+        "microsoft_spc_pe_image_page_hashes_v2": hashlib.sha256,
+    }
+
+    @classmethod
+    def page_hash_algorithm(cls, content_type: str) -> HashFunction:
+        if content_type not in cls.PAGE_HASH_ALGORITHMS:
+            raise AuthenticodeParseError(
+                f"Unknown content type for page hashes: {content_type!r}"
+            )
+        return cls.PAGE_HASH_ALGORITHMS[content_type]
+
+    @property
+    def page_hash_algorithms(self) -> list[HashFunction]:
+        """Returns all used page hash algorithms in this structure."""
+        return [
+            self.page_hash_algorithm(content_type)
+            for content_type in self.content_types
+        ]
+
+    @classmethod
+    def parse_page_hash_content(
+        cls, hash_algorithm: HashFunction, content: bytes
+    ) -> Iterable[tuple[int, int, bytes]]:
+        """Parses the content in the page hash content blob. It is constructed
+        as 4 bytes offset, and the hash digest. The final entry will be the final offset
+        and a zero hash (0000...).
+
+        This method yields tuples of start offset, end offset, and the hash digest.
+        """
+
+        d = hash_algorithm()
+        d.update(b"")
+        hash_length = len(d.digest())
+
+        position, previous_offset, digest = 0, None, None
+        while position < len(content):
+            offset = struct.unpack("<I", content[position : position + 4])[0]
+            if previous_offset is not None and digest is not None:
+                yield previous_offset, offset, digest
+
+            digest = content[position + 4 : position + 4 + hash_length]
+            previous_offset = offset
+            position += 4 + hash_length
+
+
+class IndirectData:
     """The Authenticode's SpcIndirectDataContent information, and their children. This
     is expected to be part of the content of the SignedData structure in Authenticode.
 
@@ -320,18 +526,12 @@ class SpcInfo:
             type ObjectID,
             value [0] EXPLICIT ANY OPTIONAL
         }
-        DigestInfo ::= SEQUENCE {
-            digestAlgorithm  AlgorithmIdentifier,
-            digest OCTETSTRING
-        }
 
     .. attribute:: asn1
 
        The underlying ASN.1 data object
 
     """
-
-    asn1: spc.SpcIndirectDataContent
 
     def __init__(self, asn1: spc.SpcIndirectDataContent):
         self.asn1 = asn1
@@ -352,6 +552,12 @@ class SpcInfo:
                 stacklevel=2,
             )
         return cast(Asn1Value, self.asn1["data"]["value"])
+
+    @property
+    def content(self) -> PeImageData | None:
+        if self.content_type == "microsoft_spc_pe_image_data":
+            return PeImageData(cast(SpcPeImageData, self.content_asn1))
+        return None
 
     @property
     def digest_algorithm(self) -> HashFunction:
@@ -408,8 +614,12 @@ class AuthenticodeSignedData(SignedData):
             )
 
     @property
-    def spc_info(self) -> SpcInfo:
-        return SpcInfo(self.content_asn1)
+    def content(self) -> IndirectData:
+        return IndirectData(self.content_asn1)
+
+    @property
+    def indirect_data(self) -> IndirectData:
+        return self.content
 
     def verify(
         self,
@@ -419,6 +629,7 @@ class AuthenticodeSignedData(SignedData):
         cs_verification_context: VerificationContext | None = None,
         trusted_certificate_store: CertificateStore = TRUSTED_CERTIFICATE_STORE,
         verification_context_kwargs: dict[str, Any] | None = None,
+        verify_page_hashes: bool = True,
         countersignature_mode: Literal["strict", "permit", "ignore"] = "strict",
     ) -> Iterable[list[Certificate]]:
         """Verifies the SignedData structure:
@@ -465,6 +676,8 @@ class AuthenticodeSignedData(SignedData):
         :param dict verification_context_kwargs: If provided, keyword arguments that
             are passed to the instantiation of :class:`VerificationContext` s created
             in this function. Used for e.g. providing a timestamp.
+        :param str verify_page_hashes: Defines whether page hashes should be verified,
+            if present.
         :param str countersignature_mode: Changes how countersignatures are handled.
             Defaults to 'strict', which means that errors in the countersignature
             result in verification failure. If set to 'permit', the countersignature is
@@ -503,7 +716,7 @@ class AuthenticodeSignedData(SignedData):
                 )
 
         # Check that the digest algorithms match
-        if self.digest_algorithm != self.spc_info.digest_algorithm:
+        if self.digest_algorithm != self.indirect_data.digest_algorithm:
             raise AuthenticodeInconsistentDigestAlgorithmError(
                 "SignedData.digestAlgorithm must equal SpcInfo.digestAlgorithm"
             )
@@ -517,11 +730,9 @@ class AuthenticodeSignedData(SignedData):
         # 1. The hash of the file
         if expected_hash is None:
             assert self.pefile is not None
-            fingerprinter = self.pefile.get_fingerprinter()
-            fingerprinter.add_authenticode_hashers(self.digest_algorithm)
-            expected_hash = fingerprinter.hash()[self.digest_algorithm().name]
+            expected_hash = self.pefile.get_fingerprint(self.digest_algorithm)
 
-        if expected_hash != self.spc_info.digest:
+        if expected_hash != self.indirect_data.digest:
             raise AuthenticodeInvalidDigestError(
                 "The expected hash does not match the digest in SpcInfo"
             )
@@ -532,46 +743,87 @@ class AuthenticodeSignedData(SignedData):
                 "The expected hash of the SpcInfo does not match SignerInfo"
             )
 
+        if verify_page_hashes:
+            self._verify_page_hashes()
+
         # Can't check authAttr hash against encrypted hash, done implicitly in
         # M2's pubkey.verify.
 
         signing_time = None
         if self.signer_info.countersigner and countersignature_mode != "ignore":
             assert cs_verification_context is not None
-
-            try:
-                # 3. Check the countersigner hash.
-                # Make sure to use the same digest_algorithm that the countersigner used
-                if not self.signer_info.countersigner.check_message_digest(
-                    self.signer_info.encrypted_digest
-                ):
-                    raise AuthenticodeCounterSignerError(
-                        "The expected hash of the encryptedDigest does not match"
-                        " countersigner's SignerInfo"
-                    )
-
-                cs_verification_context.timestamp = (
-                    self.signer_info.countersigner.signing_time
-                )
-
-                # We could be calling SignerInfo.verify or RFC3161SignedData.verify
-                # here, but those have identical signatures. Note that
-                # RFC3161SignedData accepts a trusted_certificate_store argument, but
-                # we pass in an explicit context anyway
-                self.signer_info.countersigner.verify(cs_verification_context)
-            except Exception as e:
-                if countersignature_mode != "strict":
-                    pass
-                else:
-                    raise AuthenticodeCounterSignerError(
-                        f"An error occurred while validating the countersignature: {e}"
-                    )
-            else:
-                # If no errors occur, we should be fine setting the timestamp to the
-                # countersignature's timestamp
-                signing_time = self.signer_info.countersigner.signing_time
+            signing_time = self._verify_countersigner(
+                cs_verification_context, countersignature_mode
+            )
 
         return self.signer_info.verify(verification_context, signing_time)
+
+    def _verify_page_hashes(self) -> None:
+        """Verifies the page hashes (if available) in the SpcPeImageData field."""
+
+        # can only verify page hashes when the indirect data is
+        # microsoft_spc_pe_image_data
+        if self.indirect_data.content_type != "microsoft_spc_pe_image_data":
+            return
+
+        assert self.pefile is not None
+        assert isinstance(self.indirect_data.content, PeImageData)  # typing
+        image_data = self.indirect_data.content
+
+        for start, end, digest, hash_algorithm in image_data.page_hashes:
+            expected_hash = self.pefile.get_fingerprint(
+                hash_algorithm, start, end, aligned=True
+            )
+
+            if expected_hash != digest:
+                raise AuthenticodeInvalidPageHashError(
+                    f"The page hash for page {start}-{end} is invalid."
+                )
+
+    def _verify_countersigner(
+        self,
+        verification_context: VerificationContext,
+        countersignature_mode: Literal["strict", "permit", "ignore"] = "strict",
+    ) -> datetime.datetime | None:
+        """Verifies the countersigner of the SignerInfo, if available.
+
+        Returns the verified signing time of the binary, if correct, or returns None.
+        """
+
+        assert self.signer_info.countersigner is not None
+        assert countersignature_mode != "ignore"
+
+        try:
+            # 3. Check the countersigner hash.
+            # Make sure to use the same digest_algorithm that the countersigner used
+            if not self.signer_info.countersigner.check_message_digest(
+                self.signer_info.encrypted_digest
+            ):
+                raise AuthenticodeCounterSignerError(
+                    "The expected hash of the encryptedDigest does not match"
+                    " countersigner's SignerInfo"
+                )
+
+            verification_context.timestamp = self.signer_info.countersigner.signing_time
+
+            # We could be calling SignerInfo.verify or RFC3161SignedData.verify
+            # here, but those have identical signatures. Note that
+            # RFC3161SignedData accepts a trusted_certificate_store argument, but
+            # we pass in an explicit context anyway
+            self.signer_info.countersigner.verify(verification_context)
+        except Exception as e:
+            if countersignature_mode != "strict":
+                pass
+            else:
+                raise AuthenticodeCounterSignerError(
+                    f"An error occurred while validating the countersignature: {e}"
+                )
+        else:
+            # If no errors occur, we should be fine setting the timestamp to the
+            # countersignature's timestamp
+            return self.signer_info.countersigner.signing_time
+
+        return None
 
     def explain_verify(
         self, *args: Any, **kwargs: Any
@@ -675,9 +927,13 @@ class RFC3161SignedData(SignedData):
             )
 
     @property
+    def content(self) -> TSTInfo:
+        return TSTInfo(self.content_asn1)
+
+    @property
     def tst_info(self) -> TSTInfo:
         """Contains the :class:`TSTInfo` class for this SignedData."""
-        return TSTInfo(self.content_asn1)
+        return self.content
 
     @property
     def signing_time(self) -> datetime.datetime:

@@ -50,6 +50,10 @@ class AuthenticodeInvalidDigestError(AuthenticodeVerificationError):
     pass
 
 
+class AuthenticodeInvalidPageHashError(AuthenticodeVerificationError):
+    pass
+
+
 class AuthenticodeCounterSignerError(AuthenticodeVerificationError):
     pass
 
