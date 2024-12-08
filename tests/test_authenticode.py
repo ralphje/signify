@@ -213,6 +213,14 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             pefile = SignedPEFile(f)
             pefile.verify()
 
+            # test that the signing time is correct in this case
+            self.assertEqual(
+                list(pefile.signed_datas)[0].signer_info.countersigner.signing_time,
+                datetime.datetime(
+                    2019, 12, 11, 8, 40, 17, 750_000, tzinfo=datetime.timezone.utc
+                ),
+            )
+
     def test_jameslth_valid_when_revocation_not_checked(self):
         """this certificate is revoked"""
         with open(str(root_dir / "test_data" / "jameslth"), "rb") as f:
