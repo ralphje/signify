@@ -33,7 +33,8 @@ import logging
 import pathlib
 import struct
 import warnings
-from typing import Any, Callable, ClassVar, Iterable, Sequence, cast
+from collections.abc import Iterable, Sequence
+from typing import Any, Callable, ClassVar, cast
 
 import mscerts
 from asn1crypto import cms, tsp

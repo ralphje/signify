@@ -3,7 +3,8 @@ from __future__ import annotations
 import datetime
 import logging
 import pathlib
-from typing import Any, Iterable, Iterator, List
+from collections.abc import Iterable, Iterator
+from typing import Any
 
 import asn1crypto.crl
 import asn1crypto.ocsp
@@ -21,7 +22,7 @@ from signify.x509 import Certificate, CertificateName
 logger = logging.getLogger(__name__)
 
 
-class CertificateStore(List[Certificate]):
+class CertificateStore(list[Certificate]):
     """A list of :class:`Certificate` objects."""
 
     def __init__(

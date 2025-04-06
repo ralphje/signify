@@ -1,5 +1,0 @@
-certvalidator>=0.11
-asn1crypto>=1.3,<2
-oscrypto>=1.1,<2
-mscerts
-typing_extensions>=4.6.0

@@ -38,7 +38,11 @@ def format_certificate(cert: Certificate, indent: int = 4) -> str:
 
 
 def describe_attribute(name: str, values: list[Any]) -> list[str]:
-    if name in ("microsoft_time_stamp_token", "microsoft_spc_sp_opus_info"):
+    if name in (
+        "microsoft_time_stamp_token",
+        "microsoft_spc_sp_opus_info",
+        "counter_signature",
+    ):
         return [f"{name}: (elided)"]
     if name == "message_digest":
         return [f"{name}: {values[0].native.hex()}"]
@@ -55,12 +59,6 @@ def describe_signer_info(signer_info: SignerInfo) -> list[str]:
         f"Digest encryption algorithm: {signer_info.digest_encryption_algorithm}",
         f"Encrypted digest: {signer_info.encrypted_digest.hex()}",
     ]
-    if isinstance(signer_info, AuthenticodeSignerInfo):
-        result += [
-            "",
-            f"Program name: {signer_info.program_name}",
-            f"More info: {signer_info.more_info}",
-        ]
 
     if signer_info.authenticated_attributes:
         result += [
@@ -81,6 +79,18 @@ def describe_signer_info(signer_info: SignerInfo) -> list[str]:
             ],
         ]
 
+    if isinstance(signer_info, AuthenticodeSignerInfo):
+        result += [
+            "",
+            "Opus Info:",
+            indent_text(
+                f"Program name: {signer_info.program_name}",
+                f"More info: {signer_info.more_info}",
+                f"Publisher info: {signer_info.publisher_info}",
+                indent=4,
+            ),
+        ]
+
     if signer_info.countersigner:
         result += [""]
         if hasattr(signer_info.countersigner, "issuer"):
@@ -88,8 +98,7 @@ def describe_signer_info(signer_info: SignerInfo) -> list[str]:
                 "Countersigner:",
                 indent_text(
                     f"Signing time: {signer_info.countersigner.signing_time}",
-                    f"Issuer: {signer_info.countersigner.issuer.dn}",
-                    f"Serial: {signer_info.countersigner.serial_number}",
+                    *describe_signer_info(signer_info.countersigner),
                     indent=4,
                 ),
             ]
@@ -100,19 +109,6 @@ def describe_signer_info(signer_info: SignerInfo) -> list[str]:
                     *describe_signed_data(signer_info.countersigner),
                     indent=4,
                 ),
-            ]
-
-        if hasattr(signer_info.countersigner, "certificates"):
-            result += [
-                indent_text(
-                    "",
-                    "Included certificates:",
-                    *[
-                        format_certificate(cert)
-                        for cert in signer_info.countersigner.certificates
-                    ],
-                    indent=4,
-                )
             ]
 
     return result

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Iterable, cast
+from collections.abc import Iterable
+from typing import cast
 
 from asn1crypto import algos
 

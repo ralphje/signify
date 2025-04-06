@@ -4,8 +4,9 @@ import collections
 import datetime
 import logging
 import re
+from collections.abc import Iterable, Iterator
 from functools import cached_property
-from typing import Any, ClassVar, Iterable, Iterator, cast, overload
+from typing import Any, ClassVar, cast, overload
 
 import asn1crypto.pem
 import asn1crypto.x509

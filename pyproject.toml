@@ -1,10 +1,53 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+
+[project]
+name = "signify"
+dependencies = [
+    "certvalidator>=0.11",
+    "asn1crypto>=1.3,<2",
+    "oscrypto>=1.1,<2",
+    "mscerts",
+    "typing_extensions>=4.6.0",
+]
+requires-python = ">=3.9"
+authors = [
+    {name = "Ralph Broenink", email = "ralph@ralphbroenink.net"},
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+description = "Module to generate and verify PE signatures"
+keywords = ["authenticode", "authentihash", "fingerprinter", "pe"]
+readme = "README.rst"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Legal Industry",
+    "Intended Audience :: System Administrators",
+    "Programming Language :: Python",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Security :: Cryptography",
+    "Topic :: System :: Software Distribution",
+    "Topic :: Utilities",
+]
+dynamic = ["version"]
+
+[tool.setuptools.dynamic]
+version = {attr = "signify.__version__"}
+
+[project.urls]
+Documentation = "http://signify.readthedocs.io/en/latest/"
+Repository = "https://github.com/ralphje/signify"
+Changelog = "https://signify.readthedocs.io/en/latest/changelog.html"
+
 [tool.black]
 line-length = 88
-target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+target-version = ['py39', 'py310', 'py311', 'py312', 'py313']
 
 [tool.mypy]
 files = "signify"
-python_version = "3.8"
+python_version = "3.9"
 strict = true
 disallow_incomplete_defs = true
 
@@ -19,7 +62,7 @@ module = [
 ignore_missing_imports = true
 
 [tool.ruff]
-target-version = "py38"
+target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "W", "C4", "I", "N", "UP", "S", "B", "PERF", "RUF", "TID", "PTH", "PIE"]

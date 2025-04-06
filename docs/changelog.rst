@@ -6,6 +6,8 @@ v0.8.0 (unreleased)
 -------------------
 * Add support for page hashes contained within the ``SpcPeImageData`` structure.
 
+* Drop support for Python 3.8, as it reached end-of-life in October 2024. The minimum
+  required version is now 3.9.
 * Renamed ``SpcInfo`` to ``IndirectData``, and split off ``PeImageData`` into a
   separate class.
 * Add support (don't crash) for the ``microsoft_spc_siginfo`` OID in the

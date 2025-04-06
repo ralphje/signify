@@ -3,7 +3,8 @@ from __future__ import annotations
 import datetime
 import hashlib
 import pathlib
-from typing import Any, Iterable, cast
+from collections.abc import Iterable
+from typing import Any, cast
 
 import mscerts
 from asn1crypto import cms

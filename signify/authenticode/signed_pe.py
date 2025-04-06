@@ -37,8 +37,9 @@ import hashlib
 import logging
 import os
 import struct
+from collections.abc import Iterable, Iterator
 from functools import cached_property
-from typing import Any, BinaryIO, Iterable, Iterator, cast
+from typing import Any, BinaryIO, cast
 
 from typing_extensions import Literal, TypedDict
 

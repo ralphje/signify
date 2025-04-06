@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import datetime
-from typing import Iterable, cast
+from collections.abc import Iterable
+from typing import cast
 
 from asn1crypto import cms
 from asn1crypto.core import Asn1Value
