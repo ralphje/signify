@@ -18,6 +18,8 @@ v0.8.0 (unreleased)
 * Refactor classes to store the ASN.1 object in the property ``asn1``, and use
   property methods as data accessors, instead of assigning all attributes during class
   initialization.
+* ``CertificateStore`` is no longer a subclass of ``list``, as that was type unsafe,
+  and could result in loosing its attributes.
 
 v0.7.1 (2024-09-11)
 -------------------

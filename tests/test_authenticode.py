@@ -23,6 +23,7 @@ import binascii
 import datetime
 import hashlib
 import io
+import itertools
 import pathlib
 import unittest
 
@@ -278,8 +279,9 @@ class AuthenticodeParserTestCase(unittest.TestCase):
         with open(str(root_dir / "test_data" / "sigcheck_sha1_patched.exe"), "rb") as f:
             pefile = SignedPEFile(f)
             for mode in ("all", "first"):
-                with self.subTest(multi_verify_mode=mode), self.assertRaises(
-                    VerificationError
+                with (
+                    self.subTest(multi_verify_mode=mode),
+                    self.assertRaises(VerificationError),
                 ):
                     pefile.verify(
                         trusted_certificate_store=TRUSTED_CERTIFICATE_STORE_NO_CTL,
@@ -299,8 +301,9 @@ class AuthenticodeParserTestCase(unittest.TestCase):
         ) as f:
             pefile = SignedPEFile(f)
             for mode in ("all", "best"):
-                with self.subTest(multi_verify_mode=mode), self.assertRaises(
-                    VerificationError
+                with (
+                    self.subTest(multi_verify_mode=mode),
+                    self.assertRaises(VerificationError),
                 ):
                     pefile.verify(
                         trusted_certificate_store=TRUSTED_CERTIFICATE_STORE_NO_CTL,
@@ -322,8 +325,9 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             # we can test for the fact that all signatures are invalid here as well,
             # because the normal CTL will disallow sha1
             for mode in ("all", "best", "first", "any"):
-                with self.subTest(multi_verify_mode=mode), self.assertRaises(
-                    VerificationError
+                with (
+                    self.subTest(multi_verify_mode=mode),
+                    self.assertRaises(VerificationError),
                 ):
                     pefile.verify(multi_verify_mode=mode)
 
@@ -393,7 +397,7 @@ class CertificateTestCase(unittest.TestCase):
     def test_all_trusted_certificates_are_trusted(self):
         context = VerificationContext(trusted_certificate_store)
         # only select 50 to speed up testing
-        for certificate in trusted_certificate_store[:50]:
+        for certificate in itertools.islice(trusted_certificate_store, 50):
             # Trust depends on the timestamp
             context.timestamp = certificate.valid_to
             chain = certificate.verify(context)
