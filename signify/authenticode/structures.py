@@ -791,13 +791,22 @@ class TSTInfo:
         return cast(datetime.datetime, self.asn1["gen_time"].native)
 
     @property
-    def signing_time_accuracy(self) -> datetime.timedelta:
+    def signing_time_accuracy(self) -> datetime.timedelta | None:
         """The accuracy of the above time"""
+        if self.asn1["accuracy"].native is None:
+            return None
         return accuracy_to_python(self.asn1["accuracy"])
 
     @property
-    def signing_authority(self) -> CertificateName:
+    def signing_time_ordering(self) -> bool:
+        """Indicates whether the signing time can be ordered."""
+        return cast("bool | None", self.asn1["ordering"].native) or False
+
+    @property
+    def signing_authority(self) -> CertificateName | None:
         """The authority generating this signature"""
+        if self.asn1["tsa"].native is None:
+            return None
         return CertificateName(self.asn1["tsa"])
 
 
