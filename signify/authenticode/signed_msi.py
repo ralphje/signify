@@ -4,15 +4,16 @@ import hashlib
 import logging
 import uuid
 from _hashlib import HASH
+from collections.abc import Iterable, Iterator
 from operator import attrgetter
-from typing import Any, BinaryIO, Iterable, Iterator
+from typing import Any, BinaryIO
 
 from olefile.olefile import (
+    STGTY_ROOT,
     STGTY_STORAGE,
     STGTY_STREAM,
-    STGTY_ROOT,
-    OleFileIO,
     OleDirectoryEntry,
+    OleFileIO,
 )
 from typing_extensions import Literal
 
