@@ -1,38 +1,5 @@
-#!/usr/bin/env python
-
-# This is a derivative, modified, work from the verify-sigs project.
-# Please refer to the LICENSE file in the distribution for more
-# information. Original filename: fingerprinter.py
-#
-# Parts of this file are licensed as follows:
-#
-# Copyright 2010 Google Inc. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""This module effectively implements the relevant parts of the PECOFF_ documentation
-to find the relevant parts of the PE structure.
-
-It is also capable of listing all the certificates in the Certificate Table and find
-the certificate with type 0x2. The actual parsing of this certificate is perfomed by
-:mod:`signify.authenticode`.
-
-.. _PECOFF: http://www.microsoft.com/whdc/system/platform/firmware/PECOFF.mspx
-"""
-
 from __future__ import annotations
 
-import collections
 import hashlib
 import logging
 import uuid
@@ -40,16 +7,23 @@ from _hashlib import HASH
 from operator import attrgetter
 from typing import Any, BinaryIO, Iterable, Iterator
 
-from olefile.olefile import STGTY_STORAGE, STGTY_STREAM, STGTY_ROOT, OleFileIO, OleDirectoryEntry
-from typing_extensions import Literal, TypedDict
+from olefile.olefile import (
+    STGTY_STORAGE,
+    STGTY_STREAM,
+    STGTY_ROOT,
+    OleFileIO,
+    OleDirectoryEntry,
+)
+from typing_extensions import Literal
 
 from signify._typing import HashFunction
 from signify.asn1.hashing import ACCEPTED_DIGEST_ALGORITHMS
 from signify.authenticode import structures
-from signify.exceptions import AuthenticodeNotSignedError, SignedPEParseError
+from signify.exceptions import AuthenticodeNotSignedError
 from signify.x509 import Certificate
 
 logger = logging.getLogger(__name__)
+
 
 class SignedMsiFile:
     def __init__(self, file_obj: BinaryIO):
@@ -61,7 +35,6 @@ class SignedMsiFile:
         self.file = file_obj
         self._ole_file = OleFileIO(self.file)
 
-
     def get_fingerprint(
         self,
         digest_algorithm: HashFunction,
@@ -70,13 +43,13 @@ class SignedMsiFile:
         hasher = digest_algorithm()
         hasher.update(self._calculate_prehash(digest_algorithm))
         entries = self._ole_file.root.kids  # TODO handle nested kids
-        entries.sort(key=attrgetter('name_utf16'))
+        entries.sort(key=attrgetter("name_utf16"))
         for entry in entries:
-            if entry.name in ("\x05DigitalSignature", '\x05MsiDigitalSignatureEx'):
+            if entry.name in ("\x05DigitalSignature", "\x05MsiDigitalSignatureEx"):
                 continue
             with self._ole_file.openstream(entry.name) as fh:
                 hasher.update(fh.read())
-        
+
         dir_uid = uuid.UUID(self._ole_file.root.clsid)
         hasher.update(dir_uid.bytes_le)
         return hasher.digest()
@@ -116,7 +89,7 @@ class SignedMsiFile:
             SignedData
         :return: iterator of signify.authenticode.SignedData
         """
-        
+
         # TODO ignore_parse_errors not used
 
         def recursive_nested(
@@ -168,8 +141,8 @@ class SignedMsiFile:
 
         # Calculate the needed hashes
         for digest_algorithm in needed_hashes:
-           fingerprint = self.get_fingerprint(digest_algorithm)
-           expected_hashes[digest_algorithm().name] = fingerprint
+            fingerprint = self.get_fingerprint(digest_algorithm)
+            expected_hashes[digest_algorithm().name] = fingerprint
 
         return expected_hashes
 
@@ -292,7 +265,7 @@ class SignedMsiFile:
         return structures.AuthenticodeVerificationResult.call(
             self.verify, *args, **kwargs
         )
-    
+
     @staticmethod
     def _prehash_entry(entry: OleDirectoryEntry, hasher: HASH):
         if entry.entry_type != STGTY_ROOT:
@@ -300,26 +273,28 @@ class SignedMsiFile:
         if entry.entry_type in (STGTY_ROOT, STGTY_STORAGE):
             dir_uid = uuid.UUID(entry.clsid)
             hasher.update(dir_uid.bytes_le)
-        
+
         if entry.entry_type == STGTY_STREAM:
-            hasher.update(entry.size.to_bytes(4, 'little'))
-        
-        hasher.update(entry.dwUserFlags.to_bytes(4, 'little'))  # TODO empty in our case, to check with a msi with flags set
+            hasher.update(entry.size.to_bytes(4, "little"))
+
+        hasher.update(
+            entry.dwUserFlags.to_bytes(4, "little")
+        )  # TODO empty in our case, to check with a msi with flags set
 
         if entry.entry_type != STGTY_ROOT:
-            hasher.update(entry.createTime.to_bytes(8, 'little'))
-            hasher.update(entry.modifyTime.to_bytes(8, 'little'))
+            hasher.update(entry.createTime.to_bytes(8, "little"))
+            hasher.update(entry.modifyTime.to_bytes(8, "little"))
 
         return
 
     def _calculate_prehash(self, digest_algorithm: HashFunction) -> bytes:
         prehasher = digest_algorithm()
         SignedMsiFile._prehash_entry(self._ole_file.root, prehasher)
-        
+
         entries = self._ole_file.root.kids  # TODO handle nested kids
-        entries.sort(key=attrgetter('name_utf16'))
+        entries.sort(key=attrgetter("name_utf16"))
         for entry in entries:
-            if entry.name in ("\x05DigitalSignature", '\x05MsiDigitalSignatureEx'):
+            if entry.name in ("\x05DigitalSignature", "\x05MsiDigitalSignatureEx"):
                 continue
             SignedMsiFile._prehash_entry(entry, prehasher)
         return prehasher.digest()
