@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid
-from _hashlib import HASH
 from collections.abc import Iterable, Iterator
 from operator import attrgetter
 from typing import Any, BinaryIO
@@ -268,7 +267,7 @@ class SignedMsiFile:
         )
 
     @staticmethod
-    def _prehash_entry(entry: OleDirectoryEntry, hasher: HASH):
+    def _prehash_entry(entry: OleDirectoryEntry, hasher: "hashlib._Hash") -> None:
         if entry.entry_type != STGTY_ROOT:
             hasher.update(entry.name_utf16)
         if entry.entry_type in (STGTY_ROOT, STGTY_STORAGE):
