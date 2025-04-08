@@ -22,6 +22,10 @@ Installation is very simple::
 
     pip install signify
 
+MSI file support requires::
+
+    pip install signify[msi]
+
 Documentation
 -------------
 Documentation is available at http://signify.readthedocs.io/en/latest/ or in the docs/ directory.
