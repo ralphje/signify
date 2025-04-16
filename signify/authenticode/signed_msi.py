@@ -4,6 +4,7 @@ import hashlib
 import logging
 import uuid
 from collections.abc import Iterable, Iterator
+from functools import cached_property
 from operator import attrgetter
 from typing import Any, BinaryIO
 
@@ -13,6 +14,7 @@ from olefile.olefile import (
     STGTY_STREAM,
     OleDirectoryEntry,
     OleFileIO,
+    NotOleFileError,
 )
 from typing_extensions import Literal
 
@@ -29,11 +31,17 @@ class SignedMsiFile:
     def __init__(self, file_obj: BinaryIO):
         """Msi file
 
-        :param file_obj: A MSI file opened in binary file
+        :param file_obj: An MSI file opened in binary file
         """
 
         self.file = file_obj
-        self._ole_file = OleFileIO(self.file)
+
+    @cached_property
+    def _ole_file(self):
+        try:
+            return OleFileIO(self.file)
+        except NotOleFileError:
+            raise AuthenticodeNotSignedError("Not a valid OleFile")
 
     def get_fingerprint(
         self,
@@ -100,13 +108,11 @@ class SignedMsiFile:
                 for nested in signed_data.signer_info.nested_signed_datas:
                     yield from recursive_nested(nested)
 
-        with OleFileIO(self.file) as ole:
-            # https://github.com/decalage2/olefile
-            if not ole.exists("\x05DigitalSignature"):
-                raise ValueError("missing DigitalSignature")
-            # get properties from the stream:
-            with ole.openstream("\x05DigitalSignature") as fh:
-                b_data = fh.read()
+        if not self._ole_file.exists("\x05DigitalSignature"):
+            raise ValueError("missing DigitalSignature")
+        # get properties from the stream:
+        with self._ole_file.openstream("\x05DigitalSignature") as fh:
+            b_data = fh.read()
 
         yield from recursive_nested(
             structures.AuthenticodeSignedData.from_envelope(b_data)
