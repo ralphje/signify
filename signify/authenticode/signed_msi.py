@@ -109,7 +109,7 @@ class SignedMsiFile:
                     yield from recursive_nested(nested)
 
         if not self._ole_file.exists("\x05DigitalSignature"):
-            raise ValueError("missing DigitalSignature")
+            raise AuthenticodeNotSignedError("missing DigitalSignature")
         # get properties from the stream:
         with self._ole_file.openstream("\x05DigitalSignature") as fh:
             b_data = fh.read()
