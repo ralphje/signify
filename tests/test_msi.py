@@ -45,9 +45,9 @@ class SignedMsiTestCase(unittest.TestCase):
         )
         with open(str(root_dir / "test_data" / "cmake.msi"), "rb") as f:
             msi_file = SignedMsiFile(f)
-            prehash = msi_file._calculate_prehash(digest_algorithm=hashlib.sha256)
+            prehash = msi_file._calculate_prehash(hasher=hashlib.sha256())
 
-        self.assertEqual(prehash.hex(), expected_prehash)
+        self.assertEqual(prehash.hexdigest(), expected_prehash)
 
     def test_cmake_msi_signed_data(self):
         with open(str(root_dir / "test_data" / "cmake.msi"), "rb") as f:
@@ -81,6 +81,27 @@ class SignedMsiTestCase(unittest.TestCase):
         self.assertEqual(
             kitware.subject.dn,
             "CN=Kitware\, Inc., O=Kitware\, Inc., L=Clifton Park, ST=New York, C=US, 2.5.4.5=2235734, 2.5.4.15=Private Organization, 1.3.6.1.4.1.311.60.2.1.2=New York, 1.3.6.1.4.1.311.60.2.1.3=US",
+        )
+    
+    def test_putty_msi(self):
+        """Putty msi does not have an extended digital signature."""
+        with open(str(root_dir / "test_data" / "putty.msi"), "rb") as f:
+            msi_file = SignedMsiFile(f)
+            result = msi_file.verify()
+        self.assertEqual(len(result), 1)
+        _signed_data, certificate_chains = result[0]
+        sectigo_root, sectigo_intermediate, tatham = certificate_chains[0]
+        self.assertEqual(
+            sectigo_root.subject.dn,
+            "CN=Sectigo Public Code Signing Root R46, O=Sectigo Limited, C=GB",
+        )
+        self.assertEqual(
+            sectigo_intermediate.subject.dn,
+            "CN=Sectigo Public Code Signing CA R36, O=Sectigo Limited, C=GB",
+        )
+        self.assertEqual(
+            tatham.subject.dn,
+            "CN=Simon Tatham, O=Simon Tatham, ST=Cambridgeshire, C=GB",
         )
     
     def test_exe_file(self):

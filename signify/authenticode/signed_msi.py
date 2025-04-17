@@ -18,14 +18,16 @@ from olefile.olefile import (
 )
 from typing_extensions import Literal
 
-from signify._typing import HashFunction
+from signify._typing import HashFunction, HashObject
 from signify.asn1.hashing import ACCEPTED_DIGEST_ALGORITHMS
 from signify.authenticode import structures
-from signify.exceptions import AuthenticodeNotSignedError
+from signify.exceptions import AuthenticodeNotSignedError, AuthenticodeInvalidExtendedDigestError
 from signify.x509 import Certificate
 
 logger = logging.getLogger(__name__)
 
+EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME = "\x05MsiDigitalSignatureEx"
+DIGITAL_SIGNATURE_ENTRY_NAME = "\x05DigitalSignature"
 
 class SignedMsiFile:
     def __init__(self, file_obj: BinaryIO):
@@ -49,11 +51,21 @@ class SignedMsiFile:
     ) -> bytes:
         """Gets the fingerprint for this msi file."""
         hasher = digest_algorithm()
-        hasher.update(self._calculate_prehash(digest_algorithm))
+
+        if self._ole_file.exists(EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME):
+            # MSI is signed with an extended signature 
+            with self._ole_file.openstream(EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME) as fh:
+                expected_extended_signature = fh.read()
+            prehasher = digest_algorithm()
+            prehash = self._calculate_prehash(prehasher).digest()
+            hasher.update(prehash)
+            if prehash != expected_extended_signature:
+                raise AuthenticodeInvalidExtendedDigestError("The expected prehash does not match the digest")
+        
         entries = self._ole_file.root.kids  # TODO handle nested kids
         entries.sort(key=attrgetter("name_utf16"))
         for entry in entries:
-            if entry.name in ("\x05DigitalSignature", "\x05MsiDigitalSignatureEx"):
+            if entry.name in (DIGITAL_SIGNATURE_ENTRY_NAME, EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME):
                 continue
             with self._ole_file.openstream(entry.name) as fh:
                 hasher.update(fh.read())
@@ -148,6 +160,7 @@ class SignedMsiFile:
         # Calculate the needed hashes
         for digest_algorithm in needed_hashes:
             fingerprint = self.get_fingerprint(digest_algorithm)
+            print(f"fingerprint: {fingerprint.hex()}")  # TODO remove me
             expected_hashes[digest_algorithm().name] = fingerprint
 
         return expected_hashes
@@ -273,7 +286,7 @@ class SignedMsiFile:
         )
 
     @staticmethod
-    def _prehash_entry(entry: OleDirectoryEntry, hasher: "hashlib._Hash") -> None:
+    def _prehash_entry(entry: OleDirectoryEntry, hasher: HashObject) -> None:
         if entry.entry_type != STGTY_ROOT:
             hasher.update(entry.name_utf16)
         if entry.entry_type in (STGTY_ROOT, STGTY_STORAGE):
@@ -293,14 +306,13 @@ class SignedMsiFile:
 
         return
 
-    def _calculate_prehash(self, digest_algorithm: HashFunction) -> bytes:
-        prehasher = digest_algorithm()
-        SignedMsiFile._prehash_entry(self._ole_file.root, prehasher)
+    def _calculate_prehash(self, hasher: HashObject) -> HashObject:
+        SignedMsiFile._prehash_entry(self._ole_file.root, hasher)
 
         entries = self._ole_file.root.kids  # TODO handle nested kids
         entries.sort(key=attrgetter("name_utf16"))
         for entry in entries:
             if entry.name in ("\x05DigitalSignature", "\x05MsiDigitalSignatureEx"):
                 continue
-            SignedMsiFile._prehash_entry(entry, prehasher)
-        return prehasher.digest()
+            SignedMsiFile._prehash_entry(entry, hasher)
+        return hasher
