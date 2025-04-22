@@ -320,9 +320,9 @@ class SignedMsiFile:
 
         return
     
-    @staticmethod
-    def _prehash_storage_entry(dir_entry: OleDirectoryEntry, hasher: HashObject) -> None:
-        SignedMsiFile._prehash_entry(dir_entry, hasher)
+    @classmethod
+    def _prehash_storage_entry(cls, dir_entry: OleDirectoryEntry, hasher: HashObject) -> None:
+        cls._prehash_entry(dir_entry, hasher)
 
         entries = dir_entry.kids
         entries.sort(key=attrgetter("name_utf16"))
@@ -330,11 +330,11 @@ class SignedMsiFile:
             if entry.name in ("\x05DigitalSignature", "\x05MsiDigitalSignatureEx"):
                 continue
             if entry.kids:
-                SignedMsiFile._prehash_storage_entry(entry, hasher)
+                cls._prehash_storage_entry(entry, hasher)
             else:
-                SignedMsiFile._prehash_entry(entry, hasher)
+                cls._prehash_entry(entry, hasher)
 
     def _calculate_prehash(self, digest_algorithm: HashFunction) -> bytes:
         hasher = digest_algorithm()
-        SignedMsiFile._prehash_storage_entry(self._ole_file.root, hasher)
+        self._prehash_storage_entry(self._ole_file.root, hasher)
         return hasher.digest()
