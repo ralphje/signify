@@ -56,8 +56,7 @@ class SignedMsiFile:
             # MSI is signed with an extended signature 
             with self._ole_file.openstream(EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME) as fh:
                 expected_extended_signature = fh.read()
-            prehasher = digest_algorithm()
-            prehash = self._calculate_prehash(prehasher).digest()
+            prehash = self._calculate_prehash(digest_algorithm)
             hasher.update(prehash)
             if prehash != expected_extended_signature:
                 raise AuthenticodeInvalidExtendedDigestError("The expected prehash does not match the digest")
@@ -305,14 +304,22 @@ class SignedMsiFile:
             hasher.update(entry.modifyTime.to_bytes(8, "little"))
 
         return
+    
+    @staticmethod
+    def _prehash_storage_entry(dir_entry: OleDirectoryEntry, hasher: HashObject) -> None:
+        SignedMsiFile._prehash_entry(dir_entry, hasher)
 
-    def _calculate_prehash(self, hasher: HashObject) -> HashObject:
-        SignedMsiFile._prehash_entry(self._ole_file.root, hasher)
-
-        entries = self._ole_file.root.kids  # TODO handle nested kids
+        entries = dir_entry.kids
         entries.sort(key=attrgetter("name_utf16"))
         for entry in entries:
             if entry.name in ("\x05DigitalSignature", "\x05MsiDigitalSignatureEx"):
                 continue
-            SignedMsiFile._prehash_entry(entry, hasher)
-        return hasher
+            if entry.kids:
+                SignedMsiFile._prehash_storage_entry(entry, hasher)
+            else:
+                SignedMsiFile._prehash_entry(entry, hasher)
+
+    def _calculate_prehash(self, digest_algorithm: HashFunction) -> bytes:
+        hasher = digest_algorithm()
+        SignedMsiFile._prehash_storage_entry(self._ole_file.root, hasher)
+        return hasher.digest()
