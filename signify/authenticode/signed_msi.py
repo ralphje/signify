@@ -45,6 +45,30 @@ class SignedMsiFile:
         except NotOleFileError:
             raise AuthenticodeNotSignedError("Not a valid OleFile")
 
+    @classmethod
+    def _hash_storage_entry(
+            cls,
+            dir_entry: OleDirectoryEntry,
+            hasher: HashObject, *,
+            dir_entry_path: list[str]=None,
+    ) -> None:
+        dir_entry_path = dir_entry_path or []  # we omit the root directory
+        
+        entries = dir_entry.kids
+        entries.sort(key=attrgetter("name_utf16"))
+        for entry in entries:
+            if entry.name in (DIGITAL_SIGNATURE_ENTRY_NAME, EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME):
+                continue
+            if entry.kids:
+                cls._hash_storage_entry(entry, hasher, dir_entry_path=dir_entry_path + [entry.name])
+            else:
+                # use the full path to the stream
+                with entry.olefile.openstream(dir_entry_path + [entry.name]) as fh:
+                    hasher.update(fh.read())
+
+        dir_uid = uuid.UUID(dir_entry.clsid)
+        hasher.update(dir_uid.bytes_le)
+
     def get_fingerprint(
         self,
         digest_algorithm: HashFunction,
@@ -61,16 +85,7 @@ class SignedMsiFile:
             if prehash != expected_extended_signature:
                 raise AuthenticodeInvalidExtendedDigestError("The expected prehash does not match the digest")
         
-        entries = self._ole_file.root.kids  # TODO handle nested kids
-        entries.sort(key=attrgetter("name_utf16"))
-        for entry in entries:
-            if entry.name in (DIGITAL_SIGNATURE_ENTRY_NAME, EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME):
-                continue
-            with self._ole_file.openstream(entry.name) as fh:
-                hasher.update(fh.read())
-
-        dir_uid = uuid.UUID(self._ole_file.root.clsid)
-        hasher.update(dir_uid.bytes_le)
+        self._hash_storage_entry(self._ole_file.root, hasher)
         return hasher.digest()
 
     @property
