@@ -45,9 +45,9 @@ class SignedMsiTestCase(unittest.TestCase):
         )
         with open(str(root_dir / "test_data" / "cmake.msi"), "rb") as f:
             msi_file = SignedMsiFile(f)
-            prehash = msi_file._calculate_prehash(hasher=hashlib.sha256())
+            prehash = msi_file._calculate_prehash(digest_algorithm=hashlib.sha256)
 
-        self.assertEqual(prehash.hexdigest(), expected_prehash)
+        self.assertEqual(prehash.hex(), expected_prehash)
 
     def test_cmake_msi_signed_data(self):
         with open(str(root_dir / "test_data" / "cmake.msi"), "rb") as f:
