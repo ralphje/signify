@@ -11,17 +11,17 @@ from olefile.olefile import (
     STGTY_ROOT,
     STGTY_STORAGE,
     STGTY_STREAM,
+    NotOleFileError,
     OleDirectoryEntry,
     OleFileIO,
-    NotOleFileError,
 )
 
 from signify._typing import HashFunction, HashObject
 from signify.authenticode import structures
 from signify.authenticode.signed_file import SignedFile
 from signify.exceptions import (
-    AuthenticodeNotSignedError,
     AuthenticodeInvalidExtendedDigestError,
+    AuthenticodeNotSignedError,
 )
 
 EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME = "\x05MsiDigitalSignatureEx"
@@ -65,11 +65,11 @@ class SignedMsiFile(SignedFile):
                 continue
             if entry.kids:
                 cls._hash_storage_entry(
-                    entry, hasher, dir_entry_path=dir_entry_path + [entry.name]
+                    entry, hasher, dir_entry_path=[*dir_entry_path, entry.name]
                 )
             else:
                 # use the full path to the stream
-                with entry.olefile.openstream(dir_entry_path + [entry.name]) as fh:
+                with entry.olefile.openstream([*dir_entry_path, entry.name]) as fh:
                     hasher.update(fh.read())
 
         dir_uid = uuid.UUID(dir_entry.clsid)
