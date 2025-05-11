@@ -1,6 +1,7 @@
 import hashlib
 from abc import ABC, abstractmethod
-from typing import BinaryIO, Iterator, Iterable, Literal, Any
+from collections.abc import Iterable, Iterator
+from typing import Any, BinaryIO, Literal
 
 from signify.asn1.hashing import ACCEPTED_DIGEST_ALGORITHMS
 from signify.authenticode import structures
@@ -163,4 +164,3 @@ class SignedFile(ABC):
         :param expected_hashes: Hashes provided by the caller of :meth:`verify`
         :return: All required hashes
         """
-        pass
