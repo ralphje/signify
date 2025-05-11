@@ -39,7 +39,7 @@ class SignedMsiFile:
         self.file = file_obj
 
     @cached_property
-    def _ole_file(self):
+    def _ole_file(self) -> OleFileIO:
         try:
             return OleFileIO(self.file)
         except NotOleFileError:
@@ -50,7 +50,7 @@ class SignedMsiFile:
             cls,
             dir_entry: OleDirectoryEntry,
             hasher: HashObject, *,
-            dir_entry_path: list[str]=None,
+            dir_entry_path: list[str] | None =None,
     ) -> None:
         dir_entry_path = dir_entry_path or []  # we omit the root directory
         
