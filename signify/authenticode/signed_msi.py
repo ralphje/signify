@@ -21,13 +21,17 @@ from typing_extensions import Literal
 from signify._typing import HashFunction, HashObject
 from signify.asn1.hashing import ACCEPTED_DIGEST_ALGORITHMS
 from signify.authenticode import structures
-from signify.exceptions import AuthenticodeNotSignedError, AuthenticodeInvalidExtendedDigestError
+from signify.exceptions import (
+    AuthenticodeNotSignedError,
+    AuthenticodeInvalidExtendedDigestError,
+)
 from signify.x509 import Certificate
 
 logger = logging.getLogger(__name__)
 
 EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME = "\x05MsiDigitalSignatureEx"
 DIGITAL_SIGNATURE_ENTRY_NAME = "\x05DigitalSignature"
+
 
 class SignedMsiFile:
     def __init__(self, file_obj: BinaryIO):
@@ -47,20 +51,26 @@ class SignedMsiFile:
 
     @classmethod
     def _hash_storage_entry(
-            cls,
-            dir_entry: OleDirectoryEntry,
-            hasher: HashObject, *,
-            dir_entry_path: list[str] | None =None,
+        cls,
+        dir_entry: OleDirectoryEntry,
+        hasher: HashObject,
+        *,
+        dir_entry_path: list[str] | None = None,
     ) -> None:
         dir_entry_path = dir_entry_path or []  # we omit the root directory
-        
+
         entries = dir_entry.kids
         entries.sort(key=attrgetter("name_utf16"))
         for entry in entries:
-            if entry.name in (DIGITAL_SIGNATURE_ENTRY_NAME, EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME):
+            if entry.name in (
+                DIGITAL_SIGNATURE_ENTRY_NAME,
+                EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME,
+            ):
                 continue
             if entry.kids:
-                cls._hash_storage_entry(entry, hasher, dir_entry_path=dir_entry_path + [entry.name])
+                cls._hash_storage_entry(
+                    entry, hasher, dir_entry_path=dir_entry_path + [entry.name]
+                )
             else:
                 # use the full path to the stream
                 with entry.olefile.openstream(dir_entry_path + [entry.name]) as fh:
@@ -77,14 +87,16 @@ class SignedMsiFile:
         hasher = digest_algorithm()
 
         if self._ole_file.exists(EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME):
-            # MSI is signed with an extended signature 
+            # MSI is signed with an extended signature
             with self._ole_file.openstream(EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME) as fh:
                 expected_extended_signature = fh.read()
             prehash = self._calculate_prehash(digest_algorithm)
             hasher.update(prehash)
             if prehash != expected_extended_signature:
-                raise AuthenticodeInvalidExtendedDigestError("The expected prehash does not match the digest")
-        
+                raise AuthenticodeInvalidExtendedDigestError(
+                    "The expected prehash does not match the digest"
+                )
+
         self._hash_storage_entry(self._ole_file.root, hasher)
         return hasher.digest()
 
@@ -319,9 +331,11 @@ class SignedMsiFile:
             hasher.update(entry.modifyTime.to_bytes(8, "little"))
 
         return
-    
+
     @classmethod
-    def _prehash_storage_entry(cls, dir_entry: OleDirectoryEntry, hasher: HashObject) -> None:
+    def _prehash_storage_entry(
+        cls, dir_entry: OleDirectoryEntry, hasher: HashObject
+    ) -> None:
         cls._prehash_entry(dir_entry, hasher)
 
         entries = dir_entry.kids
