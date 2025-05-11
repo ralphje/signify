@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 import uuid
 from collections.abc import Iterable, Iterator
 from functools import cached_property
@@ -26,8 +25,6 @@ from signify.exceptions import (
     AuthenticodeInvalidExtendedDigestError,
 )
 from signify.x509 import Certificate
-
-logger = logging.getLogger(__name__)
 
 EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME = "\x05MsiDigitalSignatureEx"
 DIGITAL_SIGNATURE_ENTRY_NAME = "\x05DigitalSignature"
@@ -57,6 +54,7 @@ class SignedMsiFile:
         *,
         dir_entry_path: list[str] | None = None,
     ) -> None:
+        """Recursively hashes all streams in a storage entry."""
         dir_entry_path = dir_entry_path or []  # we omit the root directory
 
         entries = dir_entry.kids
@@ -83,7 +81,7 @@ class SignedMsiFile:
         self,
         digest_algorithm: HashFunction,
     ) -> bytes:
-        """Gets the fingerprint for this msi file."""
+        """Compute the fingerprint for this msi file."""
         hasher = digest_algorithm()
 
         if self._ole_file.exists(EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME):
@@ -112,31 +110,16 @@ class SignedMsiFile:
         self, *, include_nested: bool = True, ignore_parse_errors: bool = True
     ) -> Iterator[structures.AuthenticodeSignedData]:
         """Returns an iterator over :class:`AuthenticodeSignedData` objects relevant
-        for this PE file.
+        for this MSI file.
 
         :param include_nested: Boolean, if True, will also iterate over all nested
             SignedData structures
-        :param ignore_parse_errors: Indicates how to handle
-            :exc:`SignedPEParseError` that may be raised while fetching
-            embedded :class:`structures.AuthenticodeSignedData` structures.
-
-            When :const:`True`,  which is the default and seems to be how Windows
-            handles this as well, this will fetch as many valid
-            :class:`structures.AuthenticodeSignedData` structures until an exception
-            occurs.
-
-            Note that this will also silence the :exc:`SignedPEParseError` that occurs
-            when there's no valid :class:`AuthenticodeSignedData` to fetch.
-
-            When :const:`False`, this will raise the :exc:`SignedPEParseError` as
-            soon as one occurs.
-        :raises SignedPEParseError: For parse errors in the PEFile
+        :param ignore_parse_errors: Present for compatibility reasons. Has no effect
+        :raises AuthenticodeNotSignedError: For missing DigitalSignature in the Msi file
         :raises signify.authenticode.AuthenticodeParseError: For parse errors in the
             SignedData
         :return: iterator of signify.authenticode.SignedData
         """
-
-        # TODO ignore_parse_errors not used
 
         def recursive_nested(
             signed_data: structures.AuthenticodeSignedData,
@@ -186,7 +169,6 @@ class SignedMsiFile:
         # Calculate the needed hashes
         for digest_algorithm in needed_hashes:
             fingerprint = self.get_fingerprint(digest_algorithm)
-            print(f"fingerprint: {fingerprint.hex()}")  # TODO remove me
             expected_hashes[digest_algorithm().name] = fingerprint
 
         return expected_hashes
@@ -311,8 +293,31 @@ class SignedMsiFile:
             self.verify, *args, **kwargs
         )
 
+    def _calculate_prehash(self, digest_algorithm: HashFunction) -> bytes:
+        hasher = digest_algorithm()
+        self._prehash_storage_entry(self._ole_file.root, hasher)
+        return hasher.digest()
+
+    @classmethod
+    def _prehash_storage_entry(
+        cls, dir_entry: OleDirectoryEntry, hasher: HashObject
+    ) -> None:
+        """Recursively pre-hashes all entries in storage."""
+        cls._prehash_entry(dir_entry, hasher)
+
+        entries = dir_entry.kids
+        entries.sort(key=attrgetter("name_utf16"))
+        for entry in entries:
+            if entry.name in ("\x05DigitalSignature", "\x05MsiDigitalSignatureEx"):
+                continue
+            if entry.kids:
+                cls._prehash_storage_entry(entry, hasher)
+            else:
+                cls._prehash_entry(entry, hasher)
+
     @staticmethod
     def _prehash_entry(entry: OleDirectoryEntry, hasher: HashObject) -> None:
+        """Pre-hash an entry metadata."""
         if entry.entry_type != STGTY_ROOT:
             hasher.update(entry.name_utf16)
         if entry.entry_type in (STGTY_ROOT, STGTY_STORAGE):
@@ -331,24 +336,3 @@ class SignedMsiFile:
             hasher.update(entry.modifyTime.to_bytes(8, "little"))
 
         return
-
-    @classmethod
-    def _prehash_storage_entry(
-        cls, dir_entry: OleDirectoryEntry, hasher: HashObject
-    ) -> None:
-        cls._prehash_entry(dir_entry, hasher)
-
-        entries = dir_entry.kids
-        entries.sort(key=attrgetter("name_utf16"))
-        for entry in entries:
-            if entry.name in ("\x05DigitalSignature", "\x05MsiDigitalSignatureEx"):
-                continue
-            if entry.kids:
-                cls._prehash_storage_entry(entry, hasher)
-            else:
-                cls._prehash_entry(entry, hasher)
-
-    def _calculate_prehash(self, digest_algorithm: HashFunction) -> bytes:
-        hasher = digest_algorithm()
-        self._prehash_storage_entry(self._ole_file.root, hasher)
-        return hasher.digest()
