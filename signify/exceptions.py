@@ -65,6 +65,7 @@ class AuthenticodeInvalidPageHashError(AuthenticodeVerificationError):
 class AuthenticodeCounterSignerError(CounterSignerError, AuthenticodeVerificationError):
     pass
 
+
 class AuthenticodeInvalidExtendedDigestError(AuthenticodeVerificationError):
     pass
 

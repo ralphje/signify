@@ -82,7 +82,7 @@ class SignedMsiTestCase(unittest.TestCase):
             kitware.subject.dn,
             "CN=Kitware\, Inc., O=Kitware\, Inc., L=Clifton Park, ST=New York, C=US, 2.5.4.5=2235734, 2.5.4.15=Private Organization, 1.3.6.1.4.1.311.60.2.1.2=New York, 1.3.6.1.4.1.311.60.2.1.3=US",
         )
-    
+
     def test_putty_msi(self):
         """Putty msi does not have an extended digital signature."""
         with open(str(root_dir / "test_data" / "putty.msi"), "rb") as f:
@@ -103,13 +103,13 @@ class SignedMsiTestCase(unittest.TestCase):
             tatham.subject.dn,
             "CN=Simon Tatham, O=Simon Tatham, ST=Cambridgeshire, C=GB",
         )
-    
+
     def test_exe_file(self):
         with open(str(root_dir / "test_data" / "sigcheck.exe"), "rb") as f:
             msi_file = SignedMsiFile(f)
             with self.assertRaises(AuthenticodeNotSignedError):
                 msi_file.verify()
-    
+
     def test_msi_not_signed(self):
         with open(str(root_dir / "test_data" / "cmake_not_signed.msi"), "rb") as f:
             msi_file = SignedMsiFile(f)
