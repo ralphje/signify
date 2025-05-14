@@ -1,7 +1,7 @@
 import hashlib
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
-from typing import Any, BinaryIO, Literal
+from typing import Any, BinaryIO, Literal, Union
 
 from signify.asn1.hashing import ACCEPTED_DIGEST_ALGORITHMS
 from signify.authenticode import structures
@@ -34,7 +34,7 @@ class SignedFile(ABC):
         self,
         *,
         multi_verify_mode: Literal["any", "first", "all", "best"] = "any",
-        expected_hashes: dict[str, bytes] | None = None,
+        expected_hashes: Union[dict[str, bytes], None] = None,
         ignore_parse_errors: bool = True,
         **kwargs: Any,
     ) -> list[tuple[structures.AuthenticodeSignedData, Iterable[list[Certificate]]]]:
@@ -136,7 +136,7 @@ class SignedFile(ABC):
 
     def explain_verify(
         self, *args: Any, **kwargs: Any
-    ) -> tuple[structures.AuthenticodeVerificationResult, Exception | None]:
+    ) -> tuple[structures.AuthenticodeVerificationResult, Union[Exception, None]]:
         """This will return a value indicating the signature status of this PE file.
         This will not raise an error when the verification fails, but rather
         indicate this through the resulting enum
@@ -153,7 +153,7 @@ class SignedFile(ABC):
     def _calculate_expected_hashes(
         self,
         signed_datas: Iterable[structures.AuthenticodeSignedData],
-        expected_hashes: dict[str, bytes] | None = None,
+        expected_hashes: Union[dict[str, bytes], None] = None,
     ) -> dict[str, bytes]:
         """Calculates the expected hashes that are needed for verification. This
         provides a small speed-up by pre-calculating all hashes, so that not each
