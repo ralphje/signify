@@ -4,8 +4,7 @@ import unittest
 
 from olefile import OleFileIO
 
-from signify.authenticode import AuthenticodeVerificationResult
-from signify.authenticode.signed_msi import SignedMsiFile
+from signify.authenticode import AuthenticodeVerificationResult, SignedMsiFile
 from signify.exceptions import AuthenticodeNotSignedError
 
 root_dir = pathlib.Path(__file__).parent
