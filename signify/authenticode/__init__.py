@@ -1,3 +1,4 @@
+# ruff: noqa: I001, import order prevent circular import error
 from .authroot import AUTHROOTSTL_PATH, CertificateTrustList, CertificateTrustSubject
 from .signed_pe import SignedPEFile
 from .signed_msi import SignedMsiFile
@@ -29,7 +30,7 @@ __all__ = [
     "IndirectData",
     "RFC3161SignedData",
     "RFC3161SignerInfo",
-    "SignedPEFile",
     "SignedMsiFile",
+    "SignedPEFile",
     "TSTInfo",
 ]
