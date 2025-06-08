@@ -41,6 +41,9 @@ Documentation = "http://signify.readthedocs.io/en/latest/"
 Repository = "https://github.com/ralphje/signify"
 Changelog = "https://signify.readthedocs.io/en/latest/changelog.html"
 
+[project.optional-dependencies]
+msi = ["olefile"]
+
 [tool.black]
 line-length = 88
 target-version = ['py39', 'py310', 'py311', 'py312', 'py313']
@@ -55,6 +58,7 @@ disallow_incomplete_defs = true
 module = [
     "asn1crypto.*",
     "certvalidator.*",
+    "olefile.*",
     "oscrypto.*",
     "pyasn1.*",
     "pyasn1_modules.*"
