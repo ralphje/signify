@@ -115,8 +115,16 @@ class SignedMsiTestCase(unittest.TestCase):
             msi_file = SignedMsiFile(f)
             with self.assertRaises(AuthenticodeNotSignedError):
                 msi_file.verify()
-    
+
     def test_explain_verify_on_msi_not_signed(self):
         with open(str(root_dir / "test_data" / "cmake_not_signed.msi"), "rb") as f:
             msi_file = SignedMsiFile(f)
-            self.assertTupleEqual(msi_file.explain_verify(), (AuthenticodeVerificationResult.NOT_SIGNED, AuthenticodeNotSignedError("missing DigitalSignature")))
+            self.assertTupleEqual(
+                msi_file.explain_verify(),
+                (
+                    AuthenticodeVerificationResult.NOT_SIGNED,
+                    AuthenticodeNotSignedError(
+                        "The MSI file is missing a DigitalSignature stream."
+                    ),
+                ),
+            )

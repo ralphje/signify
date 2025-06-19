@@ -8,10 +8,9 @@ import textwrap
 from typing import Any
 
 from signify.authenticode import (
-    SignedPEFile,
+    AuthenticodeFile,
     AuthenticodeSignedData,
     AuthenticodeSignerInfo,
-    RFC3161SignerInfo,
     RFC3161SignedData,
 )
 from signify.pkcs7 import SignerInfo, SignedData
@@ -163,6 +162,18 @@ def describe_signed_data(signed_data: SignedData):
                     )
                 ]
 
+        if signed_data.indirect_data.content_type == "microsoft_spc_siginfo":
+            siginfo = signed_data.indirect_data.content
+            result += [
+                "",
+                indent_text("SigInfo:", indent=4),
+                indent_text(
+                    f"SIP Version: {siginfo.sip_version}",
+                    f"SIP GUID: {siginfo.sip_guid}",
+                    indent=8,
+                ),
+            ]
+
     if isinstance(signed_data, RFC3161SignedData) and signed_data.tst_info:
         result += [
             "",
@@ -181,7 +192,7 @@ def describe_signed_data(signed_data: SignedData):
         verify_result, e = signed_data.explain_verify()
         result += ["", str(verify_result)]
         if e:
-            result += [f"{e}"]
+            result += [f"{e!r}"]
 
     return result
 
@@ -193,15 +204,15 @@ def main(*filenames: str):
         print(f"{filename}:")
         with pathlib.Path(filename).open("rb") as file_obj:
             try:
-                pe = SignedPEFile(file_obj)
-                for signed_data in pe.signed_datas:
+                signed_file = AuthenticodeFile.detect(file_obj)
+                for signed_data in signed_file.signed_datas:
                     print(indent_text(*describe_signed_data(signed_data), indent=4))
                     print("--------")
 
-                result, e = pe.explain_verify()
+                result, e = signed_file.explain_verify()
                 print(result)
                 if e:
-                    print(e)
+                    print(repr(e))
 
             except Exception as e:
                 raise

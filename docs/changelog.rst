@@ -5,14 +5,17 @@ This page contains the most significant changes in Signify between each release.
 v0.8.0 (unreleased)
 -------------------
 * Add support for page hashes contained within the ``SpcPeImageData`` structure.
+* Add support for MSI files through ``SignedMsi`` class, contributed by @HugoC. The
+  ``AuthenticodeFile.detect`` class method auto-detects the file type, and the class
+  provides a transparent interface. You must install support for MSI files by using
+  ``pip install signify[msi]``
 
 * Drop support for Python 3.8, as it reached end-of-life in October 2024. The minimum
   required version is now 3.9.
 * Renamed ``SpcInfo`` to ``IndirectData``, and split off ``PeImageData`` into a
   separate class.
-* Add support (don't crash) for the ``microsoft_spc_siginfo`` OID in the
-  ``SpcIndirectDataContent`` structure, used in signing MSI files. Note that MSI files
-  are not (yet) supported.
+* Add support for the ``microsoft_spc_siginfo`` OID in the ``SpcIndirectDataContent``
+  structure, used in signing MSI files.
 * Add support for ``SpcRelaxedPeMarkerCheck`` and ``PlatformManifestBinaryID`` as
   SignerInfo attributes, although their exact purpose is currently unknown.
 * Refactor classes to store the ASN.1 object in the property ``asn1``, and use

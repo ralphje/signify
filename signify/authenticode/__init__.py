@@ -1,5 +1,6 @@
 # ruff: noqa: I001, import order prevent circular import error
 from .authroot import AUTHROOTSTL_PATH, CertificateTrustList, CertificateTrustSubject
+from .signed_file import AuthenticodeFile
 from .signed_pe import SignedPEFile
 from .signed_msi import SignedMsiFile
 from .structures import (
@@ -22,6 +23,7 @@ __all__ = [
     "TRUSTED_CERTIFICATE_STORE",
     "TRUSTED_CERTIFICATE_STORE_NO_CTL",
     "AuthenticodeCounterSignerInfo",
+    "AuthenticodeFile",
     "AuthenticodeSignedData",
     "AuthenticodeSignerInfo",
     "AuthenticodeVerificationResult",

@@ -46,7 +46,7 @@ from typing_extensions import TypedDict
 from signify import fingerprinter
 from signify._typing import HashFunction
 from signify.authenticode import structures
-from signify.authenticode.signed_file import SignedFile
+from signify.authenticode.signed_file import AuthenticodeFile
 from signify.exceptions import SignedPEParseError
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class ParsedCertTable(TypedDict):
     certificate: bytes
 
 
-class SignedPEFile(SignedFile):
+class SignedPEFile(AuthenticodeFile):
     def __init__(self, file_obj: BinaryIO):
         """A PE file that is to be parsed to find the relevant sections for
         Authenticode parsing.
@@ -353,7 +353,7 @@ class SignedPEFile(SignedFile):
                 if certificate["type"] == 2:
                     yield from recursive_nested(
                         structures.AuthenticodeSignedData.from_envelope(
-                            certificate["certificate"], pefile=self
+                            certificate["certificate"], signed_file=self
                         )
                     )
                     found = True
@@ -372,17 +372,13 @@ class SignedPEFile(SignedFile):
         signed_datas: Iterable[structures.AuthenticodeSignedData],
         expected_hashes: dict[str, bytes] | None = None,
     ) -> dict[str, bytes]:
+        """Optimizes the default implementation of :meth:`_calculate_expected_hashes`
+        by calculating multiple hashes at once.
+        """
         if expected_hashes is None:
             expected_hashes = {}
 
-        # Calculate which hashes we require for the signedinfos
-        digest_algorithms = set()
-        for signed_data in signed_datas:
-            digest_algorithms.add(signed_data.digest_algorithm)
-
-        # Calculate which hashes are needed
-        provided_hashes = {getattr(hashlib, t) for t in expected_hashes}
-        needed_hashes = digest_algorithms - provided_hashes
+        needed_hashes = self._get_needed_hashes(signed_datas, expected_hashes)
 
         # Calculate the needed hashes
         if needed_hashes:

@@ -1,20 +1,47 @@
-import hashlib
-from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator
-from typing import Any, BinaryIO, Literal, Union
+from __future__ import annotations
 
+import hashlib
+import os
+from collections.abc import Iterable, Iterator
+from typing import TYPE_CHECKING, Any, BinaryIO, Literal
+
+from signify._typing import HashFunction
 from signify.asn1.hashing import ACCEPTED_DIGEST_ALGORITHMS
-from signify.authenticode import structures
-from signify.exceptions import AuthenticodeNotSignedError
+from signify.exceptions import AuthenticodeNotSignedError, ParseError
 from signify.x509 import Certificate
 
+if TYPE_CHECKING:
+    from signify.authenticode import structures
 
-class SignedFile(ABC):
+
+class AuthenticodeFile:
     """File signed with Authenticode."""
 
-    @abstractmethod
     def __init__(self, file_obj: BinaryIO):
-        pass
+        """An Authenticode-signed file that is to be parsed to find the relevant
+        sections for Authenticode parsing.
+
+        :param file_obj: An Authenticode-signed file opened in binary file
+        """
+        raise NotImplementedError()
+
+    @classmethod
+    def detect(cls, file_obj: BinaryIO) -> AuthenticodeFile:
+        """This initializer will return either :cls:`SignedMsiFile` or
+        :cls:`SignedPEFile`, and otherwise throw an error.
+        """
+        file_obj.seek(0, os.SEEK_SET)
+        header = file_obj.read(8)
+        if header == bytes.fromhex("D0 CF 11 E0 A1 B1 1A E1"):
+            from .signed_msi import SignedMsiFile
+
+            return SignedMsiFile(file_obj)
+        elif header.startswith(bytes.fromhex("4D 5A")):
+            from .signed_pe import SignedPEFile
+
+            return SignedPEFile(file_obj)
+
+        raise ParseError("Unknown file type.")
 
     @property
     def signed_datas(self) -> Iterator[structures.AuthenticodeSignedData]:
@@ -24,17 +51,40 @@ class SignedFile(ABC):
 
         yield from self.iter_signed_datas()
 
-    @abstractmethod
     def iter_signed_datas(
         self, *, include_nested: bool = True, ignore_parse_errors: bool = True
     ) -> Iterator[structures.AuthenticodeSignedData]:
-        pass
+        """Returns an iterator over :class:`AuthenticodeSignedData` objects relevant
+        for this PE file.
+
+        :param include_nested: Boolean, if True, will also iterate over all nested
+            SignedData structures
+        :param ignore_parse_errors: Indicates how to handle
+            :exc:`SignedPEParseError` that may be raised while fetching
+            embedded :class:`structures.AuthenticodeSignedData` structures.
+
+            When :const:`True`,  which is the default and seems to be how Windows
+            handles this as well, this will fetch as many valid
+            :class:`structures.AuthenticodeSignedData` structures until an exception
+            occurs.
+
+            Note that this will also silence the :exc:`SignedPEParseError` that occurs
+            when there's no valid :class:`AuthenticodeSignedData` to fetch.
+
+            When :const:`False`, this will raise the :exc:`SignedPEParseError` as
+            soon as one occurs.
+        :raises SignedPEParseError: For parse errors in the PEFile
+        :raises signify.authenticode.AuthenticodeParseError: For parse errors in the
+            SignedData
+        :return: iterator of signify.authenticode.SignedData
+        """
+        raise NotImplementedError
 
     def verify(
         self,
         *,
         multi_verify_mode: Literal["any", "first", "all", "best"] = "any",
-        expected_hashes: Union[dict[str, bytes], None] = None,
+        expected_hashes: dict[str, bytes] | None = None,
         ignore_parse_errors: bool = True,
         **kwargs: Any,
     ) -> list[tuple[structures.AuthenticodeSignedData, Iterable[list[Certificate]]]]:
@@ -136,7 +186,7 @@ class SignedFile(ABC):
 
     def explain_verify(
         self, *args: Any, **kwargs: Any
-    ) -> tuple[structures.AuthenticodeVerificationResult, Union[Exception, None]]:
+    ) -> tuple[structures.AuthenticodeVerificationResult, Exception | None]:
         """This will return a value indicating the signature status of this PE file.
         This will not raise an error when the verification fails, but rather
         indicate this through the resulting enum
@@ -145,15 +195,49 @@ class SignedFile(ABC):
         :returns: The verification result, and the exception containing
             more details (if available or None)
         """
+
+        from signify.authenticode import structures
+
         return structures.AuthenticodeVerificationResult.call(
             self.verify, *args, **kwargs
         )
 
-    @abstractmethod
+    @classmethod
+    def _get_needed_hashes(
+        cls,
+        signed_datas: Iterable[structures.AuthenticodeSignedData],
+        expected_hashes: dict[str, bytes],
+    ) -> set[HashFunction]:
+        """Provided the list of signed datas and already-provided hashes, returns a
+        list of hashes that need to be calculated.
+
+        Calculates the expected hashes that are needed for verification. This
+        provides a small speed-up by pre-calculating all hashes, so that not each
+        individual SignerInfo object is responsible for calculating their own hash.
+
+        :param signed_datas: The signed datas of this object. Provided to allow
+            :meth:`verify` to prefetch these
+        :param expected_hashes: Hashes provided by the caller of :meth:`verify`
+        :return: All required hashes
+        """
+
+        # Calculate which hashes we require for the signedinfos
+        digest_algorithms = set()
+        for signed_data in signed_datas:
+            digest_algorithms.add(signed_data.digest_algorithm)
+
+        # Calculate which hashes are needed
+        provided_hashes = {getattr(hashlib, t) for t in expected_hashes}
+        return digest_algorithms - provided_hashes
+
+    def get_fingerprint(self, digest_algorithm: HashFunction) -> bytes:
+        """Gets the fingerprint for this file"""
+        raise NotImplementedError
+
     def _calculate_expected_hashes(
         self,
         signed_datas: Iterable[structures.AuthenticodeSignedData],
-        expected_hashes: Union[dict[str, bytes], None] = None,
+        expected_hashes: dict[str, bytes] | None = None,
     ) -> dict[str, bytes]:
         """Calculates the expected hashes that are needed for verification. This
         provides a small speed-up by pre-calculating all hashes, so that not each
@@ -164,3 +248,11 @@ class SignedFile(ABC):
         :param expected_hashes: Hashes provided by the caller of :meth:`verify`
         :return: All required hashes
         """
+        if expected_hashes is None:
+            expected_hashes = {}
+
+        # Calculate the needed hashes
+        for digest_algorithm in self._get_needed_hashes(signed_datas, expected_hashes):
+            fingerprint = self.get_fingerprint(digest_algorithm)
+            expected_hashes[digest_algorithm().name] = fingerprint
+        return expected_hashes

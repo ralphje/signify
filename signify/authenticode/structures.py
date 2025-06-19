@@ -46,13 +46,14 @@ from signify._typing import HashFunction
 from signify.asn1 import spc
 from signify.asn1.hashing import _get_digest_algorithm
 from signify.asn1.helpers import accuracy_to_python
-from signify.asn1.spc import SpcPeImageData
-from signify.authenticode import signed_pe
+from signify.asn1.spc import SpcPeImageData, SpcSigInfo
+from signify.authenticode import signed_file, signed_msi, signed_pe
 from signify.authenticode.authroot import CertificateTrustList
 from signify.exceptions import (
     AuthenticodeCounterSignerError,
     AuthenticodeInconsistentDigestAlgorithmError,
     AuthenticodeInvalidDigestError,
+    AuthenticodeInvalidExtendedDigestError,
     AuthenticodeInvalidPageHashError,
     AuthenticodeNotSignedError,
     AuthenticodeParseError,
@@ -262,7 +263,7 @@ class AuthenticodeSignerInfo(SignerInfo):
         """It is possible for Authenticode SignerInfo objects to contain nested
         :class:`signify.pkcs7.SignedData` objects. This is  similar to including
         multiple SignedData structures in the
-        :class:`signify.authenticode.SignedPEFile`.
+        :class:`signify.authenticode.AuthenticodeFile`.
 
         This field is extracted from the unauthenticated attributes.
         """
@@ -279,7 +280,9 @@ class AuthenticodeSignerInfo(SignerInfo):
                     "Nested signature is not a SignedData structure"
                 )
             result.append(
-                AuthenticodeSignedData(sig_data["content"], pefile=self.parent.pefile)
+                AuthenticodeSignedData(
+                    sig_data["content"], signed_file=self.parent.signed_file
+                )
             )
 
         return result
@@ -515,6 +518,25 @@ class PeImageData:
             position += 4 + hash_length
 
 
+class SigInfo:
+    """SigInfo, mostly used in MSI files. It defines information about the SIP, which
+    is the Subject Interface Package: A Microsoft proprietary specification for a
+    software layer that enables applications to create, store, retrieve, and verify a
+    subject signature.
+    """
+
+    def __init__(self, asn1: spc.SpcSigInfo):
+        self.asn1 = asn1
+
+    @property
+    def sip_version(self) -> int:
+        return cast(int, self.asn1["dwSIPversion"].native)
+
+    @property
+    def sip_guid(self) -> str:
+        return cast(str, self.asn1["gSIPguid"].native)
+
+
 class IndirectData:
     """The Authenticode's SpcIndirectDataContent information, and their children. This
     is expected to be part of the content of the SignedData structure in Authenticode.
@@ -557,9 +579,11 @@ class IndirectData:
         return cast(Asn1Value, self.asn1["data"]["value"])
 
     @property
-    def content(self) -> PeImageData | None:
+    def content(self) -> PeImageData | SigInfo | None:
         if self.content_type == "microsoft_spc_pe_image_data":
             return PeImageData(cast(SpcPeImageData, self.content_asn1))
+        elif self.content_type == "microsoft_spc_siginfo":
+            return SigInfo(cast(SpcSigInfo, self.content_asn1))
         return None
 
     @property
@@ -595,13 +619,13 @@ class AuthenticodeSignedData(SignedData):
     def __init__(
         self,
         asn1: cms.SignedData,
-        pefile: signed_pe.SignedPEFile | None = None,
+        signed_file: signed_file.AuthenticodeFile | None = None,
     ):
         """
         :param asn1.pkcs7.SignedData asn1: The ASN.1 structure of the SignedData object
-        :param pefile: The related PEFile.
+        :param signed_file: The related AuthenticodeFile.
         """
-        self.pefile = pefile
+        self.signed_file = signed_file
         super().__init__(asn1)
 
     def _validate_asn1(self) -> None:
@@ -643,12 +667,12 @@ class AuthenticodeSignedData(SignedData):
           :class:`AuthenticodeSignerInfo` must have the same)
         * Ensures that the hash in :attr:`SpcInfo.digest` matches the expected hash.
           If no expected hash is provided to this function, it is calculated using
-          the :class:`Fingerprinter` obtained from the :class:`SignedPEFile` object.
+          the :class:`Fingerprinter` obtained from the :class:`AuthenticodeFile` object.
 
         :param expected_hash: The expected hash digest of the
-            :class:`SignedPEFile`.
+            :class:`AuthenticodeFile`.
         :param verify_page_hashes: Defines whether page hashes should be verified,
-            if present.
+            if present. This also includes extended digests for MSI files.
         :param verification_context: See :meth:`SignedData.verify`
         :param cs_verification_context: See :meth:`SignedData.verify`
         :param trusted_certificate_store: See :meth:`SignedData.verify`
@@ -672,8 +696,8 @@ class AuthenticodeSignedData(SignedData):
         # Check that the hashes are correct
         # 1. The hash of the file
         if expected_hash is None:
-            assert self.pefile is not None
-            expected_hash = self.pefile.get_fingerprint(self.digest_algorithm)
+            assert self.signed_file is not None
+            expected_hash = self.signed_file.get_fingerprint(self.digest_algorithm)
 
         if expected_hash != self.indirect_data.digest:
             raise AuthenticodeInvalidDigestError(
@@ -682,6 +706,7 @@ class AuthenticodeSignedData(SignedData):
 
         if verify_page_hashes:
             self._verify_page_hashes()
+            self._verify_extended_digest()
 
         try:
             return super().verify(
@@ -699,6 +724,25 @@ class AuthenticodeSignedData(SignedData):
         except CounterSignerError as e:
             raise AuthenticodeCounterSignerError(str(e))
 
+    def _verify_extended_digest(self) -> None:
+        """Verifies the extended digest of MSI files."""
+        if (
+            not isinstance(self.signed_file, signed_msi.SignedMsiFile)
+            or not self.signed_file.has_prehash
+        ):
+            return
+
+        with self.signed_file._ole_file.openstream(
+            signed_msi.EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME
+        ) as fh:
+            expected_extended_signature = fh.read()
+
+        prehash = self.signed_file._calculate_prehash(self.digest_algorithm)
+        if prehash != expected_extended_signature:
+            raise AuthenticodeInvalidExtendedDigestError(
+                "The expected prehash does not match the digest"
+            )
+
     def _verify_page_hashes(self) -> None:
         """Verifies the page hashes (if available) in the SpcPeImageData field."""
 
@@ -707,12 +751,16 @@ class AuthenticodeSignedData(SignedData):
         if self.indirect_data.content_type != "microsoft_spc_pe_image_data":
             return
 
-        assert self.pefile is not None
+        if not isinstance(self.signed_file, signed_pe.SignedPEFile):
+            raise AuthenticodeInvalidPageHashError(
+                "Page hashes present for non-PE-file."
+            )
+
         assert isinstance(self.indirect_data.content, PeImageData)  # typing
         image_data = self.indirect_data.content
 
         for start, end, digest, hash_algorithm in image_data.page_hashes:
-            expected_hash = self.pefile.get_fingerprint(
+            expected_hash = self.signed_file.get_fingerprint(
                 hash_algorithm, start, end, aligned=True
             )
 
