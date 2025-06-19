@@ -68,3 +68,17 @@ class ValidationTestCase(unittest.TestCase):
         )
         with self.assertRaises(VerificationError):
             context.verify(cert)
+
+
+class FingerprintTestCase(unittest.TestCase):
+    def test_fingerprint_with_financial_criteria(self):
+        with open(str(root_dir / "certs" / "codetwo.pem"), "rb") as f:
+            cert = Certificate.from_pem(f.read())
+
+        self.assertEqual(
+            cert.sha1_fingerprint, "a71f6477a8ad571d2abeee4e20acdc37f96678e0"
+        )
+        self.assertEqual(
+            cert.extensions["microsoft_spc_financial_criteria"],
+            {"financial_info_available": False, "meets_criteria": True},
+        )

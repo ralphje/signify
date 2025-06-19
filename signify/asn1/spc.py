@@ -418,7 +418,7 @@ class SpcSpAgencyInformation(Sequence):  # type: ignore[misc]
     """
 
     _fields = [
-        ("policy_information", SpcLink, {"explicit": 0}),
+        ("policy_information", SpcLink, {"optional": True, "explicit": 0}),
         ("policy_display_text", SpcString, {"optional": True, "explicit": 1}),
         ("logo_image", SpcImage, {"optional": True, "implicit": 2}),
         ("logo_link", SpcLink, {"optional": True, "explicit": 3}),
@@ -429,8 +429,8 @@ class SpcFinancialCriteria(Sequence):  # type: ignore[misc]
     """Reverse-engineered extension for certificates"""
 
     _fields = [
-        ("financial_info_available", Boolean, {"default": False}),
-        ("meets_criteria", Boolean, {"default": False}),
+        ("financial_info_available", Boolean),
+        ("meets_criteria", Boolean),
     ]
 
 

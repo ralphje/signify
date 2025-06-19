@@ -21,6 +21,8 @@ v0.8.0 (unreleased)
 * ``CertificateStore`` is no longer a subclass of ``list``, as that was type unsafe,
   and could result in loosing its attributes.
 
+* Resolve bug with parsing of ``microsoft_spc_financial_criteria``.
+
 v0.7.1 (2024-09-11)
 -------------------
 * Fix minor bug in parsing of ``CertificateTrustSubject.root_program_chain_policies``.
