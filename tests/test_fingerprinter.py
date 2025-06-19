@@ -26,12 +26,8 @@ import os.path
 import pathlib
 import unittest
 
-from signify.fingerprinter import (
-    AuthenticodeFingerprinter,
-    Finger,
-    Fingerprinter,
-    Range,
-)
+from signify.authenticode import SignedPEFingerprinter
+from signify.fingerprinter import Finger, Fingerprinter, Range
 
 root_dir = pathlib.Path(__file__).parent
 
@@ -47,11 +43,11 @@ class FingerPrinterTestCase(unittest.TestCase):
                 continue
             with self.subTest(filename):
                 with open(str(filename), "rb") as file_obj:
-                    fingerprinter = AuthenticodeFingerprinter(file_obj)
+                    fingerprinter = SignedPEFingerprinter(file_obj)
                     fingerprinter.add_hashers(
                         hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha512
                     )
-                    fingerprinter.add_authenticode_hashers(
+                    fingerprinter.add_signed_pe_hashers(
                         hashlib.md5, hashlib.sha1, hashlib.sha256
                     )
                     results = fingerprinter.hashes()

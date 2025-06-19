@@ -9,6 +9,10 @@ class ParseError(SignifyError):
     pass
 
 
+class SignedMsiParseError(ParseError):
+    pass
+
+
 class SignedPEParseError(ParseError):
     pass
 

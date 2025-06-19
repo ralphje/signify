@@ -27,8 +27,8 @@ class AuthenticodeFile:
 
     @classmethod
     def detect(cls, file_obj: BinaryIO) -> AuthenticodeFile:
-        """This initializer will return either :cls:`SignedMsiFile` or
-        :cls:`SignedPEFile`, and otherwise throw an error.
+        """This initializer will return either :class:`SignedMsiFile` or
+        :class:`SignedPEFile`, and otherwise throw an error.
         """
         file_obj.seek(0, os.SEEK_SET)
         header = file_obj.read(8)
@@ -55,12 +55,12 @@ class AuthenticodeFile:
         self, *, include_nested: bool = True, ignore_parse_errors: bool = True
     ) -> Iterator[structures.AuthenticodeSignedData]:
         """Returns an iterator over :class:`AuthenticodeSignedData` objects relevant
-        for this PE file.
+        for this Authenticode-signed file.
 
         :param include_nested: Boolean, if True, will also iterate over all nested
             SignedData structures
         :param ignore_parse_errors: Indicates how to handle
-            :exc:`SignedPEParseError` that may be raised while fetching
+            :exc:`ParseError` that may be raised while fetching
             embedded :class:`structures.AuthenticodeSignedData` structures.
 
             When :const:`True`,  which is the default and seems to be how Windows
@@ -68,12 +68,12 @@ class AuthenticodeFile:
             :class:`structures.AuthenticodeSignedData` structures until an exception
             occurs.
 
-            Note that this will also silence the :exc:`SignedPEParseError` that occurs
+            Note that this will also silence the :exc:`ParseError` that occurs
             when there's no valid :class:`AuthenticodeSignedData` to fetch.
 
-            When :const:`False`, this will raise the :exc:`SignedPEParseError` as
+            When :const:`False`, this will raise the :exc:`ParseError` as
             soon as one occurs.
-        :raises SignedPEParseError: For parse errors in the PEFile
+        :raises ParseError: For parse errors in the signed file
         :raises signify.authenticode.AuthenticodeParseError: For parse errors in the
             SignedData
         :return: iterator of signify.authenticode.SignedData

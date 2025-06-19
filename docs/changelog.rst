@@ -23,6 +23,8 @@ v0.8.0 (unreleased)
   initialization.
 * ``CertificateStore`` is no longer a subclass of ``list``, as that was type unsafe,
   and could result in loosing its attributes.
+* ``AuthenticodeFingerprinter`` is now a ``SignedPEFingerprinter``, as it is scoped for
+  that use case (and not for MSI files).
 
 * Resolve bug with parsing of ``microsoft_spc_financial_criteria``.
 

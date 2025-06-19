@@ -132,7 +132,7 @@ class AuthenticodeVerificationResult(enum.Enum):
     ) -> tuple[AuthenticodeVerificationResult, Exception | None]:
         try:
             function(*args, **kwargs)
-        except (SignedPEParseError, AuthenticodeNotSignedError) as exc:
+        except AuthenticodeNotSignedError as exc:
             return cls.NOT_SIGNED, exc
         except AuthenticodeInconsistentDigestAlgorithmError as exc:
             return cls.INCONSISTENT_DIGEST_ALGORITHM, exc
@@ -478,6 +478,7 @@ class PeImageData:
 
     @classmethod
     def page_hash_algorithm(cls, content_type: str) -> HashFunction:
+        """Returns the used page hash algorithm for the provided content type."""
         if content_type not in cls.PAGE_HASH_ALGORITHMS:
             raise AuthenticodeParseError(
                 f"Unknown content type for page hashes: {content_type!r}"
@@ -530,10 +531,12 @@ class SigInfo:
 
     @property
     def sip_version(self) -> int:
+        """The SIP version."""
         return cast(int, self.asn1["dwSIPversion"].native)
 
     @property
     def sip_guid(self) -> str:
+        """The SIP GUID."""
         return cast(str, self.asn1["gSIPguid"].native)
 
 
@@ -568,6 +571,7 @@ class IndirectData:
 
     @property
     def content_asn1(self) -> Asn1Value:
+        """ASN.1 structure of the content."""
         if self.content_type not in {
             "microsoft_spc_pe_image_data",
             "microsoft_spc_siginfo",
@@ -580,6 +584,7 @@ class IndirectData:
 
     @property
     def content(self) -> PeImageData | SigInfo | None:
+        """Nested content of this :class:`IndirectData`."""
         if self.content_type == "microsoft_spc_pe_image_data":
             return PeImageData(cast(SpcPeImageData, self.content_asn1))
         elif self.content_type == "microsoft_spc_siginfo":
@@ -588,6 +593,7 @@ class IndirectData:
 
     @property
     def digest_algorithm(self) -> HashFunction:
+        """Digest algorithm of the :attr:`digest`."""
         return _get_digest_algorithm(
             self.asn1["message_digest"]["digest_algorithm"],
             location="SpcIndirectDataContent.digestAlgorithm",
@@ -595,18 +601,15 @@ class IndirectData:
 
     @property
     def digest(self) -> bytes:
+        """The (signed) digest as present in this structure. This should match the
+        digest calculated over the data itself.
+        """
         return cast(bytes, self.asn1["message_digest"]["digest"].native)
 
 
 class AuthenticodeSignedData(SignedData):
     """The :class:`signify.pkcs7.SignedData` structure for Authenticode. It holds the
-    same information as its superclass, with additionally the :class:`SpcInfo`:
-
-    .. attribute:: spc_info
-
-       The parsed :attr:`content` of this :class:`SignedData` object, being a
-       SpcIndirectDataContent object.
-
+    same information as its superclass, with additionally the :class:`IndirectData`.
     """
 
     signer_infos: Sequence[AuthenticodeSignerInfo]
@@ -642,10 +645,12 @@ class AuthenticodeSignedData(SignedData):
 
     @property
     def content(self) -> IndirectData:
+        """The indirect data content of this :class:`AuthenticodeSignedData` object."""
         return IndirectData(self.content_asn1)
 
     @property
     def indirect_data(self) -> IndirectData:
+        """Alias for :attr:`content`"""
         return self.content
 
     def verify(  # type: ignore[override]
@@ -813,6 +818,7 @@ class TSTInfo:
 
     @property
     def policy(self) -> str:
+        """Policy attribute"""
         return cast(str, self.asn1["policy"].native)
 
     @property
@@ -881,11 +887,12 @@ class RFC3161SignedData(SignedData):
 
     @property
     def content(self) -> TSTInfo:
+        """Contains the :class:`TSTInfo` class for this SignedData."""
         return TSTInfo(self.content_asn1)
 
     @property
     def tst_info(self) -> TSTInfo:
-        """Contains the :class:`TSTInfo` class for this SignedData."""
+        """Alias for :attr:`content`."""
         return self.content
 
     @property

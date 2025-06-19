@@ -23,7 +23,7 @@ import hashlib
 import json
 import pathlib
 
-from signify.fingerprinter import AuthenticodeFingerprinter
+from signify.authenticode import SignedPEFingerprinter
 
 
 def main():
@@ -32,11 +32,11 @@ def main():
             continue
         print(f"Updating {filename}...")
         with open(str(filename), "rb") as file_obj:
-            fingerprinter = AuthenticodeFingerprinter(file_obj)
+            fingerprinter = SignedPEFingerprinter(file_obj)
             fingerprinter.add_hashers(
                 hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha512
             )
-            fingerprinter.add_authenticode_hashers(
+            fingerprinter.add_signed_pe_hashers(
                 hashlib.md5, hashlib.sha1, hashlib.sha256
             )
             results = fingerprinter.hashes()

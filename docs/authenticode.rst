@@ -2,18 +2,19 @@ Authenticode
 ============
 .. module:: signify.authenticode
 
-The Authenticode support of Signify allows you to easily verify a PE File's signature::
+The Authenticode support of Signify allows you to easily verify a PE or MSI File's
+Authenticode signature::
 
     with open("file.exe", "rb") as f:
-        pefile = SignedPEFile(f)
-        pefile.verify()
+        signed_file = AuthenticodeFile.detect(f)
+        signed_file.verify()
 
-This method will raise an error if it is invalid. A simpler API is also available, allowing you to interpret the error
-if one happens::
+This method will raise an error if it is invalid. A simpler API is also available,
+allowing you to interpret the error if one happens::
 
     with open("file.exe", "rb") as f:
-        pefile = SignedPEFile(f)
-        status, err = pefile.explain_verify()
+        signed_file = AuthenticodeFile.detect(f)
+        status, err = signed_file.explain_verify()
 
     if status != AuthenticodeVerificationResult.OK:
         print(f"Invalid: {err}")
@@ -161,17 +162,39 @@ Future work:
 
 * 1.3.6.1.4.1.311.2.5.1 (enhanced_hash)
 
-Signed PE File
---------------
-A regular PE file will contain zero or one :class:`AuthenticodeSignedData` objects.
-The :class:`SignedPEFile` class contains helpers to ensure the correct objects can be
-extracted, and additionally, allows for validating the PE signatures.
+Authenticode-signed File Objects
+--------------------------------
+To support both PE and MSI files, a generic interface exists. When you call
+:meth:`AuthenticodeFile.detect`, either a :class:`SignedPeFile` or
+:class:`SignedMsiFile` will be returned, both implementing the same interface. This
+generic interface allows access to zero or more :class:`AuthenticodeSignedData` objects,
+and allows validation of the signature.
 
-.. autoclass:: SignedPEFile
+.. autoclass:: AuthenticodeFile
    :members:
 
 .. autoclass:: AuthenticodeVerificationResult
    :members:
+
+Signed PE File
+~~~~~~~~~~~~~~
+This class is used for the verification of PE files.
+
+.. autoclass:: SignedPEFile
+   :members:
+   :special-members: __init__
+
+.. autoclass:: SignedPEFingerprinter
+   :members:
+   :special-members: __init__
+
+Signed MSI File
+~~~~~~~~~~~~~~~
+This class is used for the verification of MSI files.
+
+.. autoclass:: SignedMsiFile
+   :members:
+   :special-members: __init__
 
 PKCS7 objects
 -------------
@@ -182,8 +205,13 @@ may help:
 
 .. autoclass:: AuthenticodeSignedData
    :members:
+   :special-members: __init__
 
-.. autoclass:: SpcInfo
+.. autoclass:: IndirectData
+   :members:
+.. autoclass:: PeImageData
+   :members:
+.. autoclass:: SigInfo
    :members:
 
 .. autoclass:: AuthenticodeSignerInfo

@@ -29,6 +29,7 @@ This module is compatible with Python 3.9+.
 
    authenticode
    authroot
+   authenticode_asn1
 
 
 Indices and tables

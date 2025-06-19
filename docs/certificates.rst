@@ -31,11 +31,14 @@ Certificate Store
 -----------------
 .. autoclass:: CertificateStore
    :members:
+   :special-members: __init__
 .. autoclass:: FileSystemCertificateStore
    :members:
+   :special-members: __init__
 
 Verification
 ------------
 
 .. autoclass:: VerificationContext
    :members:
+   :special-members: __init__

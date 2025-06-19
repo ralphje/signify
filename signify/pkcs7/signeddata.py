@@ -126,7 +126,7 @@ class SignedData:
 
     @property
     def signer_infos(self) -> Sequence[signerinfo.SignerInfo]:
-        """A list of all included SignerInfo objects"""
+        """A list of all included :class:`signerinfo.SignerInfo` objects"""
         if self._signerinfo_class is not None:
             assert not isinstance(self._signerinfo_class, str)
             return [
@@ -138,6 +138,7 @@ class SignedData:
 
     @property
     def signer_info(self) -> signerinfo.SignerInfo:
+        """The included :class:`signerinfo.SignerInfo` object, if there's one."""
         if len(self.signer_infos) == 1:
             return self.signer_infos[0]
         raise AttributeError(

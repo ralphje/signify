@@ -18,7 +18,11 @@ from olefile.olefile import (
 from signify._typing import HashFunction, HashObject
 from signify.authenticode import structures
 from signify.authenticode.signed_file import AuthenticodeFile
-from signify.exceptions import AuthenticodeNotSignedError
+from signify.exceptions import (
+    AuthenticodeNotSignedError,
+    SignedMsiParseError,
+    SignifyError,
+)
 
 EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME = "\x05MsiDigitalSignatureEx"
 DIGITAL_SIGNATURE_ENTRY_NAME = "\x05DigitalSignature"
@@ -38,7 +42,7 @@ class SignedMsiFile(AuthenticodeFile):
         try:
             return OleFileIO(self.file)
         except NotOleFileError:
-            raise AuthenticodeNotSignedError("Not a valid OleFile")
+            raise SignedMsiParseError("Not a valid OleFile")
 
     @classmethod
     def _hash_storage_entry(
@@ -85,18 +89,6 @@ class SignedMsiFile(AuthenticodeFile):
     def iter_signed_datas(
         self, *, include_nested: bool = True, ignore_parse_errors: bool = True
     ) -> Iterator[structures.AuthenticodeSignedData]:
-        """Returns an iterator over :class:`AuthenticodeSignedData` objects relevant
-        for this MSI file.
-
-        :param include_nested: Boolean, if True, will also iterate over all nested
-            SignedData structures
-        :param ignore_parse_errors: Present for compatibility reasons. Has no effect
-        :raises AuthenticodeNotSignedError: For missing DigitalSignature in the Msi file
-        :raises signify.authenticode.AuthenticodeParseError: For parse errors in the
-            SignedData
-        :return: iterator of signify.authenticode.SignedData
-        """
-
         def recursive_nested(
             signed_data: structures.AuthenticodeSignedData,
         ) -> Iterator[structures.AuthenticodeSignedData]:
@@ -105,17 +97,30 @@ class SignedMsiFile(AuthenticodeFile):
                 for nested in signed_data.signer_info.nested_signed_datas:
                     yield from recursive_nested(nested)
 
-        if not self._ole_file.exists(DIGITAL_SIGNATURE_ENTRY_NAME):
-            raise AuthenticodeNotSignedError(
-                "The MSI file is missing a DigitalSignature stream."
-            )
-        # get properties from the stream:
-        with self._ole_file.openstream(DIGITAL_SIGNATURE_ENTRY_NAME) as fh:
-            b_data = fh.read()
+        try:
+            if not self._ole_file.exists(DIGITAL_SIGNATURE_ENTRY_NAME):
+                raise AuthenticodeNotSignedError(
+                    "The MSI file is missing a DigitalSignature stream."
+                )
+            # get properties from the stream:
+            with self._ole_file.openstream(DIGITAL_SIGNATURE_ENTRY_NAME) as fh:
+                b_data = fh.read()
 
-        yield from recursive_nested(
-            structures.AuthenticodeSignedData.from_envelope(b_data, signed_file=self)
-        )
+            yield from recursive_nested(
+                structures.AuthenticodeSignedData.from_envelope(
+                    b_data, signed_file=self
+                )
+            )
+
+        except SignedMsiParseError:
+            if not ignore_parse_errors:
+                raise
+        except SignifyError:
+            raise
+        except Exception as e:
+            # Rewrap any parse errors encountered
+            if not ignore_parse_errors:
+                raise SignedMsiParseError(str(e))
 
     @property
     def has_prehash(self) -> bool:

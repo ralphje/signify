@@ -43,11 +43,11 @@ from typing import BinaryIO, cast
 
 from typing_extensions import TypedDict
 
-from signify import fingerprinter
 from signify._typing import HashFunction
 from signify.authenticode import structures
 from signify.authenticode.signed_file import AuthenticodeFile
 from signify.exceptions import SignedPEParseError
+from signify.fingerprinter import Fingerprinter, Range
 
 logger = logging.getLogger(__name__)
 
@@ -280,12 +280,12 @@ class SignedPEFile(AuthenticodeFile):
         self.file.seek(optional_header_offset + 32, os.SEEK_SET)
         return cast(int, struct.unpack("<I", self.file.read(4))[0])
 
-    def get_fingerprinter(self) -> fingerprinter.AuthenticodeFingerprinter:
+    def get_fingerprinter(self) -> SignedPEFingerprinter:
         """Returns a fingerprinter object for this file.
 
-        :rtype: signify.fingerprinter.AuthenticodeFingerprinter
+        :rtype: signify.fingerprinter.SignedPEFingerprinter
         """
-        return fingerprinter.AuthenticodeFingerprinter(self.file)
+        return SignedPEFingerprinter(self.file)
 
     def get_fingerprint(
         self,
@@ -298,7 +298,7 @@ class SignedPEFile(AuthenticodeFile):
         and optionally aligned to the PE file's alignment.
         """
         fingerprinter = self.get_fingerprinter()
-        fingerprinter.add_authenticode_hashers(
+        fingerprinter.add_signed_pe_hashers(
             digest_algorithm,
             start=start,
             end=end,
@@ -309,31 +309,6 @@ class SignedPEFile(AuthenticodeFile):
     def iter_signed_datas(
         self, *, include_nested: bool = True, ignore_parse_errors: bool = True
     ) -> Iterator[structures.AuthenticodeSignedData]:
-        """Returns an iterator over :class:`AuthenticodeSignedData` objects relevant
-        for this PE file.
-
-        :param include_nested: Boolean, if True, will also iterate over all nested
-            SignedData structures
-        :param ignore_parse_errors: Indicates how to handle
-            :exc:`SignedPEParseError` that may be raised while fetching
-            embedded :class:`structures.AuthenticodeSignedData` structures.
-
-            When :const:`True`,  which is the default and seems to be how Windows
-            handles this as well, this will fetch as many valid
-            :class:`structures.AuthenticodeSignedData` structures until an exception
-            occurs.
-
-            Note that this will also silence the :exc:`SignedPEParseError` that occurs
-            when there's no valid :class:`AuthenticodeSignedData` to fetch.
-
-            When :const:`False`, this will raise the :exc:`SignedPEParseError` as
-            soon as one occurs.
-        :raises SignedPEParseError: For parse errors in the PEFile
-        :raises signify.authenticode.AuthenticodeParseError: For parse errors in the
-            SignedData
-        :return: iterator of signify.authenticode.SignedData
-        """
-
         def recursive_nested(
             signed_data: structures.AuthenticodeSignedData,
         ) -> Iterator[structures.AuthenticodeSignedData]:
@@ -383,7 +358,78 @@ class SignedPEFile(AuthenticodeFile):
         # Calculate the needed hashes
         if needed_hashes:
             fingerprinter = self.get_fingerprinter()
-            fingerprinter.add_authenticode_hashers(*needed_hashes)
+            fingerprinter.add_signed_pe_hashers(*needed_hashes)
             expected_hashes.update(fingerprinter.hashes()["authentihash"])
 
         return expected_hashes
+
+
+class SignedPEFingerprinter(Fingerprinter):
+    """An extension of the :class:`Fingerprinter` class that enables the calculation of
+    authentihashes of PE Files.
+    """
+
+    def add_signed_pe_hashers(
+        self,
+        *hashers: HashFunction,
+        start: int = 0,
+        end: int = -1,
+        block_size: int | None = None,
+    ) -> bool:
+        """Specialized method of :meth:`add_hashers` to add hashers with ranges limited
+        to those that are needed to calculate the hash of signed PE Files.
+        """
+
+        pefile = SignedPEFile(self.file)
+        omit = pefile.get_authenticode_omit_sections()
+
+        if omit is None:
+            return False
+
+        ranges = []
+        range_start = 0
+        for start_length in sorted(omit.values()):
+            ranges.append(Range(range_start, start_length.start))
+            range_start = sum(start_length)
+        ranges.append(Range(range_start, self._filelength))
+
+        self.add_hashers(
+            *hashers,
+            ranges=ranges,
+            description="authentihash",
+            start=start,
+            end=end,
+            block_size=block_size,
+        )
+        return True
+
+
+def main(*filenames: str) -> None:
+    import binascii
+    import pathlib
+
+    for filename in filenames:
+        print(f"{filename}:")
+        with pathlib.Path(filename).open("rb") as file_obj:
+            fingerprinter = SignedPEFingerprinter(file_obj)
+            fingerprinter.add_hashers(
+                hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha512
+            )
+            fingerprinter.add_signed_pe_hashers(
+                hashlib.md5, hashlib.sha1, hashlib.sha256
+            )
+            results = fingerprinter.hashes()
+
+            for description, result in sorted(results.items()):
+                print(f"  {description or 'generic'}:")
+
+                for k, v in sorted(result.items()):
+                    if k == "_":
+                        continue
+                    print(f"    {k:<10}: {binascii.hexlify(v).decode('ascii')}")
+
+
+if __name__ == "__main__":
+    import sys
+
+    main(*sys.argv[1:])

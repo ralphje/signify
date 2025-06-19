@@ -32,14 +32,13 @@ from signify.authenticode import (
     TRUSTED_CERTIFICATE_STORE,
     TRUSTED_CERTIFICATE_STORE_NO_CTL,
 )
-from signify.authenticode.signed_pe import SignedPEFile
+from signify.authenticode.signed_pe import SignedPEFile, SignedPEFingerprinter
 from signify.exceptions import (
     AuthenticodeNotSignedError,
     AuthenticodeVerificationError,
     SignedPEParseError,
     VerificationError,
 )
-from signify.fingerprinter import AuthenticodeFingerprinter
 from signify.x509 import Certificate
 from signify.x509.context import (
     CertificateStore,
@@ -56,8 +55,8 @@ trusted_certificate_store = FileSystemCertificateStore(
 class AuthenticodeParserTestCase(unittest.TestCase):
     def test_software_update(self):
         with open(str(root_dir / "test_data" / "SoftwareUpdate.exe"), "rb") as f:
-            fingerprinter = AuthenticodeFingerprinter(f)
-            fingerprinter.add_authenticode_hashers(hashlib.sha1)
+            fingerprinter = SignedPEFingerprinter(f)
+            fingerprinter.add_signed_pe_hashers(hashlib.sha1)
             hashes = fingerprinter.hash()
 
             # Sanity check that the authenticode hash is still correct

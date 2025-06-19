@@ -62,8 +62,10 @@ Use :const:`TRUSTED_CERTIFICATE_STORE` for a certificate store with associated C
 
 .. autoclass:: CertificateTrustList
    :members:
+   :special-members: __init__
 .. autoclass:: CertificateTrustSubject
    :members:
+   :special-members: __init__
 
 .. data:: TRUSTED_CERTIFICATE_STORE
 
