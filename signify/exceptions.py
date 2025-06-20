@@ -77,10 +77,6 @@ class AuthenticodeInvalidExtendedDigestError(AuthenticodeVerificationError):
     pass
 
 
-class AuthenticodeInvalidExtendedDigestError(AuthenticodeVerificationError):
-    pass
-
-
 class CertificateTrustListParseError(SignifyError):
     pass
 
