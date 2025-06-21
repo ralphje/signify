@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import io
 from collections.abc import Iterable, Iterator
 from typing import TYPE_CHECKING, Any, BinaryIO, Literal
 
@@ -32,6 +33,7 @@ class AuthenticodeFile:
         """
         file_obj.seek(0, os.SEEK_SET)
         header = file_obj.read(8)
+        file_obj.seek(0, os.SEEK_SET)
         if header == bytes.fromhex("D0 CF 11 E0 A1 B1 1A E1"):
             from .signed_msi import SignedMsiFile
 
@@ -40,6 +42,11 @@ class AuthenticodeFile:
             from .signed_pe import SignedPEFile
 
             return SignedPEFile(file_obj)
+        elif header.startswith(bytes.fromhex("50 4B 43 58")):
+            from .raw_cert import RawCertificateFile
+            file_obj.read(4)
+            data = file_obj.read()
+            return RawCertificateFile(io.BytesIO( data))
 
         raise ParseError("Unknown file type.")
 

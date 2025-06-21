@@ -6,10 +6,10 @@ from typing import BinaryIO
 
 
 from signify.authenticode import structures
-from signify.authenticode.signed_file import SignedFile
+from signify.authenticode.signed_file import AuthenticodeFile
 
 
-class RawCertificateFile(SignedFile):
+class RawCertificateFile(AuthenticodeFile):
     def __init__(self, file_obj: BinaryIO):
         """Load a RawCertificateFile object.
         :param file_obj: A file-like object containing the raw certificate data.

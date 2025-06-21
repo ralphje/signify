@@ -3,6 +3,7 @@ from .authroot import AUTHROOTSTL_PATH, CertificateTrustList, CertificateTrustSu
 from .signed_file import AuthenticodeFile
 from .signed_pe import SignedPEFile, SignedPEFingerprinter
 from .signed_msi import SignedMsiFile
+from .raw_cert import RawCertificateFile
 from .structures import (
     CERTIFICATE_LOCATION,
     TRUSTED_CERTIFICATE_STORE,
@@ -39,5 +40,6 @@ __all__ = [
     "SignedMsiFile",
     "SignedPEFile",
     "SignedPEFingerprinter",
+    "RawCertificateFile",
     "TSTInfo",
 ]
