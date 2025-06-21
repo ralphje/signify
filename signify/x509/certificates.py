@@ -248,14 +248,20 @@ class Certificate:
 
 
 class CertificateName:
+    # References: https://github.com/lief-project/LIEF/blob/c678f6bdfb3f3199b36e1f8df25f7432a2725f53/src/PE/signature/OIDToString.cpp
+    # Reference: https://cryptography.io/en/latest/x509/reference/
     OID_TO_RDN: ClassVar[dict[str, str]] = {
         "2.5.4.3": "CN",  # common name
+        "2.5.4.5": "Serial",  # serialNumber
         "2.5.4.6": "C",  # country
         "2.5.4.7": "L",  # locality
         "2.5.4.8": "ST",  # stateOrProvince
         "2.5.4.9": "STREET",  # street
         "2.5.4.10": "O",  # organization
         "2.5.4.11": "OU",  # organizationalUnit
+        "2.5.4.15": "Business Category",  # businessCategory
+        "2.5.4.17": "Postal Code",  # postalCode
+        "1.3.6.1.4.1.311.60.2.1.3": "Jurisdiction Country",  # jurisdictionCountry
         "0.9.2342.19200300.100.1.25": "DC",  # domainComponent
         "1.2.840.113549.1.9.1": "EMAIL",  # emailaddress
     }
