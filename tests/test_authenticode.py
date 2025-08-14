@@ -31,6 +31,7 @@ from signify.authenticode import (
     CERTIFICATE_LOCATION,
     TRUSTED_CERTIFICATE_STORE,
     TRUSTED_CERTIFICATE_STORE_NO_CTL,
+    AuthenticodeFile,
 )
 from signify.authenticode.signed_pe import SignedPEFile, SignedPEFingerprinter
 from signify.exceptions import (
@@ -390,6 +391,18 @@ class AuthenticodeParserTestCase(unittest.TestCase):
                         )
                     },
                 )
+
+
+class P7XTestCase(unittest.TestCase):
+    def test_detect(self):
+        """this tests a sample that has a v0 SignerInfo structure"""
+        with open(
+            str(root_dir / "test_data" / "AppxSignature.p7x"),
+            "rb",
+        ) as f:
+            p7xfile = AuthenticodeFile.detect(f)
+            signed_data = list(p7xfile.signed_datas)[0]
+            self.assertEqual(signed_data.signed_file, p7xfile)
 
 
 class CertificateTestCase(unittest.TestCase):

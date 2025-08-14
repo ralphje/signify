@@ -53,6 +53,10 @@ class AuthenticodeVerificationError(VerificationError):
     """Raised when any exception regarding verifying Authenticode structures occurs."""
 
 
+class AuthenticodeFingerprintNotProvidedError(AuthenticodeVerificationError):
+    pass
+
+
 class AuthenticodeNotSignedError(AuthenticodeVerificationError):
     pass
 

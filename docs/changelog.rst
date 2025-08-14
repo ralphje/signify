@@ -9,6 +9,11 @@ v0.8.0 (unreleased)
   ``AuthenticodeFile.detect`` class method auto-detects the file type, and the class
   provides a transparent interface. You must install support for MSI files by using
   ``pip install signify[msi]``
+* The transparent ``AuthenticodeFile`` interface also has the subclass
+  ``AuthenticodeSignedDataFile`` that allows using a ``AuthenticodeSignedData`` object
+  as its base object, enabling easy parsing of PKCX files. Note that the
+  ``get_fingerprint`` method is not implemented, requiring all fingerprints to be
+  provided during verification.
 
 * Drop support for Python 3.8, as it reached end-of-life in October 2024. The minimum
   required version is now 3.9.
@@ -25,6 +30,8 @@ v0.8.0 (unreleased)
   and could result in loosing its attributes.
 * ``AuthenticodeFingerprinter`` is now a ``SignedPEFingerprinter``, as it is scoped for
   that use case (and not for MSI files).
+* Added ``AuthenticodeSignedData.iter_recursive_nested`` to allow easier access to
+  nested ``SignedData`` objects.
 
 * Resolve bug with parsing of ``microsoft_spc_financial_criteria``.
 

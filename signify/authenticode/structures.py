@@ -33,7 +33,7 @@ import logging
 import pathlib
 import struct
 import warnings
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from typing import Any, Callable, ClassVar, cast
 
 import mscerts
@@ -652,6 +652,18 @@ class AuthenticodeSignedData(SignedData):
     def indirect_data(self) -> IndirectData:
         """Alias for :attr:`content`"""
         return self.content
+
+    def iter_recursive_nested(self) -> Iterator[AuthenticodeSignedData]:
+        """Returns an iterator over :class:`AuthenticodeSignedData` objects, including
+        the current one, but also any nested :class:`AuthenticodeSignedData`
+        objects in the :class:`AuthenticodeSignerInfo` structure.
+
+        See :attr:`AuthenticodeSignerInfo.nested_signed_datas`
+        """
+
+        yield self
+        for nested in self.signer_info.nested_signed_datas:
+            yield from nested.iter_recursive_nested()
 
     def verify(  # type: ignore[override]
         self,

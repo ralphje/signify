@@ -196,6 +196,15 @@ This class is used for the verification of MSI files.
    :members:
    :special-members: __init__
 
+Signed Data File
+~~~~~~~~~~~~~~~~
+This class is used for the verification of simple P7X files with Authenticode
+signatures.
+
+.. autoclass:: AuthenticodeSignedDataFile
+   :members:
+   :special-members: __init__
+
 PKCS7 objects
 -------------
 To help understand the specific SignedData and SignerInfo objects, the following graph

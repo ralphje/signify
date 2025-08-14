@@ -309,14 +309,6 @@ class SignedPEFile(AuthenticodeFile):
     def iter_signed_datas(
         self, *, include_nested: bool = True, ignore_parse_errors: bool = True
     ) -> Iterator[structures.AuthenticodeSignedData]:
-        def recursive_nested(
-            signed_data: structures.AuthenticodeSignedData,
-        ) -> Iterator[structures.AuthenticodeSignedData]:
-            yield signed_data
-            if include_nested:
-                for nested in signed_data.signer_info.nested_signed_datas:
-                    yield from recursive_nested(nested)
-
         try:
             found = False
             for certificate in self._parse_cert_table():
@@ -326,11 +318,13 @@ class SignedPEFile(AuthenticodeFile):
                     )
 
                 if certificate["type"] == 2:
-                    yield from recursive_nested(
-                        structures.AuthenticodeSignedData.from_envelope(
-                            certificate["certificate"], signed_file=self
-                        )
+                    signed_data = structures.AuthenticodeSignedData.from_envelope(
+                        certificate["certificate"], signed_file=self
                     )
+                    if include_nested:
+                        yield from signed_data.iter_recursive_nested()
+                    else:
+                        yield signed_data
                     found = True
 
             if not found:
