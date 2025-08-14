@@ -72,15 +72,15 @@ class SignedMsiTestCase(unittest.TestCase):
         digicert_root, digicert_intermediate, kitware = certificate_chains[0]
         self.assertEqual(
             digicert_root.subject.dn,
-            "CN=DigiCert Trusted Root G4, OU=www.digicert.com, O=DigiCert Inc, C=US",
+            r"CN=DigiCert Trusted Root G4, OU=www.digicert.com, O=DigiCert Inc, C=US",
         )
         self.assertEqual(
             digicert_intermediate.subject.dn,
-            "CN=DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1, O=DigiCert\, Inc., C=US",
+            r"CN=DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1, O=DigiCert\, Inc., C=US",
         )
         self.assertEqual(
             kitware.subject.dn,
-            "CN=Kitware\, Inc., O=Kitware\, Inc., L=Clifton Park, ST=New York, C=US, 2.5.4.5=2235734, 2.5.4.15=Private Organization, 1.3.6.1.4.1.311.60.2.1.2=New York, 1.3.6.1.4.1.311.60.2.1.3=US",
+            r"CN=Kitware\, Inc., O=Kitware\, Inc., L=Clifton Park, ST=New York, C=US, serialNumber=2235734, businessCategory=Private Organization, jurisdictionOfIncorporationStateOrProvinceName=New York, jurisdictionOfIncorporationCountryName=US",
         )
 
     def test_putty_msi(self):

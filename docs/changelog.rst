@@ -32,6 +32,8 @@ v0.8.0 (unreleased)
   that use case (and not for MSI files).
 * Added ``AuthenticodeSignedData.iter_recursive_nested`` to allow easier access to
   nested ``SignedData`` objects.
+* Added various known OIDs to RDN generation for improved readability of generated RDN
+  strings.
 
 * Resolve bug with parsing of ``microsoft_spc_financial_criteria``.
 

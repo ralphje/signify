@@ -249,15 +249,127 @@ class Certificate:
 
 class CertificateName:
     OID_TO_RDN: ClassVar[dict[str, str]] = {
-        "2.5.4.3": "CN",  # common name
-        "2.5.4.6": "C",  # country
-        "2.5.4.7": "L",  # locality
-        "2.5.4.8": "ST",  # stateOrProvince
-        "2.5.4.9": "STREET",  # street
-        "2.5.4.10": "O",  # organization
-        "2.5.4.11": "OU",  # organizationalUnit
+        # The following list is based on RFC4514
+        "2.5.4.3": "CN",  # commonName
+        "2.5.4.6": "C",  # countryName
+        "2.5.4.7": "L",  # localityName
+        "2.5.4.8": "ST",  # stateOrProvinceName
+        "2.5.4.9": "STREET",  # street (uppercase in RFC4514, but lowercase in OpenSSL)
+        "2.5.4.10": "O",  # organizationName
+        "2.5.4.11": "OU",  # organizationalUnitName
         "0.9.2342.19200300.100.1.25": "DC",  # domainComponent
-        "1.2.840.113549.1.9.1": "EMAIL",  # emailaddress
+        "1.2.840.113549.1.9.1": "EMAIL",  # emailAddress (shortcut not in OpenSSL)
+        # Related to Microsoft EV certificates
+        "1.3.6.1.4.1.311.60.2.1.1": "jurisdictionOfIncorporationLocalityName",
+        "1.3.6.1.4.1.311.60.2.1.2": "jurisdictionOfIncorporationStateOrProvinceName",
+        "1.3.6.1.4.1.311.60.2.1.3": "jurisdictionOfIncorporationCountryName",
+        # The remainder of this list is based on the OIDs present in OpenSSL
+        # See https://github.com/openssl/openssl/blob/master/crypto/objects/objects.txt
+        # Note that the official list is with IANA at
+        # https://www.iana.org/assignments/ldap-parameters/ldap-parameters.xhtml#ldap-parameters-3
+        "0.9.2342.19200300.100.1.1": "UID",
+        "0.9.2342.19200300.100.1.2": "textEncodedORAddress",
+        "0.9.2342.19200300.100.1.3": "mail",
+        "0.9.2342.19200300.100.1.4": "info",
+        "0.9.2342.19200300.100.1.5": "favouriteDrink",
+        "0.9.2342.19200300.100.1.6": "roomNumber",
+        "0.9.2342.19200300.100.1.7": "photo",
+        "0.9.2342.19200300.100.1.8": "userClass",
+        "0.9.2342.19200300.100.1.9": "host",
+        "0.9.2342.19200300.100.1.10": "manager",
+        "0.9.2342.19200300.100.1.11": "documentIdentifier",
+        "0.9.2342.19200300.100.1.12": "documentTitle",
+        "0.9.2342.19200300.100.1.13": "documentVersion",
+        "0.9.2342.19200300.100.1.14": "documentAuthor",
+        "0.9.2342.19200300.100.1.15": "documentLocation",
+        "0.9.2342.19200300.100.1.20": "homeTelephoneNumber",
+        "0.9.2342.19200300.100.1.21": "secretary",
+        "0.9.2342.19200300.100.1.22": "otherMailbox",
+        "0.9.2342.19200300.100.1.23": "lastModifiedTime",
+        "0.9.2342.19200300.100.1.24": "lastModifiedBy",
+        "0.9.2342.19200300.100.1.26": "aRecord",
+        "0.9.2342.19200300.100.1.28": "mXRecord",
+        "0.9.2342.19200300.100.1.29": "nSRecord",
+        "0.9.2342.19200300.100.1.30": "sOARecord",
+        "0.9.2342.19200300.100.1.31": "cNAMERecord",
+        "0.9.2342.19200300.100.1.37": "associatedDomain",
+        "0.9.2342.19200300.100.1.38": "associatedName",
+        "0.9.2342.19200300.100.1.39": "homePostalAddress",
+        "0.9.2342.19200300.100.1.40": "personalTitle",
+        "0.9.2342.19200300.100.1.41": "mobileTelephoneNumber",
+        "0.9.2342.19200300.100.1.42": "pagerTelephoneNumber",
+        "0.9.2342.19200300.100.1.43": "friendlyCountryName",
+        "0.9.2342.19200300.100.1.44": "uid",
+        "0.9.2342.19200300.100.1.45": "organizationalStatus",
+        "0.9.2342.19200300.100.1.46": "janetMailbox",
+        "0.9.2342.19200300.100.1.47": "mailPreferenceOption",
+        "0.9.2342.19200300.100.1.48": "buildingName",
+        "0.9.2342.19200300.100.1.49": "dSAQuality",
+        "0.9.2342.19200300.100.1.50": "singleLevelQuality",
+        "0.9.2342.19200300.100.1.51": "subtreeMinimumQuality",
+        "0.9.2342.19200300.100.1.52": "subtreeMaximumQuality",
+        "0.9.2342.19200300.100.1.53": "personalSignature",
+        "0.9.2342.19200300.100.1.54": "dITRedirect",
+        "0.9.2342.19200300.100.1.55": "audio",
+        "0.9.2342.19200300.100.1.56": "documentPublisher",
+        "1.2.840.113549.1.9.2": "unstructuredName",
+        "1.2.840.113549.1.9.3": "contentType",
+        "1.2.840.113549.1.9.4": "messageDigest",
+        "1.2.840.113549.1.9.5": "signingTime",
+        "1.2.840.113549.1.9.6": "countersignature",
+        "1.2.840.113549.1.9.7": "challengePassword",
+        "1.2.840.113549.1.9.8": "unstructuredAddress",
+        "2.5.4.4": "SN",
+        "2.5.4.5": "serialNumber",
+        "2.5.4.12": "title",
+        "2.5.4.13": "description",
+        "2.5.4.14": "searchGuide",
+        "2.5.4.15": "businessCategory",
+        "2.5.4.16": "postalAddress",
+        "2.5.4.17": "postalCode",
+        "2.5.4.18": "postOfficeBox",
+        "2.5.4.19": "physicalDeliveryOfficeName",
+        "2.5.4.20": "telephoneNumber",
+        "2.5.4.21": "telexNumber",
+        "2.5.4.22": "teletexTerminalIdentifier",
+        "2.5.4.23": "facsimileTelephoneNumber",
+        "2.5.4.24": "x121Address",
+        "2.5.4.25": "internationaliSDNNumber",
+        "2.5.4.26": "registeredAddress",
+        "2.5.4.27": "destinationIndicator",
+        "2.5.4.28": "preferredDeliveryMethod",
+        "2.5.4.29": "presentationAddress",
+        "2.5.4.30": "supportedApplicationContext",
+        "2.5.4.31": "member",
+        "2.5.4.32": "owner",
+        "2.5.4.33": "roleOccupant",
+        "2.5.4.34": "seeAlso",
+        "2.5.4.35": "userPassword",
+        "2.5.4.36": "userCertificate",
+        "2.5.4.37": "cACertificate",
+        "2.5.4.38": "authorityRevocationList",
+        "2.5.4.39": "certificateRevocationList",
+        "2.5.4.40": "crossCertificatePair",
+        "2.5.4.41": "name",
+        "2.5.4.42": "GN",
+        "2.5.4.43": "initials",
+        "2.5.4.44": "generationQualifier",
+        "2.5.4.45": "x500UniqueIdentifier",
+        "2.5.4.46": "dnQualifier",
+        "2.5.4.47": "enhancedSearchGuide",
+        "2.5.4.48": "protocolInformation",
+        "2.5.4.49": "distinguishedName",
+        "2.5.4.50": "uniqueMember",
+        "2.5.4.51": "houseIdentifier",
+        "2.5.4.52": "supportedAlgorithms",
+        "2.5.4.53": "deltaRevocationList",
+        "2.5.4.54": "dmdName",
+        "2.5.4.65": "pseudonym",
+        "2.5.4.72": "role",
+        "2.5.4.97": "organizationIdentifier",
+        "2.5.4.98": "c3",
+        "2.5.4.99": "n3",
+        "2.5.4.100": "dnsName",
     }
 
     def __init__(self, asn1: asn1crypto.x509.Name | asn1crypto.x509.GeneralName):
