@@ -2,7 +2,7 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
-v0.8.0 (unreleased)
+v0.8.0 (2025-08-15)
 -------------------
 * Add support for page hashes contained within the ``SpcPeImageData`` structure.
 * Add support for MSI files through ``SignedMsi`` class, contributed by @HugoC. The
