@@ -3,21 +3,22 @@ from __future__ import annotations
 import hashlib
 import os
 from collections.abc import Iterable, Iterator
-from typing import TYPE_CHECKING, Any, BinaryIO, Literal
+from typing import Any, BinaryIO, Literal
 
 from typing_extensions import Self
 
 from signify._typing import HashFunction
 from signify.asn1.hashing import ACCEPTED_DIGEST_ALGORITHMS
+from signify.authenticode.structures import (
+    AuthenticodeSignedData,
+    AuthenticodeVerificationResult,
+)
 from signify.exceptions import (
     AuthenticodeFingerprintNotProvidedError,
     AuthenticodeNotSignedError,
     ParseError,
 )
 from signify.x509 import Certificate
-
-if TYPE_CHECKING:
-    from signify.authenticode import structures
 
 
 class AuthenticodeFile:
@@ -47,7 +48,7 @@ class AuthenticodeFile:
         raise ParseError("Unknown file type.")
 
     @property
-    def signed_datas(self) -> Iterator[structures.AuthenticodeSignedData]:
+    def signed_datas(self) -> Iterator[AuthenticodeSignedData]:
         """Returns an iterator over :class:`AuthenticodeSignedData` objects relevant for
         this file. See :meth:`iter_signed_datas`
         """
@@ -56,7 +57,7 @@ class AuthenticodeFile:
 
     def iter_signed_datas(
         self, *, include_nested: bool = True, ignore_parse_errors: bool = True
-    ) -> Iterator[structures.AuthenticodeSignedData]:
+    ) -> Iterator[AuthenticodeSignedData]:
         """Returns an iterator over :class:`AuthenticodeSignedData` objects relevant
         for this Authenticode-signed file.
 
@@ -64,11 +65,11 @@ class AuthenticodeFile:
             SignedData structures
         :param ignore_parse_errors: Indicates how to handle
             :exc:`ParseError` that may be raised while fetching
-            embedded :class:`structures.AuthenticodeSignedData` structures.
+            embedded :class:`AuthenticodeSignedData` structures.
 
             When :const:`True`,  which is the default and seems to be how Windows
             handles this as well, this will fetch as many valid
-            :class:`structures.AuthenticodeSignedData` structures until an exception
+            :class:`AuthenticodeSignedData` structures until an exception
             occurs.
 
             Note that this will also silence the :exc:`ParseError` that occurs
@@ -90,14 +91,14 @@ class AuthenticodeFile:
         expected_hashes: dict[str, bytes] | None = None,
         ignore_parse_errors: bool = True,
         **kwargs: Any,
-    ) -> list[tuple[structures.AuthenticodeSignedData, Iterable[list[Certificate]]]]:
+    ) -> list[tuple[AuthenticodeSignedData, Iterable[list[Certificate]]]]:
         """Verifies the SignedData structures. This is a little bit more efficient than
         calling all verify-methods separately.
 
         :param expected_hashes: When provided, should be a mapping of hash names to
             digests. This could speed up the verification process.
         :param multi_verify_mode: Indicates how to verify when there are multiple
-            :class:`structures.AuthenticodeSignedData` objects in this file. Can be:
+            :class:`AuthenticodeSignedData` objects in this file. Can be:
 
             * 'any' (default) to indicate that any of the signatures must validate
               correctly.
@@ -115,10 +116,10 @@ class AuthenticodeFile:
 
             When :const:`True`, which is the default and seems to be how Windows
             handles this as well, this will verify based on all available
-            :class:`structures.AuthenticodeSignedData` before a parse error occurs.
+            :class:`AuthenticodeSignedData` before a parse error occurs.
 
             :exc:`AuthenticodeNotSignedError` will be raised when no valid
-            :class:`structures.AuthenticodeSignedData` exists.
+            :class:`AuthenticodeSignedData` exists.
 
             When :const:`False`, this will raise the :exc:`ParseError` as soon
             as one occurs. This often occurs before :exc:`AuthenticodeNotSignedError`
@@ -189,7 +190,7 @@ class AuthenticodeFile:
 
     def explain_verify(
         self, *args: Any, **kwargs: Any
-    ) -> tuple[structures.AuthenticodeVerificationResult, Exception | None]:
+    ) -> tuple[AuthenticodeVerificationResult, Exception | None]:
         """This will return a value indicating the signature status of this PE file.
         This will not raise an error when the verification fails, but rather
         indicate this through the resulting enum
@@ -199,16 +200,12 @@ class AuthenticodeFile:
             more details (if available or None)
         """
 
-        from signify.authenticode import structures
-
-        return structures.AuthenticodeVerificationResult.call(
-            self.verify, *args, **kwargs
-        )
+        return AuthenticodeVerificationResult.call(self.verify, *args, **kwargs)
 
     @classmethod
     def _get_needed_hashes(
         cls,
-        signed_datas: Iterable[structures.AuthenticodeSignedData],
+        signed_datas: Iterable[AuthenticodeSignedData],
         expected_hashes: dict[str, bytes],
     ) -> set[HashFunction]:
         """Provided the list of signed datas and already-provided hashes, returns a
@@ -242,7 +239,7 @@ class AuthenticodeFile:
 
     def _calculate_expected_hashes(
         self,
-        signed_datas: Iterable[structures.AuthenticodeSignedData],
+        signed_datas: Iterable[AuthenticodeSignedData],
         expected_hashes: dict[str, bytes] | None = None,
     ) -> dict[str, bytes]:
         """Calculates the expected hashes that are needed for verification. This
@@ -263,23 +260,32 @@ class AuthenticodeFile:
             expected_hashes[digest_algorithm().name] = fingerprint
         return expected_hashes
 
+    def verify_additional_hashes(self, signed_data: AuthenticodeSignedData) -> None:
+        """Verifies additional hashes that may be present in the
+        :class:`AuthenticodeSignedData` referencing this data. Return :const:`None`
+        when the verification succeeds, or raises an error otherwise.
+
+        The default implementation is to do nothing.
+        """
+        return None
+
 
 class AuthenticodeSignedDataFile(AuthenticodeFile):
     """Simple transparent :class:`AuthenticodeFile` class that operates on an
-    already-parsed :class:`structures.AuthenticodeSignedData`. This can be used in
+    already-parsed :class:`AuthenticodeSignedData`. This can be used in
     places where the parsed SignedData object is present, but the original file is no
     longer present, or for parsing P7X files.
 
     Note that the :meth:`get_fingerprint` method is not implemented, so all hashes
     must be provided as expected hashes in the :meth:`verify` method.
 
-    Remember that you can directly manipulate :class:`structures.AuthenticodeSignedData`
+    Remember that you can directly manipulate :class:`AuthenticodeSignedData`
     objects and that this class is a very simple shim. If you don't need the features
     provided by :class:`AuthenticodeFile`, simply use the
-    :class:`structures.AuthenticodeSignedData` directly.
+    :class:`AuthenticodeSignedData` directly.
     """
 
-    def __init__(self, signed_data: structures.AuthenticodeSignedData | None) -> None:
+    def __init__(self, signed_data: AuthenticodeSignedData | None) -> None:
         """
         :param signed_data: The signed data object we're operating on. Can be None
             to allow filling it in later (see :meth:`from_envelope`).
@@ -292,17 +298,15 @@ class AuthenticodeSignedDataFile(AuthenticodeFile):
         will instantiate an 'empty' :class:`AuthenticodeSignedDataFile` object, and
         fill it in.
         """
-        from signify.authenticode import structures
-
         signed_file = cls(None)
-        signed_file.signed_data = structures.AuthenticodeSignedData.from_envelope(
+        signed_file.signed_data = AuthenticodeSignedData.from_envelope(
             data, signed_file=signed_file
         )
         return signed_file
 
     def iter_signed_datas(
         self, *, include_nested: bool = True, ignore_parse_errors: bool = True
-    ) -> Iterator[structures.AuthenticodeSignedData]:
+    ) -> Iterator[AuthenticodeSignedData]:
         if self.signed_data is None:
             raise Exception("Object not instantiated yet.")
         if include_nested:

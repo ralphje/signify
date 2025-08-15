@@ -19,6 +19,7 @@ from signify._typing import HashFunction, HashObject
 from signify.authenticode import structures
 from signify.authenticode.signed_file import AuthenticodeFile
 from signify.exceptions import (
+    AuthenticodeInvalidExtendedDigestError,
     AuthenticodeNotSignedError,
     SignedMsiParseError,
     SignifyError,
@@ -114,6 +115,22 @@ class SignedMsiFile(AuthenticodeFile):
             # Rewrap any parse errors encountered
             if not ignore_parse_errors:
                 raise SignedMsiParseError(str(e))
+
+    def verify_additional_hashes(
+        self, signed_data: structures.AuthenticodeSignedData
+    ) -> None:
+        """Verifies the extended digest of MSI files."""
+        if not self.has_prehash:
+            return
+
+        with self._ole_file.openstream(EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME) as fh:
+            expected_extended_signature = fh.read()
+
+        prehash = self._calculate_prehash(signed_data.digest_algorithm)
+        if prehash != expected_extended_signature:
+            raise AuthenticodeInvalidExtendedDigestError(
+                "The expected prehash does not match the digest"
+            )
 
     @property
     def has_prehash(self) -> bool:

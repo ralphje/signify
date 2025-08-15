@@ -34,7 +34,7 @@ import pathlib
 import struct
 import warnings
 from collections.abc import Iterable, Iterator, Sequence
-from typing import Any, Callable, ClassVar, cast
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, cast
 
 import mscerts
 from asn1crypto import cms, tsp
@@ -47,21 +47,18 @@ from signify.asn1 import spc
 from signify.asn1.hashing import _get_digest_algorithm
 from signify.asn1.helpers import accuracy_to_python
 from signify.asn1.spc import SpcPeImageData, SpcSigInfo
-from signify.authenticode import signed_file, signed_msi, signed_pe
 from signify.authenticode.authroot import CertificateTrustList
 from signify.exceptions import (
     AuthenticodeCounterSignerError,
     AuthenticodeInconsistentDigestAlgorithmError,
+    AuthenticodeInvalidAdditionalHashError,
     AuthenticodeInvalidDigestError,
-    AuthenticodeInvalidExtendedDigestError,
-    AuthenticodeInvalidPageHashError,
     AuthenticodeNotSignedError,
     AuthenticodeParseError,
     CertificateVerificationError,
     CounterSignerError,
     InvalidDigestError,
     ParseError,
-    SignedPEParseError,
     VerificationError,
 )
 from signify.pkcs7 import CounterSignerInfo, SignedData, SignerInfo
@@ -72,6 +69,9 @@ from signify.x509 import (
     FileSystemCertificateStore,
     VerificationContext,
 )
+
+if TYPE_CHECKING:
+    from signify.authenticode import signed_file
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,6 @@ TRUSTED_CERTIFICATE_STORE = FileSystemCertificateStore(
     trusted=True,
     ctl=CertificateTrustList.from_stl_file(),
 )
-
 
 _P = ParamSpec("_P")
 
@@ -122,8 +121,9 @@ class AuthenticodeVerificationResult(enum.Enum):
     """
     COUNTERSIGNER_ERROR = enum.auto()
     """Something went wrong when verifying the countersignature."""
-    INVALID_PAGE_HASH = enum.auto()
-    """The page hash does not match the calculated page hash for the section.
+    INVALID_ADDITIONAL_HASH = enum.auto()
+    """The additional file hash, such as the page hash for PE files, or the
+    extended digest for MSI files, does not match the calculated hash.
     """
 
     @classmethod
@@ -138,8 +138,8 @@ class AuthenticodeVerificationResult(enum.Enum):
             return cls.INCONSISTENT_DIGEST_ALGORITHM, exc
         except AuthenticodeInvalidDigestError as exc:
             return cls.INVALID_DIGEST, exc
-        except AuthenticodeInvalidPageHashError as exc:
-            return cls.INVALID_PAGE_HASH, exc
+        except AuthenticodeInvalidAdditionalHashError as exc:
+            return cls.INVALID_ADDITIONAL_HASH, exc
         except AuthenticodeCounterSignerError as exc:
             return cls.COUNTERSIGNER_ERROR, exc
         except CertificateVerificationError as exc:
@@ -670,7 +670,7 @@ class AuthenticodeSignedData(SignedData):
         verification_context: VerificationContext | None = None,
         *,
         expected_hash: bytes | None = None,
-        verify_page_hashes: bool = True,
+        verify_additional_hashes: bool = True,
         cs_verification_context: VerificationContext | None = None,
         trusted_certificate_store: CertificateStore = TRUSTED_CERTIFICATE_STORE,
         verification_context_kwargs: dict[str, Any] | None = None,
@@ -688,8 +688,9 @@ class AuthenticodeSignedData(SignedData):
 
         :param expected_hash: The expected hash digest of the
             :class:`AuthenticodeFile`.
-        :param verify_page_hashes: Defines whether page hashes should be verified,
-            if present. This also includes extended digests for MSI files.
+        :param verify_additional_hashes: Defines whether additional hashes, should
+            be verified, such as page hashes for PE files and extended digests for
+            MSI files.
         :param verification_context: See :meth:`SignedData.verify`
         :param cs_verification_context: See :meth:`SignedData.verify`
         :param trusted_certificate_store: See :meth:`SignedData.verify`
@@ -721,9 +722,8 @@ class AuthenticodeSignedData(SignedData):
                 "The expected hash does not match the digest in SpcInfo"
             )
 
-        if verify_page_hashes:
-            self._verify_page_hashes()
-            self._verify_extended_digest()
+        if verify_additional_hashes and self.signed_file is not None:
+            self.signed_file.verify_additional_hashes(self)
 
         try:
             return super().verify(
@@ -740,51 +740,6 @@ class AuthenticodeSignedData(SignedData):
             raise AuthenticodeInvalidDigestError(str(e))
         except CounterSignerError as e:
             raise AuthenticodeCounterSignerError(str(e))
-
-    def _verify_extended_digest(self) -> None:
-        """Verifies the extended digest of MSI files."""
-        if (
-            not isinstance(self.signed_file, signed_msi.SignedMsiFile)
-            or not self.signed_file.has_prehash
-        ):
-            return
-
-        with self.signed_file._ole_file.openstream(
-            signed_msi.EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME
-        ) as fh:
-            expected_extended_signature = fh.read()
-
-        prehash = self.signed_file._calculate_prehash(self.digest_algorithm)
-        if prehash != expected_extended_signature:
-            raise AuthenticodeInvalidExtendedDigestError(
-                "The expected prehash does not match the digest"
-            )
-
-    def _verify_page_hashes(self) -> None:
-        """Verifies the page hashes (if available) in the SpcPeImageData field."""
-
-        # can only verify page hashes when the indirect data is
-        # microsoft_spc_pe_image_data
-        if self.indirect_data.content_type != "microsoft_spc_pe_image_data":
-            return
-
-        if not isinstance(self.signed_file, signed_pe.SignedPEFile):
-            raise AuthenticodeInvalidPageHashError(
-                "Page hashes present for non-PE-file."
-            )
-
-        assert isinstance(self.indirect_data.content, PeImageData)  # typing
-        image_data = self.indirect_data.content
-
-        for start, end, digest, hash_algorithm in image_data.page_hashes:
-            expected_hash = self.signed_file.get_fingerprint(
-                hash_algorithm, start, end, aligned=True
-            )
-
-            if expected_hash != digest:
-                raise AuthenticodeInvalidPageHashError(
-                    f"The page hash for page {start}-{end} is invalid."
-                )
 
     def explain_verify(
         self, *args: Any, **kwargs: Any

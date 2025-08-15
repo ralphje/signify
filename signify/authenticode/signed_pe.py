@@ -46,7 +46,7 @@ from typing_extensions import TypedDict
 from signify._typing import HashFunction
 from signify.authenticode import structures
 from signify.authenticode.signed_file import AuthenticodeFile
-from signify.exceptions import SignedPEParseError
+from signify.exceptions import AuthenticodeInvalidPageHashError, SignedPEParseError
 from signify.fingerprinter import Fingerprinter, Range
 
 logger = logging.getLogger(__name__)
@@ -356,6 +356,34 @@ class SignedPEFile(AuthenticodeFile):
             expected_hashes.update(fingerprinter.hashes()["authentihash"])
 
         return expected_hashes
+
+    def verify_additional_hashes(
+        self, signed_data: structures.AuthenticodeSignedData
+    ) -> None:
+        """Verifies the page hashes (if available) in the SpcPeImageData field."""
+
+        from signify.authenticode import structures
+
+        # can only verify page hashes when the indirect data is
+        # microsoft_spc_pe_image_data
+        if signed_data.indirect_data.content_type != "microsoft_spc_pe_image_data":
+            return None
+
+        image_data: structures.PeImageData = cast(
+            structures.PeImageData, signed_data.indirect_data.content
+        )
+
+        for start, end, digest, hash_algorithm in image_data.page_hashes:
+            expected_hash = self.get_fingerprint(
+                hash_algorithm, start, end, aligned=True
+            )
+
+            if expected_hash != digest:
+                raise AuthenticodeInvalidPageHashError(
+                    f"The page hash for page {start}-{end} is invalid."
+                )
+
+        return None
 
 
 class SignedPEFingerprinter(Fingerprinter):

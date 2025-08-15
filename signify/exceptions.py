@@ -69,7 +69,11 @@ class AuthenticodeInvalidDigestError(InvalidDigestError, AuthenticodeVerificatio
     pass
 
 
-class AuthenticodeInvalidPageHashError(AuthenticodeVerificationError):
+class AuthenticodeInvalidAdditionalHashError(AuthenticodeVerificationError):
+    pass
+
+
+class AuthenticodeInvalidPageHashError(AuthenticodeInvalidAdditionalHashError):
     pass
 
 
@@ -77,7 +81,7 @@ class AuthenticodeCounterSignerError(CounterSignerError, AuthenticodeVerificatio
     pass
 
 
-class AuthenticodeInvalidExtendedDigestError(AuthenticodeVerificationError):
+class AuthenticodeInvalidExtendedDigestError(AuthenticodeInvalidAdditionalHashError):
     pass
 
 
