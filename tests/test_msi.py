@@ -2,15 +2,23 @@ import hashlib
 import pathlib
 import unittest
 
-from olefile import OleFileIO
-
-from signify.authenticode import AuthenticodeVerificationResult, SignedMsiFile
+from signify.authenticode import AuthenticodeVerificationResult
 from signify.exceptions import AuthenticodeNotSignedError
+
+try:
+    from olefile import OleFileIO
+    from signify.authenticode import SignedMsiFile
+except ImportError:
+    OleFileIO = None
 
 root_dir = pathlib.Path(__file__).parent
 
 
 class SignedMsiTestCase(unittest.TestCase):
+    def setUp(self):
+        if OleFileIO is None:
+            raise unittest.SkipTest("OleFileIO not available")
+
     def test_prehash_for_root_entry_msi(self):
         expected_prehash = (
             "ba597a30a72f996caab7a031e1de97371b72bbef64bf05306a17eff94b181eeb"
@@ -18,8 +26,6 @@ class SignedMsiTestCase(unittest.TestCase):
 
         with open(str(root_dir / "test_data" / "cmake.msi"), "rb") as f:
             m = hashlib.sha256()
-            from olefile import OleFileIO
-
             with OleFileIO(f) as ole:
                 SignedMsiFile._prehash_entry(ole.root, m)
         self.assertEqual(m.hexdigest(), expected_prehash)

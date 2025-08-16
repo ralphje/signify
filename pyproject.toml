@@ -43,6 +43,7 @@ Changelog = "https://signify.readthedocs.io/en/latest/changelog.html"
 
 [project.optional-dependencies]
 msi = ["olefile"]
+full = ["olefile"]
 
 [tool.black]
 line-length = 88

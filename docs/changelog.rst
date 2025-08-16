@@ -2,6 +2,10 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
+v0.8.1 (2025-08-16)
+-------------------
+* Better handle the case that the optional dependency ``olefile`` is not installed.
+
 v0.8.0 (2025-08-15)
 -------------------
 * Add support for page hashes contained within the ``SpcPeImageData`` structure.

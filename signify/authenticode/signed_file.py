@@ -34,7 +34,10 @@ class AuthenticodeFile:
         file_obj.seek(0, os.SEEK_SET)
         header = file_obj.read(8)
         if header == bytes.fromhex("D0 CF 11 E0 A1 B1 1A E1"):
-            from .signed_msi import SignedMsiFile
+            try:
+                from .signed_msi import SignedMsiFile
+            except ImportError:
+                raise ParseError("Support for MSI files is not installed.")
 
             return SignedMsiFile(file_obj)
         elif header.startswith(bytes.fromhex("4D 5A")):
