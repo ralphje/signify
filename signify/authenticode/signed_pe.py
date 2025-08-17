@@ -285,7 +285,7 @@ class SignedPEFile(AuthenticodeFile):
 
         :rtype: signify.fingerprinter.SignedPEFingerprinter
         """
-        return SignedPEFingerprinter(self.file)
+        return SignedPEFingerprinter(self)
 
     def get_fingerprint(
         self,
@@ -391,6 +391,16 @@ class SignedPEFingerprinter(Fingerprinter):
     authentihashes of PE Files.
     """
 
+    def __init__(self, file_obj: BinaryIO | SignedPEFile, block_size: int = 1000000):
+        """Allow ``file_obj`` to be a :class:`SignedPEFile` instance."""
+
+        if isinstance(file_obj, SignedPEFile):
+            super().__init__(file_obj.file, block_size)
+            self.signed_pe_file = file_obj
+        else:
+            super().__init__(file_obj, block_size)
+            self.signed_pe_file = SignedPEFile(file_obj)
+
     def add_signed_pe_hashers(
         self,
         *hashers: HashFunction,
@@ -402,8 +412,7 @@ class SignedPEFingerprinter(Fingerprinter):
         to those that are needed to calculate the hash of signed PE Files.
         """
 
-        pefile = SignedPEFile(self.file)
-        omit = pefile.get_authenticode_omit_sections()
+        omit = self.signed_pe_file.get_authenticode_omit_sections()
 
         if omit is None:
             return False
