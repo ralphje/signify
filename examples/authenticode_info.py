@@ -204,7 +204,7 @@ def main(*filenames: str):
         print(f"{filename}:")
         with pathlib.Path(filename).open("rb") as file_obj:
             try:
-                signed_file = AuthenticodeFile.detect(file_obj)
+                signed_file = AuthenticodeFile.from_stream(file_obj)
                 for signed_data in signed_file.signed_datas:
                     print(indent_text(*describe_signed_data(signed_data), indent=4))
                     print("--------")

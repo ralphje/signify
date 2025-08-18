@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
-from functools import cached_property
-from operator import attrgetter
 from typing import BinaryIO, cast
 
 from olefile.olefile import (
@@ -17,7 +15,6 @@ from olefile.olefile import (
 
 from signify._typing import HashFunction, HashObject
 from signify.authenticode import structures
-from signify.authenticode.signed_file import AuthenticodeFile
 from signify.exceptions import (
     AuthenticodeInvalidExtendedDigestError,
     AuthenticodeNotSignedError,
@@ -25,25 +22,35 @@ from signify.exceptions import (
     SignifyError,
 )
 
+from .base import AuthenticodeFile
+
 EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME = "\x05MsiDigitalSignatureEx"
 DIGITAL_SIGNATURE_ENTRY_NAME = "\x05DigitalSignature"
 
 
 class SignedMsiFile(AuthenticodeFile):
-    def __init__(self, file_obj: BinaryIO):
-        """Msi file
+    """Implementation of MSI file Authenticode validation"""
 
-        :param file_obj: An MSI file opened in binary file
+    def __init__(self, file_obj: BinaryIO | OleFileIO):
+        """
+        :param file_obj: An MSI file opened in binary mode, or a OleFileIO object.
         """
 
-        self.file = file_obj
+        if isinstance(file_obj, OleFileIO):
+            self._ole_file = file_obj
+        else:
+            try:
+                self._ole_file = OleFileIO(file_obj)
+            except NotOleFileError:
+                raise SignedMsiParseError("Not a valid OleFile")
 
-    @cached_property
-    def _ole_file(self) -> OleFileIO:
-        try:
-            return OleFileIO(self.file)
-        except NotOleFileError:
-            raise SignedMsiParseError("Not a valid OleFile")
+    @classmethod
+    def _try_open(
+        cls, file_obj: BinaryIO, file_name: str | None, header: bytes
+    ) -> SignedMsiFile | None:
+        if header.startswith(bytes.fromhex("D0 CF 11 E0 A1 B1 1A E1")):
+            return cls(file_obj)
+        return None
 
     @classmethod
     def _hash_storage_entry(
@@ -57,7 +64,7 @@ class SignedMsiFile(AuthenticodeFile):
         dir_entry_path = dir_entry_path or []  # we omit the root directory
 
         entries = dir_entry.kids
-        entries.sort(key=attrgetter("name_utf16"))
+        entries.sort(key=lambda e: e.name_utf16)
         for entry in entries:
             if entry.name in (
                 DIGITAL_SIGNATURE_ENTRY_NAME,
@@ -156,9 +163,12 @@ class SignedMsiFile(AuthenticodeFile):
         cls._prehash_entry(dir_entry, hasher)
 
         entries = dir_entry.kids
-        entries.sort(key=attrgetter("name_utf16"))
+        entries.sort(key=lambda e: e.name_utf16)
         for entry in entries:
-            if entry.name in ("\x05DigitalSignature", "\x05MsiDigitalSignatureEx"):
+            if entry.name in (
+                DIGITAL_SIGNATURE_ENTRY_NAME,
+                EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME,
+            ):
                 continue
             if entry.kids:
                 cls._prehash_storage_entry(entry, hasher)

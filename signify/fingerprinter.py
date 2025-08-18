@@ -22,17 +22,13 @@
 
 from __future__ import annotations
 
-import binascii
 import collections
 import hashlib
 import logging
 import os
-import pathlib
-import sys
 from typing import BinaryIO
 
 from signify._typing import HashFunction
-from signify.authenticode import signed_pe
 
 logger = logging.getLogger(__name__)
 

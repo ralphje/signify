@@ -45,9 +45,10 @@ from typing_extensions import TypedDict
 
 from signify._typing import HashFunction
 from signify.authenticode import structures
-from signify.authenticode.signed_file import AuthenticodeFile
 from signify.exceptions import AuthenticodeInvalidPageHashError, SignedPEParseError
 from signify.fingerprinter import Fingerprinter, Range
+
+from .base import AuthenticodeFile
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,14 @@ class SignedPEFile(AuthenticodeFile):
 
         self.file.seek(0, os.SEEK_END)
         self._filelength = self.file.tell()
+
+    @classmethod
+    def _try_open(
+        cls, file_obj: BinaryIO, file_name: str | None, header: bytes
+    ) -> SignedPEFile | None:
+        if header.startswith(bytes.fromhex("4D 5A")):
+            return cls(file_obj)
+        return None
 
     def get_authenticode_omit_sections(self) -> dict[str, RelRange] | None:
         """Returns all ranges of the raw file that are relevant for exclusion for the

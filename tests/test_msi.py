@@ -3,11 +3,11 @@ import pathlib
 import unittest
 
 from signify.authenticode import AuthenticodeVerificationResult
-from signify.exceptions import AuthenticodeNotSignedError
+from signify.exceptions import AuthenticodeNotSignedError, SignedMsiParseError
 
 try:
     from olefile import OleFileIO
-    from signify.authenticode import SignedMsiFile
+    from signify.authenticode.signed_file import SignedMsiFile
 except ImportError:
     OleFileIO = None
 
@@ -78,15 +78,20 @@ class SignedMsiTestCase(unittest.TestCase):
         digicert_root, digicert_intermediate, kitware = certificate_chains[0]
         self.assertEqual(
             digicert_root.subject.dn,
-            r"CN=DigiCert Trusted Root G4, OU=www.digicert.com, O=DigiCert Inc, C=US",
+            r"CN=DigiCert Trusted Root G4, OU=www.digicert.com, O=DigiCert Inc,"
+            r" C=US",
         )
         self.assertEqual(
             digicert_intermediate.subject.dn,
-            r"CN=DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1, O=DigiCert\, Inc., C=US",
+            r"CN=DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1,"
+            r" O=DigiCert\, Inc., C=US",
         )
         self.assertEqual(
             kitware.subject.dn,
-            r"CN=Kitware\, Inc., O=Kitware\, Inc., L=Clifton Park, ST=New York, C=US, serialNumber=2235734, businessCategory=Private Organization, jurisdictionOfIncorporationStateOrProvinceName=New York, jurisdictionOfIncorporationCountryName=US",
+            r"CN=Kitware\, Inc., O=Kitware\, Inc., L=Clifton Park, ST=New York,"
+            r" C=US, serialNumber=2235734, businessCategory=Private Organization,"
+            r" jurisdictionOfIncorporationStateOrProvinceName=New York,"
+            r" jurisdictionOfIncorporationCountryName=US",
         )
 
     def test_putty_msi(self):
@@ -112,9 +117,8 @@ class SignedMsiTestCase(unittest.TestCase):
 
     def test_exe_file(self):
         with open(str(root_dir / "test_data" / "sigcheck.exe"), "rb") as f:
-            msi_file = SignedMsiFile(f)
-            with self.assertRaises(AuthenticodeNotSignedError):
-                msi_file.verify()
+            with self.assertRaises(SignedMsiParseError):
+                SignedMsiFile(f)
 
     def test_msi_not_signed(self):
         with open(str(root_dir / "test_data" / "cmake_not_signed.msi"), "rb") as f:

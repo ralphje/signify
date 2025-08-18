@@ -33,7 +33,7 @@ from signify.authenticode import (
     TRUSTED_CERTIFICATE_STORE_NO_CTL,
     AuthenticodeFile,
 )
-from signify.authenticode.signed_pe import SignedPEFile, SignedPEFingerprinter
+from signify.authenticode.signed_file.pe import SignedPEFile, SignedPEFingerprinter
 from signify.exceptions import (
     AuthenticodeNotSignedError,
     AuthenticodeVerificationError,
@@ -400,7 +400,7 @@ class P7XTestCase(unittest.TestCase):
             str(root_dir / "test_data" / "AppxSignature.p7x"),
             "rb",
         ) as f:
-            p7xfile = AuthenticodeFile.detect(f)
+            p7xfile = AuthenticodeFile.from_stream(f)
             signed_data = list(p7xfile.signed_datas)[0]
             self.assertEqual(signed_data.signed_file, p7xfile)
 

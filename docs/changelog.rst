@@ -2,6 +2,15 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
+v0.9.0 (unreleased)
+-------------------
+* Move concrete implementations of file types to a separate module with dynamic
+  detection, and remove various concrete implementations as imports from
+  ``signify.authenticode``.
+* Rename ``AuthenticodeFile.detect`` to ``AuthenticodeFile.from_stream``
+* Optimize ``SignedPEFingerprinter`` to use the current instance of ``SignedPEFile``.
+* Add support for passing ``OleFileIO`` directly into ``SignedMsiFile``
+
 v0.8.1 (2025-08-16)
 -------------------
 * Better handle the case that the optional dependency ``olefile`` is not installed.

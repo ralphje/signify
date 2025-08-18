@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
+import pathlib
 from collections.abc import Iterable, Iterator
 from typing import Any, BinaryIO, Literal
 
@@ -20,6 +22,8 @@ from signify.exceptions import (
 )
 from signify.x509 import Certificate
 
+logger = logging.getLogger(__name__)
+
 
 class AuthenticodeFile:
     """An Authenticode-signed file that is to be parsed to find the relevant
@@ -27,28 +31,45 @@ class AuthenticodeFile:
     """
 
     @classmethod
-    def detect(cls, file_obj: BinaryIO) -> AuthenticodeFile:
-        """This initializer will return either :class:`SignedMsiFile` or
-        :class:`SignedPEFile`, and otherwise throw an error.
+    def from_stream(
+        cls, file_obj: BinaryIO, file_name: str | None = None
+    ) -> AuthenticodeFile:
+        """This initializer will return a concrete subclass that is compatible with the
+        provided file object, and otherwise throw an error.
+
+        The optional ``file_name`` argument can be used to specify the file name.
         """
+        if file_name is None and hasattr(file_obj, "name"):
+            file_name = pathlib.Path(file_obj.name).name
+
+        # Peek for the first 8 bytes
         file_obj.seek(0, os.SEEK_SET)
         header = file_obj.read(8)
-        if header == bytes.fromhex("D0 CF 11 E0 A1 B1 1A E1"):
+        file_obj.seek(0, os.SEEK_SET)
+
+        for subclass in cls.__subclasses__():
             try:
-                from .signed_msi import SignedMsiFile
-            except ImportError:
-                raise ParseError("Support for MSI files is not installed.")
+                attempt = subclass._try_open(file_obj, file_name, header)
+            except Exception as e:  # noqa: PERF203
+                logger.debug(f"Error while trying {subclass.__name__}: {e!r}")
+            else:
+                if attempt is not None:
+                    return attempt
 
-            return SignedMsiFile(file_obj)
-        elif header.startswith(bytes.fromhex("4D 5A")):
-            from .signed_pe import SignedPEFile
+        raise ParseError("Unable to determine file type with available parsers.")
 
-            return SignedPEFile(file_obj)
-        elif header.startswith(b"PKCX"):
-            file_obj.seek(-4, os.SEEK_CUR)
-            return AuthenticodeSignedDataFile.from_envelope(file_obj.read())
+    @classmethod
+    def _try_open(
+        cls, file_obj: BinaryIO, file_name: str | None, header: bytes
+    ) -> Self | None:
+        """Returns a specific :class:`AuthenticodeFile` object for the specified file,
+        if compatible, or :const:`None` otherwise. Errors are silently ignored by
+        :meth:`from_stream`.
 
-        raise ParseError("Unknown file type.")
+        Since most files will use the header for detection, a header of at least 8
+        bytes is provided for convenience.
+        """
+        return None
 
     @property
     def signed_datas(self) -> Iterator[AuthenticodeSignedData]:
@@ -271,48 +292,3 @@ class AuthenticodeFile:
         The default implementation is to do nothing.
         """
         return None
-
-
-class AuthenticodeSignedDataFile(AuthenticodeFile):
-    """Simple transparent :class:`AuthenticodeFile` class that operates on an
-    already-parsed :class:`AuthenticodeSignedData`. This can be used in
-    places where the parsed SignedData object is present, but the original file is no
-    longer present, or for parsing P7X files.
-
-    Note that the :meth:`get_fingerprint` method is not implemented, so all hashes
-    must be provided as expected hashes in the :meth:`verify` method.
-
-    Remember that you can directly manipulate :class:`AuthenticodeSignedData`
-    objects and that this class is a very simple shim. If you don't need the features
-    provided by :class:`AuthenticodeFile`, simply use the
-    :class:`AuthenticodeSignedData` directly.
-    """
-
-    def __init__(self, signed_data: AuthenticodeSignedData | None) -> None:
-        """
-        :param signed_data: The signed data object we're operating on. Can be None
-            to allow filling it in later (see :meth:`from_envelope`).
-        """
-        self.signed_data = signed_data
-
-    @classmethod
-    def from_envelope(cls, data: bytes) -> Self:
-        """Creates a :class:`AuthenticodeSignedDataFile` from a data envelope. This
-        will instantiate an 'empty' :class:`AuthenticodeSignedDataFile` object, and
-        fill it in.
-        """
-        signed_file = cls(None)
-        signed_file.signed_data = AuthenticodeSignedData.from_envelope(
-            data, signed_file=signed_file
-        )
-        return signed_file
-
-    def iter_signed_datas(
-        self, *, include_nested: bool = True, ignore_parse_errors: bool = True
-    ) -> Iterator[AuthenticodeSignedData]:
-        if self.signed_data is None:
-            raise Exception("Object not instantiated yet.")
-        if include_nested:
-            yield from self.signed_data.iter_recursive_nested()
-        else:
-            yield self.signed_data

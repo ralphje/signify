@@ -26,7 +26,7 @@ import os.path
 import pathlib
 import unittest
 
-from signify.authenticode import SignedPEFingerprinter
+from signify.authenticode.signed_file.pe import SignedPEFingerprinter
 from signify.fingerprinter import Finger, Fingerprinter, Range
 
 root_dir = pathlib.Path(__file__).parent

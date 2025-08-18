@@ -1,7 +1,8 @@
 Signify documentation
 =====================
-Signify, a portmanteau of *signature* and *verify*, is a Python module that computes and validates signatures.
-At this point it is mostly a library that verifies PE Authenticode-signed binaries.
+Signify, a portmanteau of *signature* and *verify*, is a Python module that computes
+and validates signatures. At this point it is mostly a library that verifies
+Authenticode-signed binaries.
 
 This module is a forked from Google's ``verify_sigs`` module, updated to fit
 modern Python standards and be compatible with Python 3. It is **not** a drop-in
@@ -28,6 +29,7 @@ This module is compatible with Python 3.9+.
    :caption: Authenticode
 
    authenticode
+   authenticode_files
    authroot
    authenticode_asn1
 
