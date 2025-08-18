@@ -226,13 +226,13 @@ class SpcSigInfo(Sequence):  # type: ignore[misc]
     """
 
     _fields = [
-        ("dwSIPversion", Integer),
-        ("gSIPguid", SpcUuid),
-        ("dwReserved1", Integer),
-        ("dwReserved2", Integer),
-        ("dwReserved3", Integer),
-        ("dwReserved4", Integer),
-        ("dwReserved5", Integer),
+        ("sip_version", Integer),
+        ("sip_guid", SpcUuid),
+        ("reserved1", Integer),
+        ("reserved2", Integer),
+        ("reserved3", Integer),
+        ("reserved4", Integer),
+        ("reserved5", Integer),
     ]
 
 
@@ -241,6 +241,7 @@ class SpcAttributeType(ObjectIdentifier):  # type: ignore[misc]
 
     _map: dict[str, str] = {
         "1.3.6.1.4.1.311.2.1.15": "microsoft_spc_pe_image_data",
+        "1.3.6.1.4.1.311.2.1.25": "microsoft_spc_cab_data",
         "1.3.6.1.4.1.311.2.1.30": "microsoft_spc_siginfo",
         "1.3.6.1.4.1.311.2.3.1": "microsoft_spc_pe_image_page_hashes_v1",
         "1.3.6.1.4.1.311.2.3.2": "microsoft_spc_pe_image_page_hashes_v2",
@@ -272,6 +273,7 @@ class SpcAttributeTypeAndOptionalValue(Sequence):  # type: ignore[misc]
     _oid_pair = ("type", "value")
     _oid_specs: dict[str, type[Asn1Value]] = {
         "microsoft_spc_pe_image_data": SpcPeImageData,
+        "microsoft_spc_cab_data": SpcLink,
         "microsoft_spc_siginfo": SpcSigInfo,
         # used as content in SpcLink.moniker's SpcSerializedObject.serializedData
         "microsoft_spc_pe_image_page_hashes_v1": SetOfOctetString,
@@ -302,6 +304,10 @@ class SpcIndirectDataContent(Sequence):  # type: ignore[misc]
         ("data", SpcAttributeTypeAndOptionalValue),
         ("message_digest", DigestInfo),
     ]
+
+
+class SetOfSpcIndirectDataContent(SetOf):  # type: ignore[misc]
+    _child_spec = SpcIndirectDataContent
 
 
 class SpcSpOpusInfo(Sequence):  # type: ignore[misc]

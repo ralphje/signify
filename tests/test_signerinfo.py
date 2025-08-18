@@ -5,7 +5,7 @@ from asn1crypto.algos import DigestAlgorithm
 from asn1crypto.core import Boolean
 
 from signify.exceptions import ParseError
-from signify.pkcs7.signerinfo import _get_digest_algorithm
+from signify.pkcs7.signer_info import _get_digest_algorithm
 
 
 class GetDigestAlgorithmTest(unittest.TestCase):

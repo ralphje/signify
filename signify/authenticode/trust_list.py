@@ -3,8 +3,8 @@ from __future__ import annotations
 import datetime
 import hashlib
 import pathlib
-from collections.abc import Iterable
-from typing import Any, cast
+from collections.abc import Iterable, Iterator
+from typing import TYPE_CHECKING, Any, cast
 
 import mscerts
 from asn1crypto import cms
@@ -13,17 +13,27 @@ from typing_extensions import Self
 from signify import asn1
 from signify._typing import HashFunction
 from signify.asn1.hashing import _get_digest_algorithm
+from signify.authenticode.signer_info import AuthenticodeSignerInfo
+from signify.authenticode.verification_result import AuthenticodeExplainVerifyMixin
 from signify.exceptions import (
     CertificateTrustListParseError,
     CTLCertificateVerificationError,
 )
-from signify.pkcs7 import signeddata
-from signify.x509 import certificates, context
+from signify.pkcs7 import SignedData
+from signify.x509 import Certificate, certificates, context
+
+if TYPE_CHECKING:
+    from signify.authenticode.indirect_data import IndirectData
 
 AUTHROOTSTL_PATH = pathlib.Path(mscerts.where(stl=True))
 
 
-class CertificateTrustList(signeddata.SignedData):
+class CertificateTrustListSignerInfo(AuthenticodeSignerInfo):
+    parent: CertificateTrustList  # type: ignore[assignment]
+    _expected_content_type = "microsoft_ctl"
+
+
+class CertificateTrustList(AuthenticodeExplainVerifyMixin, SignedData):
     """A subclass of :class:`signify.pkcs7.SignedData`, containing a list of trusted
     root certificates. It is based on the following ASN.1 structure::
 
@@ -54,15 +64,24 @@ class CertificateTrustList(signeddata.SignedData):
 
     """
 
+    _signerinfo_class_name = CertificateTrustListSignerInfo
     _expected_content_type = "microsoft_ctl"
     content_asn1: asn1.ctl.CertificateTrustList
 
+    def iter_recursive_nested(self) -> Iterator[CertificateTrustList]:
+        """Returns an iterator over the current object. Included for compatibility
+        with :class:`AuthenticodeSignedData`.
+        """
+        yield self
+
     @property
     def subject_usage(self) -> list[str]:
-        """Defines the EKU of the Certificate Trust List.
-        Should be 1.3.6.1.4.1.311.20.1.
-        """
+        """Defines the EKU of the Certificate Trust List."""
         return cast(list[str], self.content_asn1["subject_usage"].native)
+
+    @property
+    def is_catalog(self) -> bool:
+        return "microsoft_catalog_list" in self.subject_usage
 
     @property
     def list_identifier(self) -> bytes | None:
@@ -89,8 +108,17 @@ class CertificateTrustList(signeddata.SignedData):
         )
 
     @property
-    def subject_algorithm(self) -> HashFunction:
-        """Digest algorithm of verifying the list."""
+    def subject_algorithm(
+        self,
+    ) -> HashFunction | str:
+        """Digest algorithm of verifying the list. When the TrustList is for a catalog,
+        this may return a string.
+        """
+        if self.content_asn1["subject_algorithm"]["algorithm"].native in {
+            "microsoft_catalog_list_member",
+            "microsoft_catalog_list_member_v2",
+        }:
+            return cast(str, self.content_asn1["subject_algorithm"]["algorithm"].native)
         return _get_digest_algorithm(
             self.content_asn1["subject_algorithm"],
             location="CertificateTrustList.subjectAlgorithm",
@@ -101,7 +129,7 @@ class CertificateTrustList(signeddata.SignedData):
         return {
             subj.identifier.hex().lower(): subj
             for subj in (
-                CertificateTrustSubject(subject)
+                CertificateTrustSubject(subject, self)
                 for subject in self.content_asn1["trusted_subjects"]
             )
         }
@@ -113,6 +141,14 @@ class CertificateTrustList(signeddata.SignedData):
         """A list of :class:`CertificateTrustSubject` s in this list."""
 
         return self._subjects.values()
+
+    def verify(self, *args: Any, **kwargs: Any) -> Iterable[list[Certificate]]:
+        """Override to make sure that the TRUSTED_CERTIFICATE_STORE is set properly."""
+        if "trusted_certificate_store" not in kwargs:
+            from signify.authenticode import TRUSTED_CERTIFICATE_STORE
+
+            kwargs["trusted_certificate_store"] = TRUSTED_CERTIFICATE_STORE
+        return super().verify(*args, **kwargs)
 
     def verify_trust(
         self, chain: list[certificates.Certificate], *args: Any, **kwargs: Any
@@ -182,18 +218,41 @@ class CertificateTrustSubject:
 
     """
 
-    def __init__(self, asn1: asn1.ctl.TrustedSubject):
+    def __init__(self, asn1: asn1.ctl.TrustedSubject, parent: CertificateTrustList):
         self.asn1 = asn1
+        self.parent = parent
 
     @property
     def identifier(self) -> bytes:
         return cast(bytes, self.asn1["subject_identifier"].native)
 
     @property
+    def identifier_str(self) -> str:
+        """Return :attr:`identifier` as a string. This is usually the hex encoding
+        of the byte string, but in the case of ``microsoft_catalog_list``, this can be
+        a UTF-16 encoded string if indirect_data is present.
+        """
+        if not self.indirect_data:
+            return self.identifier.hex()
+        try:
+            value = self.identifier.decode("utf-16").rstrip("\0")
+            # Attempt to encode in latin-1. If this is not possible, we can assume that
+            # this is not intended to be decoded.
+            value.encode("latin-1")
+            return value
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            return self.identifier.hex()
+
+    @property
     def attributes(self) -> dict[str, Any]:
-        """A dictionary mapping of attribute types to values."""
+        """A dictionary mapping of attribute types to singular native values."""
+        return {k: v.native[0] for k, v in self.attributes_asn1.items()}
+
+    @property
+    def attributes_asn1(self) -> dict[str, Any]:
+        """A dictionary mapping of attribute types to ASN.1 values."""
         return {
-            attr["type"].native: attr["values"].native[0]
+            attr["type"].native: attr["values"]
             for attr in self.asn1["subject_attributes"]
         }
 
@@ -201,6 +260,8 @@ class CertificateTrustSubject:
     def extended_key_usages(self) -> list[str] | None:
         """Defines the EKU's the certificate is valid for. It may be empty, which we
         take as 'all is acceptable'.
+
+        Typically available for Certificate Trust Lists (i.e. non-catalog files).
         """
         return cast(
             "list[str] | None", self.attributes.get("microsoft_ctl_enhkey_usage", None)
@@ -208,28 +269,49 @@ class CertificateTrustSubject:
 
     @property
     def friendly_name(self) -> str | None:
-        """The friendly name of the certificate."""
+        """The friendly name of the certificate.
+
+        Typically available for Certificate Trust Lists (i.e. non-catalog files).
+        """
         return cast(
             "str | None", self.attributes.get("microsoft_ctl_friendly_name", None)
         )
 
     @property
     def key_identifier(self) -> bytes:
-        """The sha1 fingerprint of the certificate."""
+        """The sha1 fingerprint of the certificate.
+
+        Typically available for Certificate Trust Lists (i.e. non-catalog files).
+        """
         return cast(bytes, self.attributes.get("microsoft_ctl_key_identifier", b""))
 
     @property
     def subject_name_md5(self) -> bytes:
-        """The md5 of the subject name."""
+        """The md5 of the subject name.
+
+        Typically available for Certificate Trust Lists (i.e. non-catalog files).
+        """
         return cast(
             bytes, self.attributes.get("microsoft_ctl_subject_name_md5_hash", b"")
         )
 
-    # TODO: RootProgramCertPolicies not implemented
+    @property
+    def root_program_cert_policies(self) -> list[dict[str, Any]] | None:
+        """The policies applicable to the root certificate.
+
+        Typically available for Certificate Trust Lists (i.e. non-catalog files).
+        """
+        return cast(
+            "list[dict[str, Any]] | None",
+            self.attributes.get("microsoft_ctl_root_program_cert_policies", None),
+        )
 
     @property
     def auth_root_sha256(self) -> bytes:
-        """The sha256 fingerprint of the certificate."""
+        """The sha256 fingerprint of the certificate.
+
+        Typically available for Certificate Trust Lists (i.e. non-catalog files).
+        """
         return cast(
             bytes, self.attributes.get("microsoft_ctl_auth_root_sha256_hash", b"")
         )
@@ -240,6 +322,8 @@ class CertificateTrustSubject:
         a timestamp prior to this date continue to be valid, but use cases after this
         date are prohibited. It may be used in conjunction with
         :attr:`disallowed_extended_key_usages` to define specific EKU's to be disabled.
+
+        Typically available for Certificate Trust Lists (i.e. non-catalog files).
         """
         return cast(
             "datetime.datetime | None",
@@ -248,7 +332,10 @@ class CertificateTrustSubject:
 
     @property
     def root_program_chain_policies(self) -> list[str] | None:
-        """A list of EKU's probably used for EV certificates."""
+        """A list of EKU's probably used for EV certificates.
+
+        Typically available for Certificate Trust Lists (i.e. non-catalog files).
+        """
         return cast(
             "list[str] | None",
             self.attributes.get("microsoft_ctl_root_program_chain_policies", None),
@@ -259,6 +346,8 @@ class CertificateTrustSubject:
         """Defines the EKU's the certificate is not valid for. When used in combination
         with :attr:`disallowed_filetime`, the disabled EKU's are only disabled from
         that date onwards, otherwise, it means since the beginning of time.
+
+        Typically available for Certificate Trust Lists (i.e. non-catalog files).
         """
         return cast(
             "list[str] | None",
@@ -271,6 +360,8 @@ class CertificateTrustSubject:
         Certificates from prior the date will continue to validate. When used in
         conjunction with :attr:`not_before_extended_key_usages`, this only concerns
         certificates issued after this date for the defined EKU's.
+
+        Typically available for Certificate Trust Lists (i.e. non-catalog files).
         """
         return cast(
             "datetime.datetime | None",
@@ -282,11 +373,49 @@ class CertificateTrustSubject:
         """Defines the EKU's for which the :attr:`not_before_filetime` is considered. If
         that attribute is not defined, we assume that it means since the beginning of
         time.
+
+        Typically available for Certificate Trust Lists (i.e. non-catalog files).
         """
         return cast(
             "list[str] | None",
             self.attributes.get("microsoft_ctl_not_before_enhkey_usage", None),
         )
+
+    @property
+    def catalog_namevalue(self) -> dict[str, str | int] | None:
+        """Return information about the CAT entry.
+
+        Typically available for catalog files (i.e. not CTLs).
+        """
+        return cast(
+            "dict[str, str | int] | None",
+            self.attributes.get("microsoft_cat_namevalue", None),
+        )
+
+    @property
+    def catalog_memberinfo(self) -> dict[str, str | int] | None:
+        """Return information about the CAT entry.
+
+        Typically available for catalog files (i.e. not CTLs).
+        """
+        return cast(
+            "dict[str, str | int] | None",
+            self.attributes.get("microsoft_cat_memberinfo", None),
+        )
+
+    @property
+    def indirect_data(self) -> IndirectData | None:
+        """Return the indirect data for this subject.
+
+        Typically available for catalog files (i.e. not CTLs).
+        """
+        if "microsoft_spc_indirect_data_content" in self.attributes_asn1:
+            from signify.authenticode.indirect_data import IndirectData
+
+            return IndirectData(
+                self.attributes_asn1["microsoft_spc_indirect_data_content"][0]
+            )
+        return None
 
     def verify_trust(
         self,

@@ -34,7 +34,7 @@ AppX Extensions                   {1AD2DCB4-1FC8-42EF-8D9B-1EDFB2F7C75D}  AppxSi
 AppX P7X Signature                {5598CFF1-68DB-4340-B57F-1CACF88C9A51}  AppxSip.dll   P7xSipVerifyIndirectData
 PowerShell (.ps1)                 {603BCC1F-4B59-4E08-B724-D2C6297EF351}  pwrshsip.dll  PsVerifyHash
 Structured Storage*               {941C2937-1292-11D1-85BE-00C04FC295EE}  WINTRUST.DLL  CryptSIPVerifyIndirectData
-CTL                               {9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}  WINTRUST.DLL  CryptSIPVerifyIndirectData
+:ref:`CTL <Catalog (.cat)>`       {9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}  WINTRUST.DLL  CryptSIPVerifyIndirectData
 Electronic Software Distribution  {9F3053C5-439D-4BF7-8A77-04F0450A1D9F}  EsdSip.dll    EsdSipVerifyHash
 Office VBA                        {9FA65764-C36F-4319-9737-658A34585BB7}  mso.dll       MsoVBADigSigVerifyIndirectData
 :ref:`PE (.exe)`                  {C689AAB8-8E78-11D0-8C47-00C04FC295EE}  WINTRUST.DLL  CryptSIPVerifyIndirectData
@@ -43,7 +43,7 @@ Cabinet (.cab)                    {C689AABA-8E78-11D0-8C47-00C04FC295EE}  WINTRU
 Encrypted AppX                    {CF78C6DE-64A2-4799-B506-89ADFF5D16D6}  AppxSip.dll   EappxSipVerifyIndirectData
 Encrypted AppX Bundle             {D1D04F0C-9ABA-430D-B0E4-D7E96ACCE66C}  AppxSip.dll   EappxBundleSipVerifyIndirectData
 Flat Image                        {DE351A42-8E59-11D0-8C47-00C04FC295EE}  WINTRUST.DLL  CryptSIPVerifyIndirectData
-Catalog (.cat)                    {DE351A43-8E59-11D0-8C47-00C04FC295EE}  WINTRUST.DLL  CryptSIPVerifyIndirectData
+:ref:`Catalog (.cat)`             {DE351A43-8E59-11D0-8C47-00C04FC295EE}  WINTRUST.DLL  CryptSIPVerifyIndirectData
 ================================  ======================================  ============  ================================
 
 The SIPs for Structured Storage and Java Class are deprecated and may be absent in
@@ -160,6 +160,25 @@ to the content hashed in ``DigitalSignature`` (i.e. ``hash(hash(metadata) + cont
 and additionally stored in the ``MsiDigitalSignatureEx`` section.
 
 .. autoclass:: SignedMsiFile
+   :members:
+   :special-members: __init__
+
+Catalog (.cat)
+--------------
+Catalog Files (.cat) are used for externally signing files, mostly used in the case of
+driver files. They can be used to sign virtually any type of file. They are usually
+found in a subdirectory of ``C:\Windows\System32\CatRoot``.
+
+The same file format is used by Certificate Trust Lists (e.g. authroot.stl), which is
+used for distributing lists of certificates, particularly the Microsoft Root CA program,
+but can be used more widely.
+
+Both files can be checked, although the content of the file is simply signed by using
+a generic SignedData object, and there's no indirect data that contains an additional
+signature. That's why this file format does not return ``AuthenticodeSignedData``
+objects, but rather a different subclass of ``SignedData``.
+
+.. autoclass:: CtlFile
    :members:
    :special-members: __init__
 

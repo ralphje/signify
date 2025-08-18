@@ -31,6 +31,7 @@ This module is compatible with Python 3.9+.
    authenticode
    authenticode_files
    authroot
+   authenticode_structures
    authenticode_asn1
 
 

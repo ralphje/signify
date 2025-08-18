@@ -11,10 +11,10 @@ from typing_extensions import Self
 
 from signify._typing import HashFunction
 from signify.asn1.hashing import ACCEPTED_DIGEST_ALGORITHMS
-from signify.authenticode.structures import (
+from signify.authenticode.signed_data import (
     AuthenticodeSignedData,
-    AuthenticodeVerificationResult,
 )
+from signify.authenticode.verification_result import AuthenticodeVerificationResult
 from signify.exceptions import (
     AuthenticodeFingerprintNotProvidedError,
     AuthenticodeNotSignedError,

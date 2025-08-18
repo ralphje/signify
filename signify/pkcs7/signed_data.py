@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import datetime
+import importlib
 from collections.abc import Iterable, Sequence
+from functools import cached_property
 from typing import Any, Literal, cast
 
 from asn1crypto import cms
@@ -11,7 +13,7 @@ from typing_extensions import Self
 from signify._typing import HashFunction
 from signify.asn1.hashing import _get_digest_algorithm
 from signify.exceptions import CounterSignerError, InvalidDigestError, ParseError
-from signify.pkcs7 import signerinfo
+from signify.pkcs7 import signer_info
 from signify.x509.certificates import Certificate
 from signify.x509.context import CertificateStore, VerificationContext
 
@@ -44,18 +46,31 @@ class SignedData:
     """
 
     _expected_content_type: str | None = None
-    _signerinfo_class: type[signerinfo.SignerInfo] | str | None = None
+    _signerinfo_class_name: type[signer_info.SignerInfo] | str | None = None
 
     def __init__(self, asn1: cms.SignedData):
         """
         :param asn1: The ASN.1 structure of the SignedData object
         """
-
-        if isinstance(self._signerinfo_class, str):
-            self._signerinfo_class = globals()[self._signerinfo_class]
-
         self.asn1 = asn1
         self._validate_asn1()
+
+    @cached_property
+    def _signerinfo_class(self) -> type[signer_info.SignerInfo] | None:
+        """Since the :attr:`_signerinfo_class_name` can be a string (since we may not
+        be able to directly reference it at the place of definition), this method
+        ensures that the appropriate subclass is loaded.
+        """
+        if isinstance(self._signerinfo_class_name, str):
+            if "." in self._signerinfo_class_name:
+                package_name, class_name = self._signerinfo_class_name.rsplit(".", 1)
+                mod = importlib.import_module(package_name)
+                return cast(type[signer_info.SignerInfo], getattr(mod, class_name))
+            else:
+                return cast(
+                    type[signer_info.SignerInfo], globals()[self._signerinfo_class_name]
+                )
+        return self._signerinfo_class_name
 
     @classmethod
     def from_envelope(cls, data: bytes, *args: Any, **kwargs: Any) -> Self:
@@ -125,10 +140,9 @@ class SignedData:
         )
 
     @property
-    def signer_infos(self) -> Sequence[signerinfo.SignerInfo]:
-        """A list of all included :class:`signerinfo.SignerInfo` objects"""
+    def signer_infos(self) -> Sequence[signer_info.SignerInfo]:
+        """A list of all included :class:`signer_info.SignerInfo` objects"""
         if self._signerinfo_class is not None:
-            assert not isinstance(self._signerinfo_class, str)
             return [
                 self._signerinfo_class(si, parent=self)
                 for si in self.asn1["signer_infos"]
@@ -137,8 +151,8 @@ class SignedData:
             raise AttributeError("No signer_infos expected")
 
     @property
-    def signer_info(self) -> signerinfo.SignerInfo:
-        """The included :class:`signerinfo.SignerInfo` object, if there's one."""
+    def signer_info(self) -> signer_info.SignerInfo:
+        """The included :class:`signer_info.SignerInfo` object, if there's one."""
         if len(self.signer_infos) == 1:
             return self.signer_infos[0]
         raise AttributeError(

@@ -14,7 +14,7 @@ from olefile.olefile import (
 )
 
 from signify._typing import HashFunction, HashObject
-from signify.authenticode import structures
+from signify.authenticode.signed_data import AuthenticodeSignedData
 from signify.exceptions import (
     AuthenticodeInvalidExtendedDigestError,
     AuthenticodeNotSignedError,
@@ -96,7 +96,7 @@ class SignedMsiFile(AuthenticodeFile):
 
     def iter_signed_datas(
         self, *, include_nested: bool = True, ignore_parse_errors: bool = True
-    ) -> Iterator[structures.AuthenticodeSignedData]:
+    ) -> Iterator[AuthenticodeSignedData]:
         try:
             if not self._ole_file.exists(DIGITAL_SIGNATURE_ENTRY_NAME):
                 raise AuthenticodeNotSignedError(
@@ -106,9 +106,7 @@ class SignedMsiFile(AuthenticodeFile):
             with self._ole_file.openstream(DIGITAL_SIGNATURE_ENTRY_NAME) as fh:
                 b_data = fh.read()
 
-            signed_data = structures.AuthenticodeSignedData.from_envelope(
-                b_data, signed_file=self
-            )
+            signed_data = AuthenticodeSignedData.from_envelope(b_data, signed_file=self)
             if include_nested:
                 yield from signed_data.iter_recursive_nested()
             else:
@@ -119,13 +117,12 @@ class SignedMsiFile(AuthenticodeFile):
         except SignifyError:
             raise
         except Exception as e:
+            raise
             # Rewrap any parse errors encountered
             if not ignore_parse_errors:
                 raise SignedMsiParseError(str(e))
 
-    def verify_additional_hashes(
-        self, signed_data: structures.AuthenticodeSignedData
-    ) -> None:
+    def verify_additional_hashes(self, signed_data: AuthenticodeSignedData) -> None:
         """Verifies the extended digest of MSI files."""
         if not self.has_prehash:
             return

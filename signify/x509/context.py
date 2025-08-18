@@ -4,7 +4,7 @@ import datetime
 import logging
 import pathlib
 from collections.abc import Iterable, Iterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import asn1crypto.crl
 import asn1crypto.ocsp
@@ -19,6 +19,9 @@ from signify.exceptions import (
 )
 from signify.x509 import Certificate, CertificateName
 
+if TYPE_CHECKING:
+    from signify.authenticode import CertificateTrustList
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,7 +32,7 @@ class CertificateStore:
         self,
         *args: Certificate | Iterable[Certificate],
         trusted: bool = False,
-        ctl: Any | None = None,
+        ctl: CertificateTrustList | None = None,
     ):
         """
         :param bool trusted: If true, all certificates that are appended to this

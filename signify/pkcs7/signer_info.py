@@ -12,12 +12,11 @@ from signify._typing import HashFunction
 from signify.asn1.hashing import _get_digest_algorithm
 from signify.exceptions import (
     CounterSignerError,
-    InvalidDigestError,
     SignerInfoParseError,
     SignerInfoVerificationError,
     VerificationError,
 )
-from signify.pkcs7 import signeddata
+from signify.pkcs7 import signed_data
 from signify.x509 import VerificationContext
 from signify.x509.certificates import Certificate, CertificateName
 
@@ -76,7 +75,7 @@ class SignerInfo:
     _expected_content_type: str | None = None
 
     def __init__(
-        self, asn1: cms.SignerInfo, parent: signeddata.SignedData | None = None
+        self, asn1: cms.SignerInfo, parent: signed_data.SignedData | None = None
     ):
         """
         :param asn1: The ASN.1 structure of the SignerInfo.

@@ -1,10 +1,12 @@
 from .base import AuthenticodeFile
+from .ctl import CtlFile
 from .pe import SignedPEFile, SignedPEFingerprinter
-from .signeddata import AuthenticodeSignedDataFile
+from .signed_data import AuthenticodeSignedDataFile
 
 __all__ = [
     "AuthenticodeFile",
     "AuthenticodeSignedDataFile",
+    "CtlFile",
     "SignedPEFile",
     "SignedPEFingerprinter",
 ]

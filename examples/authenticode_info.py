@@ -7,12 +7,11 @@ import sys
 import textwrap
 from typing import Any
 
-from signify.authenticode import (
-    AuthenticodeFile,
-    AuthenticodeSignedData,
-    AuthenticodeSignerInfo,
-    RFC3161SignedData,
-)
+from signify.authenticode import AuthenticodeFile, CertificateTrustList
+from signify.authenticode.indirect_data import IndirectData
+from signify.authenticode.signed_data import AuthenticodeSignedData
+from signify.authenticode.signer_info import AuthenticodeSignerInfo
+from signify.authenticode.tsp import RFC3161SignedData
 from signify.pkcs7 import SignerInfo, SignedData
 from signify.x509 import Certificate
 
@@ -43,10 +42,26 @@ def describe_attribute(name: str, values: list[Any]) -> list[str]:
         "counter_signature",
     ):
         return [f"{name}: (elided)"]
-    if name == "message_digest":
+    if name in (
+        "message_digest",
+        "microsoft_ctl_subject_name_md5_hash",
+        "microsoft_ctl_key_identifier",
+        "microsoft_ctl_auth_root_sha256_hash",
+    ):
         return [f"{name}: {values[0].native.hex()}"]
     if len(values) == 1:
-        return [f"{name}: {values[0].native}"]
+        value = values[0]
+        if name == "microsoft_spc_indirect_data_content":
+            return [
+                f"{name}:",
+                indent_text(*describe_indirect_data(IndirectData(value))),
+            ]
+        if isinstance(value.native, dict):
+            return [
+                f"{name}:",
+                indent_text(*[f"{k}: {v}" for k, v in value.native.items()]),
+            ]
+        return [f"{name}: {value.native}"]
     return [f"{name}:", *[list_item(str(value.native)) for value in values]]
 
 
@@ -113,6 +128,50 @@ def describe_signer_info(signer_info: SignerInfo) -> list[str]:
     return result
 
 
+def describe_indirect_data(indirect_data: IndirectData) -> list[str]:
+    result = [
+        f"Digest algorithm: {indirect_data.digest_algorithm.__name__}",
+        f"Digest: {indirect_data.digest.hex()}",
+        f"Content type: {indirect_data.content_type}",
+    ]
+    if indirect_data.content_type == "microsoft_spc_pe_image_data":
+        pe_image_data = indirect_data.content
+        result += [
+            "",
+            "PE Image Data:",
+            indent_text(
+                f"Flags: {pe_image_data.flags}",
+                f"File Link Type: {pe_image_data.file_link_type}",
+            ),
+        ]
+        if pe_image_data.file_link_type == "moniker":
+            result += [
+                indent_text(
+                    f"Class ID: {pe_image_data.class_id}",
+                    f"Content Type: {','.join(pe_image_data.content_types)}",
+                )
+            ]
+        else:
+            result += [
+                indent_text(
+                    f"Publisher: {pe_image_data.publisher}",
+                )
+            ]
+
+    if indirect_data.content_type == "microsoft_spc_siginfo":
+        siginfo = indirect_data.content
+        result += [
+            "",
+            "SigInfo:",
+            indent_text(
+                f"SIP Version: {siginfo.sip_version}",
+                f"SIP GUID: {siginfo.sip_guid}",
+            ),
+        ]
+
+    return result
+
+
 def describe_signed_data(signed_data: SignedData):
     result = [
         "Included certificates:",
@@ -129,50 +188,8 @@ def describe_signed_data(signed_data: SignedData):
         result += [
             "",
             "Indirect Data:",
-            indent_text(
-                f"Digest algorithm: {signed_data.indirect_data.digest_algorithm.__name__}",
-                f"Digest: {signed_data.indirect_data.digest.hex()}",
-                f"Content type: {signed_data.indirect_data.content_type}",
-            ),
+            indent_text(*describe_indirect_data(signed_data.indirect_data)),
         ]
-        if signed_data.indirect_data.content_type == "microsoft_spc_pe_image_data":
-            pe_image_data = signed_data.indirect_data.content
-            result += [
-                "",
-                indent_text("PE Image Data:", indent=4),
-                indent_text(
-                    f"Flags: {pe_image_data.flags}",
-                    f"File Link Type: {pe_image_data.file_link_type}",
-                    indent=8,
-                ),
-            ]
-            if pe_image_data.file_link_type == "moniker":
-                result += [
-                    indent_text(
-                        f"Class ID: {pe_image_data.class_id}",
-                        f"Content Type: {','.join(pe_image_data.content_types)}",
-                        indent=8,
-                    )
-                ]
-            else:
-                result += [
-                    indent_text(
-                        f"Publisher: {pe_image_data.publisher}",
-                        indent=8,
-                    )
-                ]
-
-        if signed_data.indirect_data.content_type == "microsoft_spc_siginfo":
-            siginfo = signed_data.indirect_data.content
-            result += [
-                "",
-                indent_text("SigInfo:", indent=4),
-                indent_text(
-                    f"SIP Version: {siginfo.sip_version}",
-                    f"SIP GUID: {siginfo.sip_guid}",
-                    indent=8,
-                ),
-            ]
 
     if isinstance(signed_data, RFC3161SignedData) and signed_data.tst_info:
         result += [
@@ -185,6 +202,42 @@ def describe_signed_data(signed_data: SignedData):
                 f"Signing time: {signed_data.tst_info.signing_time}",
                 f"Signing time acc: {signed_data.tst_info.signing_time_accuracy}",
                 f"Signing authority: {signed_data.tst_info.signing_authority}",
+            ),
+        ]
+
+    if isinstance(signed_data, CertificateTrustList):
+        result += [
+            "",
+            "Certificate Trust List:",
+            indent_text(
+                f"Subject usage: {signed_data.subject_usage}",
+                (
+                    f"List identifier: {signed_data.list_identifier.hex()}"
+                    if signed_data.list_identifier
+                    else "List identifier: None"
+                ),
+                f"Sequence number: {signed_data.sequence_number}",
+                f"This update: {signed_data.this_update}",
+                f"Next update: {signed_data.next_update}",
+                f"Subject algorithm: "
+                + (
+                    signed_data.subject_algorithm
+                    if isinstance(signed_data.subject_algorithm, str)
+                    else signed_data.subject_algorithm.__name__
+                ),
+                "",
+                f"Subjects:",
+                *[
+                    list_item(
+                        f"Identifier: {s.identifier_str}",
+                        "Attributes:",
+                        *(
+                            list_item(*describe_attribute(*attribute))
+                            for attribute in s.attributes_asn1.items()
+                        ),
+                    )
+                    for s in signed_data.subjects
+                ],
             ),
         ]
 

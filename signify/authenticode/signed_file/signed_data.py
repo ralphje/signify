@@ -6,7 +6,7 @@ from typing import BinaryIO
 
 from typing_extensions import Self
 
-from signify.authenticode.structures import AuthenticodeSignedData
+from signify.authenticode.signed_data import AuthenticodeSignedData
 
 from .base import AuthenticodeFile
 

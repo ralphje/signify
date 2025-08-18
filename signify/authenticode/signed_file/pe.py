@@ -44,7 +44,8 @@ from typing import BinaryIO, cast
 from typing_extensions import TypedDict
 
 from signify._typing import HashFunction
-from signify.authenticode import structures
+from signify.authenticode.indirect_data import PeImageData
+from signify.authenticode.signed_data import AuthenticodeSignedData
 from signify.exceptions import AuthenticodeInvalidPageHashError, SignedPEParseError
 from signify.fingerprinter import Fingerprinter, Range
 
@@ -317,7 +318,7 @@ class SignedPEFile(AuthenticodeFile):
 
     def iter_signed_datas(
         self, *, include_nested: bool = True, ignore_parse_errors: bool = True
-    ) -> Iterator[structures.AuthenticodeSignedData]:
+    ) -> Iterator[AuthenticodeSignedData]:
         try:
             found = False
             for certificate in self._parse_cert_table():
@@ -327,7 +328,7 @@ class SignedPEFile(AuthenticodeFile):
                     )
 
                 if certificate["type"] == 2:
-                    signed_data = structures.AuthenticodeSignedData.from_envelope(
+                    signed_data = AuthenticodeSignedData.from_envelope(
                         certificate["certificate"], signed_file=self
                     )
                     if include_nested:
@@ -347,7 +348,7 @@ class SignedPEFile(AuthenticodeFile):
 
     def _calculate_expected_hashes(
         self,
-        signed_datas: Iterable[structures.AuthenticodeSignedData],
+        signed_datas: Iterable[AuthenticodeSignedData],
         expected_hashes: dict[str, bytes] | None = None,
     ) -> dict[str, bytes]:
         """Optimizes the default implementation of :meth:`_calculate_expected_hashes`
@@ -366,21 +367,15 @@ class SignedPEFile(AuthenticodeFile):
 
         return expected_hashes
 
-    def verify_additional_hashes(
-        self, signed_data: structures.AuthenticodeSignedData
-    ) -> None:
+    def verify_additional_hashes(self, signed_data: AuthenticodeSignedData) -> None:
         """Verifies the page hashes (if available) in the SpcPeImageData field."""
-
-        from signify.authenticode import structures
 
         # can only verify page hashes when the indirect data is
         # microsoft_spc_pe_image_data
         if signed_data.indirect_data.content_type != "microsoft_spc_pe_image_data":
             return None
 
-        image_data: structures.PeImageData = cast(
-            structures.PeImageData, signed_data.indirect_data.content
-        )
+        image_data: PeImageData = cast(PeImageData, signed_data.indirect_data.content)
 
         for start, end, digest, hash_algorithm in image_data.page_hashes:
             expected_hash = self.get_fingerprint(
