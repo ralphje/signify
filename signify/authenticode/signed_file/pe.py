@@ -44,7 +44,7 @@ from typing import BinaryIO, cast
 from typing_extensions import TypedDict
 
 from signify._typing import HashFunction
-from signify.authenticode.indirect_data import PeImageData
+from signify.authenticode.indirect_data import IndirectData, PeImageData
 from signify.authenticode.signed_data import AuthenticodeSignedData
 from signify.exceptions import AuthenticodeInvalidPageHashError, SignedPEParseError
 from signify.fingerprinter import Fingerprinter, Range
@@ -316,6 +316,13 @@ class SignedPEFile(AuthenticodeFile):
         )
         return fingerprinter.hash()[digest_algorithm().name]
 
+    def get_fingerprints(self, *digest_algorithms: HashFunction) -> dict[str, bytes]:
+        if not digest_algorithms:
+            return {}
+        fingerprinter = self.get_fingerprinter()
+        fingerprinter.add_signed_pe_hashers(*digest_algorithms)
+        return fingerprinter.hashes()["authentihash"]
+
     def iter_signed_datas(
         self, *, include_nested: bool = True, ignore_parse_errors: bool = True
     ) -> Iterator[AuthenticodeSignedData]:
@@ -346,36 +353,15 @@ class SignedPEFile(AuthenticodeFile):
             if not ignore_parse_errors:
                 raise
 
-    def _calculate_expected_hashes(
-        self,
-        signed_datas: Iterable[AuthenticodeSignedData],
-        expected_hashes: dict[str, bytes] | None = None,
-    ) -> dict[str, bytes]:
-        """Optimizes the default implementation of :meth:`_calculate_expected_hashes`
-        by calculating multiple hashes at once.
-        """
-        if expected_hashes is None:
-            expected_hashes = {}
-
-        needed_hashes = self._get_needed_hashes(signed_datas, expected_hashes)
-
-        # Calculate the needed hashes
-        if needed_hashes:
-            fingerprinter = self.get_fingerprinter()
-            fingerprinter.add_signed_pe_hashers(*needed_hashes)
-            expected_hashes.update(fingerprinter.hashes()["authentihash"])
-
-        return expected_hashes
-
-    def verify_additional_hashes(self, signed_data: AuthenticodeSignedData) -> None:
+    def verify_additional_hashes(self, indirect_data: IndirectData) -> None:
         """Verifies the page hashes (if available) in the SpcPeImageData field."""
 
         # can only verify page hashes when the indirect data is
         # microsoft_spc_pe_image_data
-        if signed_data.indirect_data.content_type != "microsoft_spc_pe_image_data":
+        if indirect_data.content_type != "microsoft_spc_pe_image_data":
             return None
 
-        image_data: PeImageData = cast(PeImageData, signed_data.indirect_data.content)
+        image_data: PeImageData = cast(PeImageData, indirect_data.content)
 
         for start, end, digest, hash_algorithm in image_data.page_hashes:
             expected_hash = self.get_fingerprint(

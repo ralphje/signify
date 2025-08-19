@@ -38,6 +38,7 @@ from signify.authenticode.indirect_data import IndirectData
 from signify.authenticode.verification_result import AuthenticodeExplainVerifyMixin
 from signify.exceptions import (
     AuthenticodeCounterSignerError,
+    AuthenticodeFingerprintNotProvidedError,
     AuthenticodeInconsistentDigestAlgorithmError,
     AuthenticodeInvalidDigestError,
     AuthenticodeParseError,
@@ -48,7 +49,7 @@ from signify.pkcs7 import SignedData
 from signify.x509 import Certificate, CertificateStore, VerificationContext
 
 if TYPE_CHECKING:
-    from signify.authenticode import signed_file
+    from signify.authenticode import indirect_data, signed_file
     from signify.authenticode.signer_info import AuthenticodeSignerInfo
 
 
@@ -110,6 +111,50 @@ class AuthenticodeSignedData(AuthenticodeExplainVerifyMixin, SignedData):
         for nested in self.signer_info.nested_signed_datas:
             yield from nested.iter_recursive_nested()
 
+    def verify_indirect_data(
+        self,
+        indirect_data: IndirectData,
+        *,
+        expected_hash: bytes | None = None,
+        verify_additional_hashes: bool = True,
+    ) -> None:
+        """Verifies the provided IndirectData against the expected hash.
+
+        If a :attr:`signed_file` is available, this is relayed to
+        :meth:`AuthenticodeSignedFile.verify_indirect_data`.
+
+        If such file is not available, this simply checks whether the provided
+        hash matches the hash in the :attr:`indirect_data`.
+
+        :param expected_hash: The expected hash digest of the :class:`AuthenticodeFile`.
+        :param verify_additional_hashes: Defines whether additional hashes, should
+            be verified, such as page hashes for PE files and extended digests for
+            MSI files.
+        """
+        if self.signed_file is not None:
+            return self.signed_file.verify_indirect_data(
+                indirect_data,
+                expected_hash=expected_hash,
+                verify_additional_hashes=verify_additional_hashes,
+            )
+
+        if expected_hash is None:
+            raise AuthenticodeFingerprintNotProvidedError(
+                f"Fingerprint for digest algorithm"
+                f" {indirect_data.digest_algorithm.__name__} could not be calculated"
+                " because no AuthenticodeSignedFile was provided, and the hash was not"
+                " provided as pre-calculated expected hash."
+            )
+
+        # Check that the hashes are correct
+        # 1. The hash of the file
+        if expected_hash != indirect_data.digest:
+            raise AuthenticodeInvalidDigestError(
+                "The expected hash does not match the digest in the indirect data."
+            )
+
+        return None
+
     def verify(  # type: ignore[override]
         self,
         verification_context: VerificationContext | None = None,
@@ -131,8 +176,7 @@ class AuthenticodeSignedData(AuthenticodeExplainVerifyMixin, SignedData):
           If no expected hash is provided to this function, it is calculated using
           the :class:`Fingerprinter` obtained from the :class:`AuthenticodeFile` object.
 
-        :param expected_hash: The expected hash digest of the
-            :class:`AuthenticodeFile`.
+        :param expected_hash: The expected hash digest of the :class:`AuthenticodeFile`.
         :param verify_additional_hashes: Defines whether additional hashes, should
             be verified, such as page hashes for PE files and extended digests for
             MSI files.
@@ -156,19 +200,11 @@ class AuthenticodeSignedData(AuthenticodeExplainVerifyMixin, SignedData):
                 "SignedData.digestAlgorithm must equal SignerInfo.digestAlgorithm"
             )
 
-        # Check that the hashes are correct
-        # 1. The hash of the file
-        if expected_hash is None:
-            assert self.signed_file is not None
-            expected_hash = self.signed_file.get_fingerprint(self.digest_algorithm)
-
-        if expected_hash != self.indirect_data.digest:
-            raise AuthenticodeInvalidDigestError(
-                "The expected hash does not match the digest in SpcInfo"
-            )
-
-        if verify_additional_hashes and self.signed_file is not None:
-            self.signed_file.verify_additional_hashes(self)
+        self.verify_indirect_data(
+            self.indirect_data,
+            expected_hash=expected_hash,
+            verify_additional_hashes=verify_additional_hashes,
+        )
 
         try:
             return super().verify(

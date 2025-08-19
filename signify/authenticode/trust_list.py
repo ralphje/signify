@@ -20,9 +20,10 @@ from signify.exceptions import (
     CTLCertificateVerificationError,
 )
 from signify.pkcs7 import SignedData
-from signify.x509 import Certificate, certificates, context
+from signify.x509 import Certificate, VerificationContext
 
 if TYPE_CHECKING:
+    from signify.authenticode import signed_file
     from signify.authenticode.indirect_data import IndirectData
 
 AUTHROOTSTL_PATH = pathlib.Path(mscerts.where(stl=True))
@@ -108,17 +109,15 @@ class CertificateTrustList(AuthenticodeExplainVerifyMixin, SignedData):
         )
 
     @property
-    def subject_algorithm(
-        self,
-    ) -> HashFunction | str:
+    def subject_algorithm(self) -> HashFunction:
         """Digest algorithm of verifying the list. When the TrustList is for a catalog,
         this may return a string.
         """
-        if self.content_asn1["subject_algorithm"]["algorithm"].native in {
-            "microsoft_catalog_list_member",
-            "microsoft_catalog_list_member_v2",
-        }:
-            return cast(str, self.content_asn1["subject_algorithm"]["algorithm"].native)
+        algorithm = self.content_asn1["subject_algorithm"]["algorithm"].native
+        if algorithm == "microsoft_catalog_list_member":
+            return hashlib.sha1
+        elif algorithm == "microsoft_catalog_list_member_v2":
+            return hashlib.sha256
         return _get_digest_algorithm(
             self.content_asn1["subject_algorithm"],
             location="CertificateTrustList.subjectAlgorithm",
@@ -150,9 +149,7 @@ class CertificateTrustList(AuthenticodeExplainVerifyMixin, SignedData):
             kwargs["trusted_certificate_store"] = TRUSTED_CERTIFICATE_STORE
         return super().verify(*args, **kwargs)
 
-    def verify_trust(
-        self, chain: list[certificates.Certificate], *args: Any, **kwargs: Any
-    ) -> bool:
+    def verify_trust(self, chain: list[Certificate], *args: Any, **kwargs: Any) -> bool:
         """Checks whether the specified certificate is valid in the given conditions
         according to this Certificate Trust List.
 
@@ -168,23 +165,28 @@ class CertificateTrustList(AuthenticodeExplainVerifyMixin, SignedData):
         return subject.verify_trust(chain, *args, **kwargs)
 
     def find_subject(
-        self, certificate: certificates.Certificate
+        self, subject: Certificate | signed_file.AuthenticodeFile | bytes
     ) -> CertificateTrustSubject | None:
         """Finds the :class:`CertificateTrustSubject` belonging to the provided
-        :class:`signify.x509.Certificate`.
+        :class:`signify.x509.Certificate` or :class:`signed_file.AuthenticodeFile`.
 
-        :param signify.x509.Certificate certificate: The certificate to look for.
-        :rtype: CertificateTrustSubject
+        :param subject: The certificate or file to look for.
         """
 
-        if self.subject_algorithm == hashlib.sha1:
-            identifier = certificate.sha1_fingerprint
-        elif self.subject_algorithm == hashlib.sha256:
-            identifier = certificate.sha256_fingerprint
+        if isinstance(subject, Certificate):
+            if self.subject_algorithm == hashlib.sha1:
+                identifier = subject.sha1_fingerprint
+            elif self.subject_algorithm == hashlib.sha256:
+                identifier = subject.sha256_fingerprint
+            else:
+                raise CertificateTrustListParseError(
+                    "The specified subject algorithm is not yet supported."
+                )
+        elif isinstance(subject, bytes):
+            identifier = subject.hex().lower()
         else:
-            raise CertificateTrustListParseError(
-                "The specified subject algorithm is not yet supported."
-            )
+            fingerprint = subject.get_fingerprint(self.subject_algorithm)
+            identifier = fingerprint.hex().lower()
 
         return self._subjects.get(identifier)
 
@@ -418,9 +420,7 @@ class CertificateTrustSubject:
         return None
 
     def verify_trust(
-        self,
-        chain: list[certificates.Certificate],
-        context: context.VerificationContext,
+        self, chain: list[Certificate], context: VerificationContext
     ) -> bool:
         """Checks whether the specified certificate is valid in the given conditions
         according to this Certificate Trust List.

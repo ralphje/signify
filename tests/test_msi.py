@@ -74,7 +74,7 @@ class SignedMsiTestCase(unittest.TestCase):
             msi_file = SignedMsiFile(f)
             result = msi_file.verify()
         self.assertEqual(len(result), 1)
-        _signed_data, certificate_chains = result[0]
+        _signed_data, indirect_data, certificate_chains = result[0]
         digicert_root, digicert_intermediate, kitware = certificate_chains[0]
         self.assertEqual(
             digicert_root.subject.dn,
@@ -100,7 +100,7 @@ class SignedMsiTestCase(unittest.TestCase):
             msi_file = SignedMsiFile(f)
             result = msi_file.verify()
         self.assertEqual(len(result), 1)
-        _signed_data, certificate_chains = result[0]
+        _signed_data, indirect_data, certificate_chains = result[0]
         sectigo_root, sectigo_intermediate, tatham = certificate_chains[0]
         self.assertEqual(
             sectigo_root.subject.dn,

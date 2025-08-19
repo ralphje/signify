@@ -42,7 +42,7 @@ Java Class*                       {C689AAB9-8E78-11D0-8C47-00C04FC295EE}  WINTRU
 Cabinet (.cab)                    {C689AABA-8E78-11D0-8C47-00C04FC295EE}  WINTRUST.DLL  CryptSIPVerifyIndirectData
 Encrypted AppX                    {CF78C6DE-64A2-4799-B506-89ADFF5D16D6}  AppxSip.dll   EappxSipVerifyIndirectData
 Encrypted AppX Bundle             {D1D04F0C-9ABA-430D-B0E4-D7E96ACCE66C}  AppxSip.dll   EappxBundleSipVerifyIndirectData
-Flat Image                        {DE351A42-8E59-11D0-8C47-00C04FC295EE}  WINTRUST.DLL  CryptSIPVerifyIndirectData
+:ref:`Flat Image`                 {DE351A42-8E59-11D0-8C47-00C04FC295EE}  WINTRUST.DLL  CryptSIPVerifyIndirectData
 :ref:`Catalog (.cat)`             {DE351A43-8E59-11D0-8C47-00C04FC295EE}  WINTRUST.DLL  CryptSIPVerifyIndirectData
 ================================  ======================================  ============  ================================
 
@@ -179,6 +179,22 @@ signature. That's why this file format does not return ``AuthenticodeSignedData`
 objects, but rather a different subclass of ``SignedData``.
 
 .. autoclass:: CtlFile
+   :members:
+   :special-members: __init__
+
+Flat Image
+----------
+Flat files are generic files, i.e. none of the other defined types. These can be hashed,
+but must be verified by an external signature (i.e. a catalog file).
+
+This type is not automatically loaded, so you must use ``allow_flat=True`` to get a
+flat file. Then you can add a catalog and verify the file::
+
+    file = AuthenticodeFile.from_stream(open(r"bar.dat", "rb"), allow_flat=True)
+    file.add_catalog(open(r"foo.cat", "rb"))
+    file.verify()
+
+.. autoclass:: FlatFile
    :members:
    :special-members: __init__
 

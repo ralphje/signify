@@ -14,6 +14,7 @@ from olefile.olefile import (
 )
 
 from signify._typing import HashFunction, HashObject
+from signify.authenticode.indirect_data import IndirectData
 from signify.authenticode.signed_data import AuthenticodeSignedData
 from signify.exceptions import (
     AuthenticodeInvalidExtendedDigestError,
@@ -122,7 +123,7 @@ class SignedMsiFile(AuthenticodeFile):
             if not ignore_parse_errors:
                 raise SignedMsiParseError(str(e))
 
-    def verify_additional_hashes(self, signed_data: AuthenticodeSignedData) -> None:
+    def verify_additional_hashes(self, indirect_data: IndirectData) -> None:
         """Verifies the extended digest of MSI files."""
         if not self.has_prehash:
             return
@@ -130,7 +131,7 @@ class SignedMsiFile(AuthenticodeFile):
         with self._ole_file.openstream(EXTENDED_DIGITAL_SIGNATURE_ENTRY_NAME) as fh:
             expected_extended_signature = fh.read()
 
-        prehash = self._calculate_prehash(signed_data.digest_algorithm)
+        prehash = self._calculate_prehash(indirect_data.digest_algorithm)
         if prehash != expected_extended_signature:
             raise AuthenticodeInvalidExtendedDigestError(
                 "The expected prehash does not match the digest"

@@ -11,15 +11,22 @@ from typing_extensions import Self
 
 from signify._typing import HashFunction
 from signify.asn1.hashing import ACCEPTED_DIGEST_ALGORITHMS
+from signify.authenticode.indirect_data import IndirectData
 from signify.authenticode.signed_data import (
     AuthenticodeSignedData,
+)
+from signify.authenticode.trust_list import (
+    CertificateTrustList,
+    CertificateTrustSubject,
 )
 from signify.authenticode.verification_result import AuthenticodeVerificationResult
 from signify.exceptions import (
     AuthenticodeFingerprintNotProvidedError,
+    AuthenticodeInvalidDigestError,
     AuthenticodeNotSignedError,
     ParseError,
 )
+from signify.pkcs7 import SignedData
 from signify.x509 import Certificate
 
 logger = logging.getLogger(__name__)
@@ -30,14 +37,23 @@ class AuthenticodeFile:
     sections for Authenticode parsing.
     """
 
+    catalogs: Iterable[CertificateTrustList] = ()
+
     @classmethod
     def from_stream(
-        cls, file_obj: BinaryIO, file_name: str | None = None
+        cls,
+        file_obj: BinaryIO,
+        file_name: str | None = None,
+        *,
+        allow_flat: bool = False,
     ) -> AuthenticodeFile:
         """This initializer will return a concrete subclass that is compatible with the
         provided file object, and otherwise throw an error.
 
-        The optional ``file_name`` argument can be used to specify the file name.
+        :param file_obj: The file-like object to read from
+        :param file_name: The optional argument can be used to specify the file name.
+        :param allow_flat: Indicates whether FlatFile is allowed as a subclass. As
+            this matches anything, this will always be available.
         """
         if file_name is None and hasattr(file_obj, "name"):
             file_name = pathlib.Path(file_obj.name).name
@@ -56,6 +72,11 @@ class AuthenticodeFile:
                 if attempt is not None:
                     return attempt
 
+        if allow_flat:
+            from .flat import FlatFile
+
+            return FlatFile(file_obj)
+
         raise ParseError("Unable to determine file type with available parsers.")
 
     @classmethod
@@ -70,6 +91,30 @@ class AuthenticodeFile:
         bytes is provided for convenience.
         """
         return None
+
+    def add_catalog(
+        self, catalog: CertificateTrustList | BinaryIO, check: bool = False
+    ) -> None:
+        """Add a catalog file for validation. Catalog files can contain additional
+        signatures for signed files. Note that :meth:`get_fingerprint` must be
+        implemented.
+
+        :param catalog: The catalog to add. Can be a :class:`CertificateTrustList` or
+            a file-like object opened in binary mode.
+        :param check:  If `check` is False, the catalog will be added
+            regardless of whether the current file is actually in the file.
+
+            If `check` is True, the current file will be hashed according to
+            the hashing scheme of the catalog to verify it is contained within the
+            catalog.
+        """
+        if isinstance(catalog, CertificateTrustList):
+            catalog_ = catalog
+        else:
+            catalog_ = CertificateTrustList.from_envelope(catalog.read())
+
+        if not check or catalog_.find_subject(self):
+            self.catalogs = (*self.catalogs, catalog_)
 
     @property
     def signed_datas(self) -> Iterator[AuthenticodeSignedData]:
@@ -112,22 +157,24 @@ class AuthenticodeFile:
         self,
         *,
         multi_verify_mode: Literal["any", "first", "all", "best"] = "any",
+        signature_types: Literal[
+            "all", "all+", "catalog", "catalog+", "embedded"
+        ] = "all",
         expected_hashes: dict[str, bytes] | None = None,
         ignore_parse_errors: bool = True,
         **kwargs: Any,
-    ) -> list[tuple[AuthenticodeSignedData, Iterable[list[Certificate]]]]:
+    ) -> list[tuple[SignedData, IndirectData, Iterable[list[Certificate]]]]:
         """Verifies the SignedData structures. This is a little bit more efficient than
         calling all verify-methods separately.
 
-        :param expected_hashes: When provided, should be a mapping of hash names to
-            digests. This could speed up the verification process.
         :param multi_verify_mode: Indicates how to verify when there are multiple
             :class:`AuthenticodeSignedData` objects in this file. Can be:
 
             * 'any' (default) to indicate that any of the signatures must validate
               correctly.
             * 'first' to indicate that the first signature must verify correctly
-              (the default of tools such as sigcheck.exe)
+              (the default of tools such as sigcheck.exe); this is done in file order,
+              followed by any provided catalog signatures
             * 'all' to indicate that all signatures must verify
             * 'best' to indicate that the signature using the best hashing algorithm
               must verify (e.g. if both SHA-1 and SHA-256 are present, only SHA-256
@@ -135,8 +182,24 @@ class AuthenticodeFile:
               any may verify
 
             This argument has no effect when only one signature is present.
+        :param signature_types: Defines which signatures are allowed:
+
+            * 'embedded' will only consider signatures embedded in the file
+            * 'catalog' will only consider catalog files added through
+              :meth:`add_catalog`, excluding those where the current file is not
+              listed in the catalog
+            * 'catalog+' same as 'catalog', but including those catalog files where
+              the current file is not listed in the catalog, mostly affecting
+              `multi_verify_mode` when set to 'all'
+            * 'all' combines 'embedded' with 'catalog'
+            * 'all+' combines 'embedded' with 'catalog+'
+
+            Note that this affects the `multi_verify_mode` as well. Embedded signatures
+            are evaluated before catalog signatures.
+        :param expected_hashes: When provided, should be a mapping of hash names to
+            digests. This could speed up the verification process.
         :param ignore_parse_errors: Indicates how to handle :exc:`ParseError`
-            that may be raised during parsing of the signed file's certificate table.
+            that may be raised during parsing of the signed file's embedded signatures.
 
             When :const:`True`, which is the default and seems to be how Windows
             handles this as well, this will verify based on all available
@@ -149,15 +212,31 @@ class AuthenticodeFile:
             as one occurs. This often occurs before :exc:`AuthenticodeNotSignedError`
             is potentially raised.
         :return: the used structure(s) in validation, as a list of tuples, in the form
-            (signed data object, certificate chain)
+            (signed data object, indirect data object, certificate chain)
         :raises AuthenticodeVerificationError: when the verification failed
         :raises ParseError: for parse errors in the signed file
         """
 
         # we need to iterate it twice, so we need to prefetch all signed_datas
-        signed_datas = list(
-            self.iter_signed_datas(ignore_parse_errors=ignore_parse_errors)
-        )
+        # and add all catalogs in there as well
+        signed_datas: list[AuthenticodeSignedData | CertificateTrustList] = []
+        if signature_types in ("embedded", "all", "all+"):
+            signed_datas.extend(
+                self.iter_signed_datas(ignore_parse_errors=ignore_parse_errors)
+            )
+        if signature_types in ("catalog+", "all+") and self.catalogs:
+            signed_datas.extend(self.catalogs)
+        elif signature_types in ("catalog", "all") and self.catalogs:
+            # Update the expected hashes to include those used for fetching the
+            # subjects from the catalogs
+            expected_hashes = self._calculate_expected_hashes(
+                self.catalogs, expected_hashes
+            )
+            signed_datas.extend(
+                cat
+                for cat in self.catalogs
+                if self._get_subject_from_catalog(cat, expected_hashes)
+            )
 
         # if there are no signed_datas, the binary is not signed
         if not signed_datas:
@@ -179,24 +258,18 @@ class AuthenticodeFile:
                 sd for sd in signed_datas if sd.digest_algorithm == best_algorithm
             ]
 
+        # Calculate all remaining hashes, so excluding those already-provided or
+        # previously calculated for the catalog files.
         expected_hashes = self._calculate_expected_hashes(signed_datas, expected_hashes)
 
         # Now iterate over all SignedDatas
-        chains = []
+        chains: list[tuple[SignedData, IndirectData, Iterable[list[Certificate]]]] = []
         last_error = None
         assert signed_datas
         for signed_data in signed_datas:
             try:
                 chains.append(
-                    (
-                        signed_data,
-                        signed_data.verify(
-                            expected_hash=expected_hashes[
-                                signed_data.digest_algorithm().name
-                            ],
-                            **kwargs,
-                        ),
-                    )
+                    self._verify_signed_data(signed_data, expected_hashes, **kwargs)
                 )
             except Exception as e:  # noqa: PERF203
                 # best and any are interpreted as any; first doesn't matter either way,
@@ -212,6 +285,57 @@ class AuthenticodeFile:
             return chains
         raise last_error
 
+    def _verify_signed_data(
+        self,
+        signed_data: AuthenticodeSignedData | CertificateTrustList,
+        expected_hashes: dict[str, bytes],
+        **kwargs: Any,
+    ) -> tuple[SignedData, IndirectData, Iterable[list[Certificate]]]:
+        """Verifies a SignedData object, returning the object itself,
+        the :class:`IndirectData` object and the :class:`SignedData` verification
+        result (i.e. the validation chain).
+
+        If the provided object is :class:`AuthenticodeSignedData`, the verification is
+        very straightforward, using ``signed_data.indirect_data`` for validation.
+
+        If the provided object is :class:`CertificateTrustList`, the appropriate
+        subject is located, and its :class:`IndirectData` is used for validation.
+        """
+        if isinstance(signed_data, AuthenticodeSignedData):
+            return (
+                signed_data,
+                signed_data.indirect_data,
+                signed_data.verify(
+                    expected_hash=expected_hashes.get(
+                        signed_data.indirect_data.digest_algorithm().name
+                    ),
+                    **kwargs,
+                ),
+            )
+        elif isinstance(signed_data, CertificateTrustList):
+            # Attempt to find the subject by attempting to use the expected_hashes
+            # dict (find_subject allows bytes), otherwise, simply pass in self
+            subject = self._get_subject_from_catalog(signed_data, expected_hashes)
+            if subject is None or subject.indirect_data is None:
+                raise AuthenticodeNotSignedError(
+                    "The provided catalog file does not contain a hash for the provided"
+                    " subject."
+                )
+
+            # Pop the verify_additional_hashes argument from verify.
+            verify_additional_hashes = kwargs.pop("verify_additional_hashes", True)
+
+            # Validate the indirect data directly.
+            self.verify_indirect_data(
+                subject.indirect_data,
+                expected_hash=expected_hashes.get(
+                    subject.indirect_data.digest_algorithm().name
+                ),
+                verify_additional_hashes=verify_additional_hashes,
+            )
+            return signed_data, subject.indirect_data, signed_data.verify(**kwargs)
+        raise AuthenticodeNotSignedError("Unknown SignedData object passed.")
+
     def explain_verify(
         self, *args: Any, **kwargs: Any
     ) -> tuple[AuthenticodeVerificationResult, Exception | None]:
@@ -226,10 +350,27 @@ class AuthenticodeFile:
 
         return AuthenticodeVerificationResult.call(self.verify, *args, **kwargs)
 
+    def get_fingerprint(self, digest_algorithm: HashFunction) -> bytes:
+        """Gets the fingerprint for this file"""
+        raise AuthenticodeFingerprintNotProvidedError(
+            f"Fingerprint for digest algorithm {digest_algorithm.__name__} could not "
+            "be calculated and was not provided as pre-calculated expected hash."
+        )
+
+    def get_fingerprints(self, *digest_algorithms: HashFunction) -> dict[str, bytes]:
+        """Calculate multiple fingerprints at once.
+
+        This can sometimes provide a small speed-up by pre-calculating all hashes.
+        """
+        return {
+            digest_algorithm().name: self.get_fingerprint(digest_algorithm)
+            for digest_algorithm in digest_algorithms
+        }
+
     @classmethod
     def _get_needed_hashes(
         cls,
-        signed_datas: Iterable[AuthenticodeSignedData],
+        signed_datas: Iterable[SignedData],
         expected_hashes: dict[str, bytes],
     ) -> set[HashFunction]:
         """Provided the list of signed datas and already-provided hashes, returns a
@@ -249,21 +390,16 @@ class AuthenticodeFile:
         digest_algorithms = set()
         for signed_data in signed_datas:
             digest_algorithms.add(signed_data.digest_algorithm)
+            if isinstance(signed_data, CertificateTrustList):
+                digest_algorithms.add(signed_data.subject_algorithm)
 
         # Calculate which hashes are needed
         provided_hashes = {getattr(hashlib, t) for t in expected_hashes}
         return digest_algorithms - provided_hashes
 
-    def get_fingerprint(self, digest_algorithm: HashFunction) -> bytes:
-        """Gets the fingerprint for this file"""
-        raise AuthenticodeFingerprintNotProvidedError(
-            f"Fingerprint for digest algorithm {digest_algorithm.__name__} could not "
-            "be calculated and was not provided as pre-calculated expected hash."
-        )
-
     def _calculate_expected_hashes(
         self,
-        signed_datas: Iterable[AuthenticodeSignedData],
+        signed_datas: Iterable[SignedData],
         expected_hashes: dict[str, bytes] | None = None,
     ) -> dict[str, bytes]:
         """Calculates the expected hashes that are needed for verification. This
@@ -278,16 +414,59 @@ class AuthenticodeFile:
         if expected_hashes is None:
             expected_hashes = {}
 
-        # Calculate the needed hashes
-        for digest_algorithm in self._get_needed_hashes(signed_datas, expected_hashes):
-            fingerprint = self.get_fingerprint(digest_algorithm)
-            expected_hashes[digest_algorithm().name] = fingerprint
-        return expected_hashes
+        return expected_hashes | self.get_fingerprints(
+            *self._get_needed_hashes(signed_datas, expected_hashes)
+        )
 
-    def verify_additional_hashes(self, signed_data: AuthenticodeSignedData) -> None:
-        """Verifies additional hashes that may be present in the
-        :class:`AuthenticodeSignedData` referencing this data. Return :const:`None`
-        when the verification succeeds, or raises an error otherwise.
+    def _get_subject_from_catalog(
+        self, catalog: CertificateTrustList, expected_hashes: dict[str, bytes]
+    ) -> CertificateTrustSubject | None:
+        """Gets the CertificateTrustSubject from the CertificateTrustList, taking
+        the already-provided hashes into account.
+        """
+        return catalog.find_subject(
+            expected_hashes.get(catalog.subject_algorithm().name, self)
+        )
+
+    def verify_indirect_data(
+        self,
+        indirect_data: IndirectData,
+        *,
+        expected_hash: bytes | None = None,
+        verify_additional_hashes: bool = True,
+    ) -> None:
+        """Verifies the provided IndirectData against the current file.
+
+        If no expected hash is provided, the hash is calculated by calling
+        :meth:`get_fingerprint` with the appropriate algorithm.
+
+        Then, this function will simply verify that the expected hash matches that
+        in the provided :class:`IndirectData`.
+
+        Finally, this function calls :meth:`verify_additional_hashes` if requested.
+
+        :param expected_hash: The expected hash digest of the :class:`AuthenticodeFile`.
+        :param verify_additional_hashes: Defines whether additional hashes, should
+            be verified, such as page hashes for PE files and extended digests for
+            MSI files.
+        """
+        # Check that the hashes are correct
+        # 1. The hash of the file
+        if expected_hash is None:
+            expected_hash = self.get_fingerprint(indirect_data.digest_algorithm)
+
+        if expected_hash != indirect_data.digest:
+            raise AuthenticodeInvalidDigestError(
+                "The expected hash does not match the digest in the indirect data."
+            )
+
+        if verify_additional_hashes:
+            self.verify_additional_hashes(indirect_data)
+
+    def verify_additional_hashes(self, indirect_data: IndirectData) -> None:
+        """Verifies additional hashes that may be present in the :class:`IndirectData`
+        referencing this data. Return :const:`None` when the verification succeeds, or
+        raises an error otherwise.
 
         The default implementation is to do nothing.
         """

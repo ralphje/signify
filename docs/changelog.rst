@@ -4,9 +4,22 @@ This page contains the most significant changes in Signify between each release.
 
 v0.9.0 (unreleased)
 -------------------
+* Added support for verifying catalog (.cat) files and CTL (.stl) files.
+* Added support for validation using external catalog files containing (additional)
+  signatures.
+* Added support for verifying flat images (i.e. non-Authenticode files) using
+  these external signatures.
+
+* Moved validation of a signature's ``IndirectData`` to
+  ``AuthenticodeFile.verify_indirect_data``, although ``AuthenticodeSignedData`` retains
+  its capabilities if ``expected_hash`` is provided and ``signed_file`` is unavailable.
 * Move concrete implementations of file types to a separate module with dynamic
   detection, and remove various concrete implementations as imports from
   ``signify.authenticode``.
+* Moved various structures out of ``signify.authenticode.structures`` and
+  ``signify.authenticode`` to prevent circular imports. These are now split across
+  multiple files. While doing so, some other files were renamed as well.
+* Improved parsing of ``CertificateTrustList`` attributes.
 * Rename ``AuthenticodeFile.detect`` to ``AuthenticodeFile.from_stream``
 * Optimize ``SignedPEFingerprinter`` to use the current instance of ``SignedPEFile``.
 * Add support for passing ``OleFileIO`` directly into ``SignedMsiFile``
