@@ -30,7 +30,7 @@ class ContextTestCase(unittest.TestCase):
             "rb",
         ) as f:
             pefile = SignedPEFile(f)
-            for signed_data in pefile.signed_datas:
+            for signed_data in pefile.embedded_signatures:
                 context = VerificationContext(
                     TRUSTED_CERTIFICATE_STORE_NO_CTL, signed_data.certificates
                 )

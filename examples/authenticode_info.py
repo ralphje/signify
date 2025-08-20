@@ -9,7 +9,7 @@ from typing import Any
 
 from signify.authenticode import AuthenticodeFile, CertificateTrustList
 from signify.authenticode.indirect_data import IndirectData
-from signify.authenticode.signed_data import AuthenticodeSignedData
+from signify.authenticode.signed_data import AuthenticodeSignature
 from signify.authenticode.signer_info import AuthenticodeSignerInfo
 from signify.authenticode.tsp import RFC3161SignedData
 from signify.pkcs7 import SignerInfo, SignedData
@@ -184,7 +184,7 @@ def describe_signed_data(signed_data: SignedData):
         f"Content type: {signed_data.content_type}",
     ]
 
-    if isinstance(signed_data, AuthenticodeSignedData) and signed_data.indirect_data:
+    if isinstance(signed_data, AuthenticodeSignature) and signed_data.indirect_data:
         result += [
             "",
             "Indirect Data:",
@@ -241,7 +241,7 @@ def describe_signed_data(signed_data: SignedData):
             ),
         ]
 
-    if isinstance(signed_data, AuthenticodeSignedData):
+    if isinstance(signed_data, (AuthenticodeSignature, CertificateTrustList)):
         verify_result, e = signed_data.explain_verify()
         result += ["", str(verify_result)]
         if e:
@@ -258,13 +258,14 @@ def main(*filenames: str):
         with pathlib.Path(filename).open("rb") as file_obj:
             try:
                 signed_file = AuthenticodeFile.from_stream(file_obj)
-                for signed_data in signed_file.signed_datas:
+                for signed_data in signed_file.signatures:
                     print(indent_text(*describe_signed_data(signed_data), indent=4))
                     print("--------")
 
                 result, e = signed_file.explain_verify()
                 print(result)
                 if e:
+                    raise e
                     print(repr(e))
 
             except Exception as e:

@@ -45,7 +45,7 @@ from typing_extensions import TypedDict
 
 from signify._typing import HashFunction
 from signify.authenticode.indirect_data import IndirectData, PeImageData
-from signify.authenticode.signed_data import AuthenticodeSignedData
+from signify.authenticode.signed_data import AuthenticodeSignature
 from signify.exceptions import AuthenticodeInvalidPageHashError, SignedPEParseError
 from signify.fingerprinter import Fingerprinter, Range
 
@@ -323,9 +323,9 @@ class SignedPEFile(AuthenticodeFile):
         fingerprinter.add_signed_pe_hashers(*digest_algorithms)
         return fingerprinter.hashes()["authentihash"]
 
-    def iter_signed_datas(
+    def iter_embedded_signatures(
         self, *, include_nested: bool = True, ignore_parse_errors: bool = True
-    ) -> Iterator[AuthenticodeSignedData]:
+    ) -> Iterator[AuthenticodeSignature]:
         try:
             found = False
             for certificate in self._parse_cert_table():
@@ -335,7 +335,7 @@ class SignedPEFile(AuthenticodeFile):
                     )
 
                 if certificate["type"] == 2:
-                    signed_data = AuthenticodeSignedData.from_envelope(
+                    signed_data = AuthenticodeSignature.from_envelope(
                         certificate["certificate"], signed_file=self
                     )
                     if include_nested:

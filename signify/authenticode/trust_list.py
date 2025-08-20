@@ -71,7 +71,7 @@ class CertificateTrustList(AuthenticodeExplainVerifyMixin, SignedData):
 
     def iter_recursive_nested(self) -> Iterator[CertificateTrustList]:
         """Returns an iterator over the current object. Included for compatibility
-        with :class:`AuthenticodeSignedData`.
+        with :class:`AuthenticodeSignature`.
         """
         yield self
 

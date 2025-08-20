@@ -69,7 +69,7 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             pefile = SignedPEFile(f)
 
             # This should not raise any errors.
-            signed_datas = list(pefile.signed_datas)
+            signed_datas = list(pefile.embedded_signatures)
             # There may be multiple of these, if the windows binary was signed multiple
             # times, e.g. by different entities. Each of them adds a complete SignedData
             # blob to the binary. For our sample, there is only one blob.
@@ -84,7 +84,7 @@ class AuthenticodeParserTestCase(unittest.TestCase):
     def test_pciide(self):
         with open(str(root_dir / "test_data" / "pciide.sys"), "rb") as f:
             pefile = SignedPEFile(f)
-            signed_datas = list(pefile.signed_datas)
+            signed_datas = list(pefile.embedded_signatures)
             self.assertEqual(len(signed_datas), 1)
             signed_data = signed_datas[0]
             signed_data.verify()
@@ -96,7 +96,7 @@ class AuthenticodeParserTestCase(unittest.TestCase):
         data[1024] = 3
         bt = io.BytesIO(data)
         pefile = SignedPEFile(bt)
-        signed_datas = list(pefile.signed_datas)
+        signed_datas = list(pefile.embedded_signatures)
         self.assertEqual(len(signed_datas), 1)
         self.assertRaises(AuthenticodeVerificationError, signed_datas[0].verify)
         self.assertRaises(AuthenticodeVerificationError, pefile.verify)
@@ -108,7 +108,7 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             self.assertRaises(
                 SignedPEParseError,
                 list,
-                pefile.iter_signed_datas(ignore_parse_errors=False),
+                pefile.iter_embedded_signatures(ignore_parse_errors=False),
             )
 
     def test_2A6E(self):
@@ -182,7 +182,7 @@ class AuthenticodeParserTestCase(unittest.TestCase):
             str(root_dir / "test_data" / "software_reporter_tool.exe"), "rb"
         ) as f:
             pefile = SignedPEFile(f)
-            signed_datas = list(pefile.signed_datas)
+            signed_datas = list(pefile.embedded_signatures)
             self.assertEqual(len(signed_datas), 1)
             signed_data = signed_datas[0]
             signed_data.verify()
@@ -216,7 +216,9 @@ class AuthenticodeParserTestCase(unittest.TestCase):
 
             # test that the signing time is correct in this case
             self.assertEqual(
-                list(pefile.signed_datas)[0].signer_info.countersigner.signing_time,
+                list(pefile.embedded_signatures)[
+                    0
+                ].signer_info.countersigner.signing_time,
                 datetime.datetime(
                     2019, 12, 11, 8, 40, 17, 750_000, tzinfo=datetime.timezone.utc
                 ),
@@ -265,7 +267,7 @@ class AuthenticodeParserTestCase(unittest.TestCase):
         """this tests a sample that has two signed datas, that are both valid"""
         with open(str(root_dir / "test_data" / "sigcheck.exe"), "rb") as f:
             pefile = SignedPEFile(f)
-            self.assertEqual(len(list(pefile.signed_datas)), 2)
+            self.assertEqual(len(list(pefile.embedded_signatures)), 2)
 
             for mode in ("all", "first", "any", "best"):
                 with self.subTest(multi_verify_mode=mode):
@@ -401,7 +403,7 @@ class P7XTestCase(unittest.TestCase):
             "rb",
         ) as f:
             p7xfile = AuthenticodeFile.from_stream(f)
-            signed_data = list(p7xfile.signed_datas)[0]
+            signed_data = list(p7xfile.embedded_signatures)[0]
             self.assertEqual(signed_data.signed_file, p7xfile)
 
 

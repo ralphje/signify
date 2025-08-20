@@ -49,11 +49,11 @@ from signify.pkcs7 import SignedData
 from signify.x509 import Certificate, CertificateStore, VerificationContext
 
 if TYPE_CHECKING:
-    from signify.authenticode import indirect_data, signed_file
+    from signify.authenticode import signed_file
     from signify.authenticode.signer_info import AuthenticodeSignerInfo
 
 
-class AuthenticodeSignedData(AuthenticodeExplainVerifyMixin, SignedData):
+class AuthenticodeSignature(AuthenticodeExplainVerifyMixin, SignedData):
     """The :class:`signify.pkcs7.SignedData` structure for Authenticode. It holds the
     same information as its superclass, with additionally the :class:`IndirectData`.
     """
@@ -91,7 +91,7 @@ class AuthenticodeSignedData(AuthenticodeExplainVerifyMixin, SignedData):
 
     @property
     def content(self) -> IndirectData:
-        """The indirect data content of this :class:`AuthenticodeSignedData` object."""
+        """The indirect data content of this :class:`AuthenticodeSignature` object."""
         return IndirectData(self.content_asn1)
 
     @property
@@ -99,9 +99,9 @@ class AuthenticodeSignedData(AuthenticodeExplainVerifyMixin, SignedData):
         """Alias for :attr:`content`"""
         return self.content
 
-    def iter_recursive_nested(self) -> Iterator[AuthenticodeSignedData]:
-        """Returns an iterator over :class:`AuthenticodeSignedData` objects, including
-        the current one, but also any nested :class:`AuthenticodeSignedData`
+    def iter_recursive_nested(self) -> Iterator[AuthenticodeSignature]:
+        """Returns an iterator over :class:`AuthenticodeSignature` objects, including
+        the current one, but also any nested :class:`AuthenticodeSignature`
         objects in the :class:`AuthenticodeSignerInfo` structure.
 
         See :attr:`AuthenticodeSignerInfo.nested_signed_datas`
@@ -170,7 +170,7 @@ class AuthenticodeSignedData(AuthenticodeExplainVerifyMixin, SignedData):
         :class:`SignedData`:
 
         * Verifies that the digest algorithms match across the structure
-          (:class:`SpcInfo`, :class:`AuthenticodeSignedData` and
+          (:class:`SpcInfo`, :class:`AuthenticodeSignature` and
           :class:`AuthenticodeSignerInfo` must have the same)
         * Ensures that the hash in :attr:`SpcInfo.digest` matches the expected hash.
           If no expected hash is provided to this function, it is calculated using

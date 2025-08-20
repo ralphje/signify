@@ -11,7 +11,7 @@ from signify.pkcs7 import CounterSignerInfo, SignerInfo
 from signify.x509 import Certificate, VerificationContext
 
 if TYPE_CHECKING:
-    from signify.authenticode.signed_data import AuthenticodeSignedData
+    from signify.authenticode.signed_data import AuthenticodeSignature
 
 
 class AuthenticodeCounterSignerInfo(CounterSignerInfo):
@@ -29,7 +29,7 @@ class AuthenticodeSignerInfo(RFC3161SignerInfoMixin, SignerInfo):
     :class:`SignerInfo`, but may also contain a :class:`RFC3161SignedData` class.
     """
 
-    parent: AuthenticodeSignedData
+    parent: AuthenticodeSignature
 
     _singular_authenticated_attributes = (
         *SignerInfo._singular_authenticated_attributes,
@@ -99,7 +99,7 @@ class AuthenticodeSignerInfo(RFC3161SignerInfoMixin, SignerInfo):
         )
 
     @property
-    def nested_signed_datas(self) -> list[AuthenticodeSignedData]:
+    def nested_signed_datas(self) -> list[AuthenticodeSignature]:
         """It is possible for Authenticode SignerInfo objects to contain nested
         :class:`signify.pkcs7.SignedData` objects. This is  similar to including
         multiple SignedData structures in the
@@ -107,7 +107,7 @@ class AuthenticodeSignerInfo(RFC3161SignerInfoMixin, SignerInfo):
 
         This field is extracted from the unauthenticated attributes.
         """
-        from signify.authenticode.signed_data import AuthenticodeSignedData
+        from signify.authenticode.signed_data import AuthenticodeSignature
 
         if "microsoft_nested_signature" not in self.unauthenticated_attributes:
             return []
@@ -122,7 +122,7 @@ class AuthenticodeSignerInfo(RFC3161SignerInfoMixin, SignerInfo):
                     "Nested signature is not a SignedData structure"
                 )
             result.append(
-                AuthenticodeSignedData(
+                AuthenticodeSignature(
                     sig_data["content"], signed_file=self.parent.signed_file
                 )
             )

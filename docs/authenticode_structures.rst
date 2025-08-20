@@ -8,7 +8,7 @@ may help:
 
 .. image:: http://yuml.me/f68f2b83.svg
 
-.. autoclass:: signify.authenticode.signed_data.AuthenticodeSignedData
+.. autoclass:: signify.authenticode.AuthenticodeSignature
    :members:
    :special-members: __init__
 

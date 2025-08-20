@@ -10,19 +10,28 @@ v0.9.0 (unreleased)
 * Added support for verifying flat images (i.e. non-Authenticode files) using
   these external signatures.
 
+* Added ``AuthenticodeFile.iter_signatures`` and ``.signatures`` to iterate over all
+  available signatures (embedded and catalogs). You can specify which of these
+  signature types to use for validation in ``.validate``.
+* Added ``AuthenticodeFile.verify_signature`` to check a signature (embedded or
+  catalog). Use this instead of ``signature.verify``.
+* Renamed ``AuthenticodeSignedData`` to ``AuthenticodeSignature``.
+* Renamed ``AuthenticodeFile.iter_signed_datas`` and ``.signed_datas`` to
+  ``AuthenticodeFile.iter_embedded_signatures`` and ``.embedded_signatures``,
+  respectively.
+* Renamed ``AuthenticodeFile.detect`` to ``AuthenticodeFile.from_stream``
 * Moved validation of a signature's ``IndirectData`` to
   ``AuthenticodeFile.verify_indirect_data``, although ``AuthenticodeSignedData`` retains
   its capabilities if ``expected_hash`` is provided and ``signed_file`` is unavailable.
 * Move concrete implementations of file types to a separate module with dynamic
   detection, and remove various concrete implementations as imports from
   ``signify.authenticode``.
-* Moved various structures out of ``signify.authenticode.structures`` and
-  ``signify.authenticode`` to prevent circular imports. These are now split across
-  multiple files. While doing so, some other files were renamed as well.
+* Moved various structures out of ``signify.authenticode.structures`` and direct imports
+  out of ``signify.authenticode`` to prevent circular imports. These are now split
+  across multiple files. While doing so, some other files were renamed as well.
 * Improved parsing of ``CertificateTrustList`` attributes.
-* Rename ``AuthenticodeFile.detect`` to ``AuthenticodeFile.from_stream``
+* Add support for passing ``OleFileIO`` directly into ``SignedMsiFile``.
 * Optimize ``SignedPEFingerprinter`` to use the current instance of ``SignedPEFile``.
-* Add support for passing ``OleFileIO`` directly into ``SignedMsiFile``
 
 v0.8.1 (2025-08-16)
 -------------------

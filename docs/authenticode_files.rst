@@ -175,7 +175,7 @@ but can be used more widely.
 
 Both files can be checked, although the content of the file is simply signed by using
 a generic SignedData object, and there's no indirect data that contains an additional
-signature. That's why this file format does not return ``AuthenticodeSignedData``
+signature. That's why this file format does not return ``AuthenticodeSignature``
 objects, but rather a different subclass of ``SignedData``.
 
 .. autoclass:: CtlFile
@@ -198,16 +198,16 @@ flat file. Then you can add a catalog and verify the file::
    :members:
    :special-members: __init__
 
-Signed Data File (.p7x)
------------------------
+Signature File (.p7x)
+---------------------
 Simple transparent AuthenticodeFile class that operates on an already-parsed
-:class:`signify.authenticode.AuthenticodeSignedData`. This can be used in places where
+:class:`signify.authenticode.AuthenticodeSignature`. This can be used in places where
 the parsed SignedData object is present, but the original file is no longer present,
 or for parsing P7X files.
 
 Note that this subclass does not know what content to hash or how to hash it, and so
 has only limited use.
 
-.. autoclass:: AuthenticodeSignedDataFile
+.. autoclass:: AuthenticodeSignatureFile
    :members:
    :special-members: __init__

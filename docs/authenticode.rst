@@ -23,7 +23,7 @@ If you need to get more information about the signature, you can use this::
 
     with open("file.exe", "rb") as f:
         signed_file = AuthenticodeFile.from_stream(f)
-        for signed_data in signed_file.signed_datas:
+        for signed_data in signed_file.signatures:
             print(signed_data.signer_info.program_name)
             if signed_data.signer_info.countersigner is not None:
                 print(signed_data.signer_info.countersigner.signing_time)
@@ -94,7 +94,7 @@ unauthenticated attribute with *microsoft_time_stamp_token* (OID
 ``1.3.6.1.4.1.311.3.3.1``), is added as nested :class:`authenticode.pkcs7.SignedData`
 object.
 
-This is transparently handled by the :attr:`AuthenticodeSignedData.countersigner`
+This is transparently handled by the :attr:`AuthenticodeSignature.countersigner`
 attribute, but note that this attribute can return two different types.
 
 Nested signatures
@@ -104,8 +104,9 @@ can also be nested in others as unauthenticated attributes with
 *microsoft_nested_signature* (OID ``1.3.6.1.4.1.311.2.4.1``).
 
 This is transparently handled by the
-:meth:`AuthenticodeSignedData.iter_recursive_nested` and
-:meth:`AuthenticodeFile.iter_signed_datas` (with ``included_nested=True``) methods.
+:meth:`AuthenticodeSignature.iter_recursive_nested` and
+:meth:`AuthenticodeFile.iter_embedded_signatures` (with ``included_nested=True``)
+methods.
 
 Additional attributes and extensions
 ####################################
@@ -149,7 +150,7 @@ implementation, such as :class:`signify.authenticode.signed_file.SignedPeFile` o
 :class:`signify.authenticode.signed_file.SignedMsiFile` will be returned, implementing
 the same interface.
 
-This generic interface allows access to zero or more :class:`AuthenticodeSignedData`
+This generic interface allows access to zero or more :class:`AuthenticodeSignature`
 objects, and allows validation of the signature.
 
 .. autoclass:: AuthenticodeFile

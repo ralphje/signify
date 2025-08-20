@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from typing import BinaryIO
 
 from signify._typing import HashFunction
-from signify.authenticode.signed_data import AuthenticodeSignedData
+from signify.authenticode.signed_data import AuthenticodeSignature
 from signify.fingerprinter import Fingerprinter
 
 from .base import AuthenticodeFile
@@ -33,7 +33,7 @@ class FlatFile(AuthenticodeFile):
         fingerprinter.add_hashers(*digest_algorithms)
         return fingerprinter.hashes()["generic"]
 
-    def iter_signed_datas(
+    def iter_embedded_signatures(
         self, *, include_nested: bool = True, ignore_parse_errors: bool = True
-    ) -> Iterator[AuthenticodeSignedData]:
+    ) -> Iterator[AuthenticodeSignature]:
         yield from []

@@ -13,7 +13,7 @@ from signify._typing import HashFunction
 from signify.asn1.hashing import ACCEPTED_DIGEST_ALGORITHMS
 from signify.authenticode.indirect_data import IndirectData
 from signify.authenticode.signed_data import (
-    AuthenticodeSignedData,
+    AuthenticodeSignature,
 )
 from signify.authenticode.trust_list import (
     CertificateTrustList,
@@ -117,41 +117,101 @@ class AuthenticodeFile:
             self.catalogs = (*self.catalogs, catalog_)
 
     @property
-    def signed_datas(self) -> Iterator[AuthenticodeSignedData]:
-        """Returns an iterator over :class:`AuthenticodeSignedData` objects relevant for
-        this file. See :meth:`iter_signed_datas`
+    def embedded_signatures(self) -> Iterator[AuthenticodeSignature]:
+        """Returns an iterator over :class:`AuthenticodeSignature` objects relevant for
+        this file. See :meth:`iter_embedded_signatures`
         """
 
-        yield from self.iter_signed_datas()
+        yield from self.iter_embedded_signatures()
 
-    def iter_signed_datas(
+    def iter_embedded_signatures(
         self, *, include_nested: bool = True, ignore_parse_errors: bool = True
-    ) -> Iterator[AuthenticodeSignedData]:
-        """Returns an iterator over :class:`AuthenticodeSignedData` objects relevant
-        for this Authenticode-signed file.
+    ) -> Iterator[AuthenticodeSignature]:
+        """Returns an iterator over :class:`AuthenticodeSignature` objects embedded
+        in this Authenticode-signed file.
 
         :param include_nested: Boolean, if True, will also iterate over all nested
             SignedData structures
         :param ignore_parse_errors: Indicates how to handle
             :exc:`ParseError` that may be raised while fetching
-            embedded :class:`AuthenticodeSignedData` structures.
+            embedded :class:`AuthenticodeSignature` structures.
 
             When :const:`True`,  which is the default and seems to be how Windows
             handles this as well, this will fetch as many valid
-            :class:`AuthenticodeSignedData` structures until an exception
+            :class:`AuthenticodeSignature` structures until an exception
             occurs.
 
             Note that this will also silence the :exc:`ParseError` that occurs
-            when there's no valid :class:`AuthenticodeSignedData` to fetch.
+            when there's no valid :class:`AuthenticodeSignature` to fetch.
 
             When :const:`False`, this will raise the :exc:`ParseError` as
             soon as one occurs.
         :raises ParseError: For parse errors in the signed file
         :raises signify.authenticode.AuthenticodeParseError: For parse errors in the
             SignedData
-        :return: iterator of signify.authenticode.SignedData
         """
         raise NotImplementedError
+
+    @property
+    def signatures(self) -> Iterator[AuthenticodeSignature | CertificateTrustList]:
+        """Returns an iterator over :class:`AuthenticodeSignature` objects embedded
+        in this Authenticode-signed file and :class:`CertificateTrustList` objects
+        with signatures for this file. See :meth:`iter_signatures`
+        """
+
+        yield from self.iter_signatures()
+
+    def iter_signatures(
+        self,
+        *,
+        signature_types: Literal[
+            "all", "all+", "catalog", "catalog+", "embedded"
+        ] = "all",
+        expected_hashes: dict[str, bytes] | None = None,
+        include_nested: bool = True,
+        ignore_parse_errors: bool = True,
+    ) -> Iterator[AuthenticodeSignature | CertificateTrustList]:
+        """Returns an iterator over :class:`AuthenticodeSignature` objects embedded
+        in this Authenticode-signed file and :class:`CertificateTrustList` objects
+        with signatures for this file.
+
+        :param signature_types: Defines which signatures are allowed:
+
+            * 'embedded' will only consider signatures embedded in the file
+            * 'catalog' will only consider catalog files added through
+              :meth:`add_catalog`, excluding those where the current file is not
+              listed in the catalog
+            * 'catalog+' same as 'catalog', but including those catalog files where
+              the current file is not listed in the catalog, mostly affecting
+              `multi_verify_mode` when set to 'all'
+            * 'all' combines 'embedded' with 'catalog'
+            * 'all+' combines 'embedded' with 'catalog+'
+
+            Note that this affects the `multi_verify_mode` as well. Embedded signatures
+            are evaluated before catalog signatures.
+        :param expected_hashes: When provided, should be a mapping of hash names to
+            digests. This is used when using 'catalog' or 'all'. The dictionary is
+            updated to reflect newly-retrieved hashes.
+        :param include_nested: See :meth:`iter_embedded_signatures`
+        :param ignore_parse_errors: See :meth:`iter_embedded_signatures`
+        :raises AuthenticodeVerificationError: when the verification failed
+        :raises ParseError: for parse errors in the signed file
+        """
+        if signature_types in ("embedded", "all", "all+"):
+            yield from self.iter_embedded_signatures(
+                ignore_parse_errors=ignore_parse_errors, include_nested=include_nested
+            )
+        if signature_types in ("catalog+", "all+") and self.catalogs:
+            yield from self.catalogs
+        elif signature_types in ("catalog", "all") and self.catalogs:
+            # Update the expected hashes to include those used for fetching the
+            # subjects from the catalogs
+            expected_hashes = self._calculate_expected_hashes(
+                self.catalogs, expected_hashes
+            )
+            for catalog in self.catalogs:
+                if self._get_subject_from_catalog(catalog, expected_hashes):
+                    yield catalog
 
     def verify(
         self,
@@ -163,12 +223,12 @@ class AuthenticodeFile:
         expected_hashes: dict[str, bytes] | None = None,
         ignore_parse_errors: bool = True,
         **kwargs: Any,
-    ) -> list[tuple[SignedData, IndirectData, Iterable[list[Certificate]]]]:
+    ) -> list[tuple[SignedData, IndirectData | None, Iterable[list[Certificate]]]]:
         """Verifies the SignedData structures. This is a little bit more efficient than
         calling all verify-methods separately.
 
         :param multi_verify_mode: Indicates how to verify when there are multiple
-            :class:`AuthenticodeSignedData` objects in this file. Can be:
+            :class:`AuthenticodeSignature` objects in this file. Can be:
 
             * 'any' (default) to indicate that any of the signatures must validate
               correctly.
@@ -203,10 +263,10 @@ class AuthenticodeFile:
 
             When :const:`True`, which is the default and seems to be how Windows
             handles this as well, this will verify based on all available
-            :class:`AuthenticodeSignedData` before a parse error occurs.
+            :class:`AuthenticodeSignature` before a parse error occurs.
 
             :exc:`AuthenticodeNotSignedError` will be raised when no valid
-            :class:`AuthenticodeSignedData` exists.
+            :class:`AuthenticodeSignature` exists.
 
             When :const:`False`, this will raise the :exc:`ParseError` as soon
             as one occurs. This often occurs before :exc:`AuthenticodeNotSignedError`
@@ -218,29 +278,17 @@ class AuthenticodeFile:
         """
 
         # we need to iterate it twice, so we need to prefetch all signed_datas
-        # and add all catalogs in there as well
-        signed_datas: list[AuthenticodeSignedData | CertificateTrustList] = []
-        if signature_types in ("embedded", "all", "all+"):
-            signed_datas.extend(
-                self.iter_signed_datas(ignore_parse_errors=ignore_parse_errors)
+        signed_datas = list(
+            self.iter_signatures(
+                signature_types=signature_types,
+                expected_hashes=expected_hashes,
+                ignore_parse_errors=ignore_parse_errors,
             )
-        if signature_types in ("catalog+", "all+") and self.catalogs:
-            signed_datas.extend(self.catalogs)
-        elif signature_types in ("catalog", "all") and self.catalogs:
-            # Update the expected hashes to include those used for fetching the
-            # subjects from the catalogs
-            expected_hashes = self._calculate_expected_hashes(
-                self.catalogs, expected_hashes
-            )
-            signed_datas.extend(
-                cat
-                for cat in self.catalogs
-                if self._get_subject_from_catalog(cat, expected_hashes)
-            )
+        )
 
         # if there are no signed_datas, the binary is not signed
         if not signed_datas:
-            raise AuthenticodeNotSignedError("No valid SignedData structure was found.")
+            raise AuthenticodeNotSignedError("No signature was found.")
 
         # only consider the first signed_data; by selecting it here we prevent
         # calculating more hashes than needed
@@ -263,13 +311,17 @@ class AuthenticodeFile:
         expected_hashes = self._calculate_expected_hashes(signed_datas, expected_hashes)
 
         # Now iterate over all SignedDatas
-        chains: list[tuple[SignedData, IndirectData, Iterable[list[Certificate]]]] = []
+        chains: list[
+            tuple[SignedData, IndirectData | None, Iterable[list[Certificate]]]
+        ] = []
         last_error = None
         assert signed_datas
         for signed_data in signed_datas:
             try:
                 chains.append(
-                    self._verify_signed_data(signed_data, expected_hashes, **kwargs)
+                    self.verify_signature(
+                        signed_data, expected_hashes=expected_hashes, **kwargs
+                    )
                 )
             except Exception as e:  # noqa: PERF203
                 # best and any are interpreted as any; first doesn't matter either way,
@@ -285,23 +337,24 @@ class AuthenticodeFile:
             return chains
         raise last_error
 
-    def _verify_signed_data(
+    def verify_signature(
         self,
-        signed_data: AuthenticodeSignedData | CertificateTrustList,
+        signed_data: AuthenticodeSignature | CertificateTrustList,
+        *,
         expected_hashes: dict[str, bytes],
         **kwargs: Any,
-    ) -> tuple[SignedData, IndirectData, Iterable[list[Certificate]]]:
+    ) -> tuple[SignedData, IndirectData | None, Iterable[list[Certificate]]]:
         """Verifies a SignedData object, returning the object itself,
         the :class:`IndirectData` object and the :class:`SignedData` verification
         result (i.e. the validation chain).
 
-        If the provided object is :class:`AuthenticodeSignedData`, the verification is
+        If the provided object is :class:`AuthenticodeSignature`, the verification is
         very straightforward, using ``signed_data.indirect_data`` for validation.
 
         If the provided object is :class:`CertificateTrustList`, the appropriate
         subject is located, and its :class:`IndirectData` is used for validation.
         """
-        if isinstance(signed_data, AuthenticodeSignedData):
+        if isinstance(signed_data, AuthenticodeSignature):
             return (
                 signed_data,
                 signed_data.indirect_data,
@@ -389,7 +442,8 @@ class AuthenticodeFile:
         # Calculate which hashes we require for the signedinfos
         digest_algorithms = set()
         for signed_data in signed_datas:
-            digest_algorithms.add(signed_data.digest_algorithm)
+            if isinstance(signed_data, AuthenticodeSignature):
+                digest_algorithms.add(signed_data.indirect_data.digest_algorithm)
             if isinstance(signed_data, CertificateTrustList):
                 digest_algorithms.add(signed_data.subject_algorithm)
 

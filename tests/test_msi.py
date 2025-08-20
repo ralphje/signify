@@ -62,7 +62,7 @@ class SignedMsiTestCase(unittest.TestCase):
             )
 
             msi_file = SignedMsiFile(f)
-            signed_datas = list(msi_file.signed_datas)
+            signed_datas = list(msi_file.embedded_signatures)
             self.assertEqual(len(signed_datas), 1)
             signed_data = signed_datas[0]
 

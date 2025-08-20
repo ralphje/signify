@@ -2,11 +2,11 @@ from .base import AuthenticodeFile
 from .ctl import CtlFile
 from .flat import FlatFile
 from .pe import SignedPEFile, SignedPEFingerprinter
-from .signed_data import AuthenticodeSignedDataFile
+from .signature import AuthenticodeSignatureFile
 
 __all__ = [
     "AuthenticodeFile",
-    "AuthenticodeSignedDataFile",
+    "AuthenticodeSignatureFile",
     "CtlFile",
     "FlatFile",
     "SignedPEFile",

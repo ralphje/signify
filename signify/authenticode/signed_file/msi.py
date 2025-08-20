@@ -15,7 +15,7 @@ from olefile.olefile import (
 
 from signify._typing import HashFunction, HashObject
 from signify.authenticode.indirect_data import IndirectData
-from signify.authenticode.signed_data import AuthenticodeSignedData
+from signify.authenticode.signed_data import AuthenticodeSignature
 from signify.exceptions import (
     AuthenticodeInvalidExtendedDigestError,
     AuthenticodeNotSignedError,
@@ -95,9 +95,9 @@ class SignedMsiFile(AuthenticodeFile):
         self._hash_storage_entry(self._ole_file.root, hasher)
         return hasher.digest()
 
-    def iter_signed_datas(
+    def iter_embedded_signatures(
         self, *, include_nested: bool = True, ignore_parse_errors: bool = True
-    ) -> Iterator[AuthenticodeSignedData]:
+    ) -> Iterator[AuthenticodeSignature]:
         try:
             if not self._ole_file.exists(DIGITAL_SIGNATURE_ENTRY_NAME):
                 raise AuthenticodeNotSignedError(
@@ -107,7 +107,7 @@ class SignedMsiFile(AuthenticodeFile):
             with self._ole_file.openstream(DIGITAL_SIGNATURE_ENTRY_NAME) as fh:
                 b_data = fh.read()
 
-            signed_data = AuthenticodeSignedData.from_envelope(b_data, signed_file=self)
+            signed_data = AuthenticodeSignature.from_envelope(b_data, signed_file=self)
             if include_nested:
                 yield from signed_data.iter_recursive_nested()
             else:
