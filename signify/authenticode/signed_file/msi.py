@@ -34,7 +34,8 @@ class SignedMsiFile(AuthenticodeFile):
 
     def __init__(self, file_obj: BinaryIO | OleFileIO):
         """
-        :param file_obj: An MSI file opened in binary mode, or a OleFileIO object.
+        :param file_obj: An MSI file opened in binary mode, or a
+            :class:`olefile.OleFileIO` object.
         """
 
         if isinstance(file_obj, OleFileIO):

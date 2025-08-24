@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import datetime
 import importlib
 from collections.abc import Iterable, Sequence
 from functools import cached_property
@@ -12,7 +11,7 @@ from typing_extensions import Self
 
 from signify._typing import HashFunction
 from signify.asn1.hashing import _get_digest_algorithm
-from signify.exceptions import CounterSignerError, InvalidDigestError, ParseError
+from signify.exceptions import InvalidDigestError, ParseError
 from signify.pkcs7 import signer_info
 from signify.x509.certificates import Certificate
 from signify.x509.context import CertificateStore, VerificationContext

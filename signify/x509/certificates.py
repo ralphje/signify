@@ -26,7 +26,7 @@ AlgorithmIdentifier = collections.namedtuple(
 
 
 class Certificate:
-    """Representation of a Certificate. It is built from an ASN.1 structure."""
+    """Representation of a certificate. It is built from an ASN.1 structure."""
 
     asn1: asn1crypto.x509.Certificate
 
@@ -190,12 +190,11 @@ class Certificate:
         algorithm. Supports RSA and EC keys. Note that not all hashing algorithms
         are supported.
 
-        :param bytes signature: The signature to verify
-        :param bytes data: The data that must be verified
-        :type algorithm: a hashlib function
+        :param signature: The signature to verify
+        :param data: The data that must be verified
         :param algorithm: The hashing algorithm to use
-        :param bool allow_legacy: If True, allows a legacy signature verification.
-            This method is intended for the case where the encryptedDigest does not
+        :param allow_legacy: If :const:`True`, allows legacy signature verification.
+            This method is intended for the case where the ``signature`` does not
             contain an ASN.1 structure, but a raw hash value instead. It is attempted
             automatically when verification of the RSA signature fails.
 
@@ -429,7 +428,7 @@ class CertificateName:
         """Get individual components of this CertificateName
 
         :param component_type: if provided, yields only values of this type,
-            if not provided, yields tuples of (type, value)
+            if not provided, yields tuples of ``(type, value)``
         """
 
         for n in list(self.asn1.chosen)[::-1]:

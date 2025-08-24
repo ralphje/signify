@@ -101,10 +101,10 @@ class AuthenticodeFile:
 
         :param catalog: The catalog to add. Can be a :class:`CertificateTrustList` or
             a file-like object opened in binary mode.
-        :param check:  If `check` is False, the catalog will be added
+        :param check:  If `check` is :const:`False`, the catalog will be added
             regardless of whether the current file is actually in the file.
 
-            If `check` is True, the current file will be hashed according to
+            If `check` is :const:`True`, the current file will be hashed according to
             the hashing scheme of the catalog to verify it is contained within the
             catalog.
         """
@@ -130,13 +130,13 @@ class AuthenticodeFile:
         """Returns an iterator over :class:`AuthenticodeSignature` objects embedded
         in this Authenticode-signed file.
 
-        :param include_nested: Boolean, if True, will also iterate over all nested
+        :param include_nested: If :const:`True`, will also iterate over all nested
             SignedData structures
         :param ignore_parse_errors: Indicates how to handle
             :exc:`ParseError` that may be raised while fetching
             embedded :class:`AuthenticodeSignature` structures.
 
-            When :const:`True`,  which is the default and seems to be how Windows
+            When :const:`True`, which is the default and seems to be how Windows
             handles this as well, this will fetch as many valid
             :class:`AuthenticodeSignature` structures until an exception
             occurs.
@@ -177,20 +177,19 @@ class AuthenticodeFile:
 
         :param signature_types: Defines which signatures are allowed:
 
-            * 'embedded' will only consider signatures embedded in the file
-            * 'catalog' will only consider catalog files added through
+            * ``embedded`` will only consider signatures embedded in the file
+            * ``catalog`` will only consider catalog files added through
               :meth:`add_catalog`, excluding those where the current file is not
               listed in the catalog
-            * 'catalog+' same as 'catalog', but including those catalog files where
+            * ``catalog+`` same as ``catalog``, but including those catalog files where
               the current file is not listed in the catalog, mostly affecting
-              `multi_verify_mode` when set to 'all'
-            * 'all' combines 'embedded' with 'catalog'
-            * 'all+' combines 'embedded' with 'catalog+'
+              ``multi_verify_mode`` when set to ``all``
+            * ``all`` combines ``embedded`` with ``catalog``
+            * ``all+`` combines ``embedded`` with ``catalog+``
 
-            Note that this affects the `multi_verify_mode` as well. Embedded signatures
-            are evaluated before catalog signatures.
+            Embedded signatures are evaluated before catalog signatures.
         :param expected_hashes: When provided, should be a mapping of hash names to
-            digests. This is used when using 'catalog' or 'all'. The dictionary is
+            digests. This is used when using ``catalog`` or ``all``. The dictionary is
             updated to reflect newly-retrieved hashes.
         :param include_nested: See :meth:`iter_embedded_signatures`
         :param ignore_parse_errors: See :meth:`iter_embedded_signatures`
@@ -230,49 +229,26 @@ class AuthenticodeFile:
         :param multi_verify_mode: Indicates how to verify when there are multiple
             :class:`AuthenticodeSignature` objects in this file. Can be:
 
-            * 'any' (default) to indicate that any of the signatures must validate
+            * ``any`` (default) to indicate that any of the signatures must validate
               correctly.
-            * 'first' to indicate that the first signature must verify correctly
+            * ``first`` to indicate that the first signature must verify correctly
               (the default of tools such as sigcheck.exe); this is done in file order,
               followed by any provided catalog signatures
-            * 'all' to indicate that all signatures must verify
-            * 'best' to indicate that the signature using the best hashing algorithm
+            * ``all`` to indicate that all signatures must verify
+            * ``best`` to indicate that the signature using the best hashing algorithm
               must verify (e.g. if both SHA-1 and SHA-256 are present, only SHA-256
               is checked); if multiple signatures exist with the same algorithm,
               any may verify
 
             This argument has no effect when only one signature is present.
-        :param signature_types: Defines which signatures are allowed:
-
-            * 'embedded' will only consider signatures embedded in the file
-            * 'catalog' will only consider catalog files added through
-              :meth:`add_catalog`, excluding those where the current file is not
-              listed in the catalog
-            * 'catalog+' same as 'catalog', but including those catalog files where
-              the current file is not listed in the catalog, mostly affecting
-              `multi_verify_mode` when set to 'all'
-            * 'all' combines 'embedded' with 'catalog'
-            * 'all+' combines 'embedded' with 'catalog+'
-
-            Note that this affects the `multi_verify_mode` as well. Embedded signatures
-            are evaluated before catalog signatures.
+        :param signature_types: See :meth:`iter_signatures`. Note that this affects the
+            `multi_verify_mode` as well. Embedded signatures are evaluated before
+            catalog signatures.
         :param expected_hashes: When provided, should be a mapping of hash names to
             digests. This could speed up the verification process.
-        :param ignore_parse_errors: Indicates how to handle :exc:`ParseError`
-            that may be raised during parsing of the signed file's embedded signatures.
-
-            When :const:`True`, which is the default and seems to be how Windows
-            handles this as well, this will verify based on all available
-            :class:`AuthenticodeSignature` before a parse error occurs.
-
-            :exc:`AuthenticodeNotSignedError` will be raised when no valid
-            :class:`AuthenticodeSignature` exists.
-
-            When :const:`False`, this will raise the :exc:`ParseError` as soon
-            as one occurs. This often occurs before :exc:`AuthenticodeNotSignedError`
-            is potentially raised.
+        :param ignore_parse_errors: :meth:`iter_embedded_signatures`
         :return: the used structure(s) in validation, as a list of tuples, in the form
-            (signed data object, indirect data object, certificate chain)
+            ``(signed data object, indirect data object, certificate chain)``
         :raises AuthenticodeVerificationError: when the verification failed
         :raises ParseError: for parse errors in the signed file
         """
@@ -396,7 +372,6 @@ class AuthenticodeFile:
         This will not raise an error when the verification fails, but rather
         indicate this through the resulting enum
 
-        :rtype: (signify.authenticode.AuthenticodeVerificationResult, Exception)
         :returns: The verification result, and the exception containing
             more details (if available or None)
         """

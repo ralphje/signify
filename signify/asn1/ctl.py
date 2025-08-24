@@ -154,12 +154,14 @@ class SetOfFileTime(SetOf):  # type: ignore[misc]
 
 
 class NameValue(Sequence):  # type: ignore[misc]
-    """::
-    NameValue ::= SEQUENCE {
-        refname     BMPSTRING,
-        typeaction  INTEGER,
-        value       OCTETSTRING
-    }
+    """Based on the CAT_NAMEVALUE struct in WinTrust.h, e.g. at
+    https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Security/WinTrust/struct.CAT_NAMEVALUE.html::
+
+        NameValue ::= SEQUENCE {
+            refname     BMPSTRING,
+            typeaction  INTEGER,
+            value       OCTETSTRING
+        }
     """
 
     _fields = [
@@ -170,11 +172,6 @@ class NameValue(Sequence):  # type: ignore[misc]
 
 
 class NameValues(SetOf):  # type: ignore[misc]
-    """::
-
-    NameValues ::= SET OF NameValue
-    """
-
     _child_spec = NameValue
 
 

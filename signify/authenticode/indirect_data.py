@@ -196,7 +196,7 @@ class PeImageData:
     ) -> Iterable[tuple[int, int, bytes]]:
         """Parses the content in the page hash content blob. It is constructed
         as 4 bytes offset, and the hash digest. The final entry will be the final offset
-        and a zero hash (0000...).
+        and a zero hash (``0000...``).
 
         This method yields tuples of start offset, end offset, and the hash digest.
         """

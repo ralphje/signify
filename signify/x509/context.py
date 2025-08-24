@@ -35,9 +35,10 @@ class CertificateStore:
         ctl: CertificateTrustList | None = None,
     ):
         """
-        :param bool trusted: If true, all certificates that are appended to this
-            structure are set to trusted.
-        :param CertificateTrustList ctl: The certificate trust list to use (if any)
+        :param trusted: If true, all certificates that are appended to this structure
+            are set to trusted.
+        :param signify.authenticode.CertificateTrustList ctl: The certificate trust
+            list to use (if any)
         """
         self.trusted = trusted
         self.ctl = ctl
@@ -96,7 +97,6 @@ class CertificateStore:
         1 certificate matching the parameters, i.e. there are zero or there are
         multiple, an error is raised.
 
-        :rtype: Certificate
         :raises KeyError:
         """
 
@@ -121,13 +121,10 @@ class CertificateStore:
         omitted by specifying :const:`None`. Calling this function without arguments is
         the same as iterating over this store
 
-        :param CertificateName subject: Certificate subject to look for, as
-            CertificateName
+        :param subject: Certificate subject to look for, as :class:`CertificateName`
         :param int serial_number: Serial number to look for.
-        :param CertificateName issuer: Certificate issuer to look for, as
-            CertificateName
+        :param issuer: Certificate issuer to look for, as :class:`CertificateName`
         :param str sha256_fingerprint: The SHA-256 fingerprint to look for
-        :rtype: Iterable[Certificate]
         """
 
         for certificate in self:
@@ -152,9 +149,9 @@ class FileSystemCertificateStore(CertificateStore):
 
     def __init__(self, location: pathlib.Path, *args: Any, **kwargs: Any):
         """
-        :param pathlib.Path location: The file system location for the certificates.
-        :param bool trusted: If true, all certificates that are appended to this
-            structure are set to trusted.
+        :param location: The file system location for the certificates.
+        :param trusted: If true, all certificates that are appended to this structure
+            are set to trusted.
         """
 
         super().__init__(*args, **kwargs)
@@ -200,34 +197,32 @@ class VerificationContext:
         """A context holding properties about the verification of a signature or
         certificate.
 
-        :param Iterable[CertificateStore] stores: A list of CertificateStore objects
-        that contain certificates
-        :param datetime.datetime timestamp: The timestamp to verify with. If None, the
+        :param stores: A list of :class:`CertificateStore` objects  that contain
+            certificates
+        :param timestamp: The timestamp to verify with. If :const:`None`, the
             current time is used. Must be a timezone-aware timestamp.
-        :param Iterable[str] key_usages: An iterable with the keyUsages to check for.
-            For valid options, see
+        :param key_usages: An iterable with the keyUsages to check for. For valid
+            options, see :meth:`certvalidator.CertificateValidator.validate_usage`
+        :param extended_key_usages: An iterable with the EKU's to check for. See
             :meth:`certvalidator.CertificateValidator.validate_usage`
-        :param Iterable[str] extended_key_usages: An iterable with the EKU's to check
-            for. See :meth:`certvalidator.CertificateValidator.validate_usage`
-        :param bool optional_eku: If True, sets the extended_key_usages as optionally
-            present in the certificates.
-        :param bool allow_legacy: If True, allows chain verification if the signature
-            hash algorithm is very old (e.g. MD2). Additionally, allows the
-            SignedInfo encryptedDigest to contain an encrypted hash instead of an
-            encrypted DigestInfo ASN.1 structure. Both are found in the wild,
-            but setting to True does reduce the reliability of the verification.
-        :param str revocation_mode: Can be either soft-fail, hard-fail or require. See
-            the documentation of :meth:`certvalidator.ValidationContext` for the full
-            definition
-        :param bool allow_fetching: If True, allows the underlying verification module
-            to obtain CRL and OSCP responses when needed.
-        :param int fetch_timeout: The timeout used when fetching CRL/OSCP responses
-        :param Iterable[asn1crypto.crl.CertificateList] crls: List of
-            :class:`asn1crypto.crl.CertificateList` objects to  aid in verifying
-            revocation statuses.
-        :param Iterable[asn1crypto.ocsp.OCSPResponse] ocsps: List of
-            :class:`asn1crypto.ocsp.OCSPResponse` objects to aid in verifying
-            revocation statuses.
+        :param optional_eku: If :const:`True`, sets the ``extended_key_usages`` as
+            optionally present in the certificates.
+        :param allow_legacy: If :const:`True`, allows chain verification if the
+            signature hash algorithm is very old (e.g. MD2). Additionally, allows the
+            verification of encrypted hashes in :meth:`Certificate.verify_signature`
+            instead of encrypted DigestInfo ASN.1 structures. Both are found in the
+            wild, but setting to :const:`True` does reduce the reliability of the
+            verification.
+        :param revocation_mode: Can be either ``soft-fail``, ``hard-fail`` or
+            ``require``. See the documentation of
+            :meth:`certvalidator.ValidationContext` for the full definition
+        :param allow_fetching: If :const:`True`, allows the underlying verification
+            module to obtain CRL and OSCP responses when needed.
+        :param fetch_timeout: The timeout used when fetching CRL/OSCP responses
+        :param crls: List of :class:`asn1crypto.crl.CertificateList` objects to aid in
+            verifying revocation statuses.
+        :param ocsps: List of :class:`asn1crypto.ocsp.OCSPResponse` objects to aid in
+            verifying revocation statuses.
         """
 
         self.stores = list(stores)
@@ -248,10 +243,7 @@ class VerificationContext:
 
     @property
     def certificates(self) -> Iterator[Certificate]:
-        """Iterates over all certificates in the associated stores.
-
-        :rtype: Iterable[Certificate]
-        """
+        """Iterates over all certificates in the associated stores."""
         for store in self.stores:
             yield from store
 
@@ -261,7 +253,6 @@ class VerificationContext:
         certificate matching the parameters, i.e. there are zero or there are
         multiple, an error is raised.
 
-        :rtype: Certificate
         :raises KeyError:
         """
 
@@ -278,8 +269,6 @@ class VerificationContext:
         """Finds all certificates given by the specified keyword arguments. See
         :meth:`CertificateStore.find_certificates` for a list of all supported
         arguments.
-
-        :rtype: Iterable[Certificate]
         """
 
         seen_certs = []
@@ -300,9 +289,8 @@ class VerificationContext:
         **THIS METHOD DOES NOT VERIFY WHETHER A CHAIN IS ACTUALLY VALID**.
         Use :meth:`verify` for that.
 
-        :param Certificate certificate: The certificate to build a potential chain for
-        :param int depth: The maximum depth, used for recursion
-        :rtype: Iterable[Iterable[Certificate]]
+        :param certificate: The certificate to build a potential chain for
+        :param depth: The maximum depth, used for recursion
         :return: A iterable of all possible certificate chains
         """
 
@@ -328,9 +316,8 @@ class VerificationContext:
     def verify(self, certificate: Certificate) -> list[Certificate]:
         """Verifies the certificate, and its chain.
 
-        :param Certificate certificate: The certificate to verify
+        :param certificate: The certificate to verify
         :return: A valid certificate chain for this certificate.
-        :rtype: Iterable[Certificate]
         :raises AuthenticodeVerificationError: When the certificate could not be
             verified.
         """
@@ -409,8 +396,9 @@ class VerificationContext:
         """Determines whether the given certificate chain is trusted by a trusted
         certificate store.
 
-        :param List[Certificate] chain: The certificate chain to verify trust for.
-        :return: True if the certificate chain is trusted by a certificate store.
+        :param chain: The certificate chain to verify trust for.
+        :return: :const:`True` if the certificate chain is trusted by a certificate
+            store.
         """
 
         exc = None

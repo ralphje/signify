@@ -101,7 +101,6 @@ class AuthenticodeExplainVerifyMixin(_MixinBase):
         This will not raise an error when the verification fails, but rather indicate
         this through the resulting enum
 
-        :rtype: Tuple[AuthenticodeVerificationResult, Exception]
         :return: The verification result, and the exception containing more details
             (if available or None)
         """

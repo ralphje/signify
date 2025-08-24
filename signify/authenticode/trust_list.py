@@ -153,7 +153,7 @@ class CertificateTrustList(AuthenticodeExplainVerifyMixin, SignedData):
         """Checks whether the specified certificate is valid in the given conditions
         according to this Certificate Trust List.
 
-        :param List[Certificate] chain: The certificate chain to verify
+        :param chain: The certificate chain to verify
         """
 
         # Find the subject belonging to this certificate
@@ -425,9 +425,10 @@ class CertificateTrustSubject:
         """Checks whether the specified certificate is valid in the given conditions
         according to this Certificate Trust List.
 
-        :param List[Certificate] chain: The certificate chain to verify.
-        :param VerificationContext context: The context to verify with. Mainly the
-            timestamp and extended_key_usages are used.
+        :param chain: The certificate chain to verify.
+        :param context: The context to verify with. Mainly the
+            :attr:`VerificationContext.timestamp` and
+            :attr:`VerificationContext.extended_key_usages` are used.
         """
 
         timestamp = context.timestamp

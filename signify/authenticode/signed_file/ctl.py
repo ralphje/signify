@@ -72,6 +72,5 @@ class CtlFile(AuthenticodeFile):
 
         :param include_nested: Ignored.
         :param ignore_parse_errors: Ignored.
-        :return: iterator of signify.authenticode.SignedData
         """
         yield self.ctl

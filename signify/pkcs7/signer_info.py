@@ -206,7 +206,8 @@ class SignerInfo:
     @property
     def encrypted_digest(self) -> bytes:
         """The result of encrypting the message digest and associated information with
-        the signer's private key."""
+        the signer's private key.
+        """
         return cast(bytes, self.asn1["signature"].native)
 
     @property
@@ -283,8 +284,8 @@ class SignerInfo:
         """Check the issuer signature against the information in the class. Use
         :meth:`_verify_issuer` for full verification.
 
-        :param Certificate issuer: The Certificate to verify
-        :param VerificationContext context: The context for verification
+        :param issuer: The Certificate to verify
+        :param context: The context for verification
         :raises SignerInfoVerificationError: If the issuer signature is invalid
         """
 
@@ -375,14 +376,13 @@ class SignerInfo:
         This method will call :meth:`VerificationContext.verify` for all possible
         candidates.
 
-        :param VerificationContext context: The context for building the chain. Most
-            importantly, contains all certificates to build the chain from, but also
-            their properties are relevant.
+        :param context: The context for building the chain. Most importantly, contains
+            all certificates to build the chain from, but also their properties are
+            relevant.
         :param signing_time: The time to be used as timestamp when creating the chain
         :return: Iterable of all of the valid chains from this SignedInfo up to and
             including a trusted anchor. Note that this may be an empty iteration if no
             candidate parent certificate was found.
-        :rtype: Iterable[Iterable[Certificate]]
         :raises AuthenticodeVerificationError: When :meth:`_verify_issuer` fails or
             any of the underlying calls to :meth:`VerificationContext.verify` fails.
             See the semantics of :meth:`VerificationContext.verify` for when that may
@@ -420,16 +420,18 @@ class SignerInfo:
         """Verifies that this :class:`SignerInfo` verifies up to a chain with the root
         of a trusted certificate.
 
-        :param VerificationContext context: The context for verifying the SignerInfo.
-        :param countersigner_context: The VerificationContext for
-            verifying the chain of the :class:`CounterSignerInfo`.
-        :param str countersignature_mode: Changes how countersignatures are handled.
-            Defaults to 'strict', which means that errors in the countersignature
-            result in verification failure. If set to 'permit', the countersignature is
-            checked, but when it errors, it is verified as if the countersignature was
-            never set. When set to 'ignore', countersignatures are never checked.
+        :param context: The context for verifying the SignerInfo.
+        :param countersigner_context: The VerificationContext for verifying the chain
+            of the :class:`CounterSignerInfo`.
+        :param countersignature_mode: Changes how countersignatures are handled.
+            Defaults to ``strict``, which means that errors in the countersignature
+            result in verification failure.
+
+            If set to ``permit``, the countersignature is checked, but when it errors,
+            it is verified as if the countersignature was never set.
+
+            When set to ``ignore``, countersignatures are never checked.
         :return: A list of valid certificate chains for this SignerInfo.
-        :rtype: Iterable[Iterable[Certificate]]
         :raises AuthenticodeVerificationError: When the SignerInfo could not be
             verified.
         """
@@ -457,7 +459,6 @@ class SignerInfo:
 
         :param VerificationContext context: The context
         :return: A list of potential certificate chains for this SignerInfo.
-        :rtype: Iterable[Iterable[Certificate]]
         """
 
         for certificate in context.find_certificates(

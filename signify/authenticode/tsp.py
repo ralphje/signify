@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 class RFC3161SignerInfo(SignerInfo):
     """Subclass of SignerInfo that is used to contain the signerinfo for the
-    RFC3161SignedData option.
+    :class:`RFC3161SignedData` class.
     """
 
     _expected_content_type = "tst_info"
@@ -101,8 +101,9 @@ class TSTInfo:
 
 class RFC3161SignedData(SignedData):
     """Some samples have shown to include a RFC-3161 countersignature in the
-    unauthenticated attributes (as OID 1.3.6.1.4.1.311.3.3.1, which is in the Microsoft
-    private namespace). This attribute contains its own signed data structure.
+    unauthenticated attributes (as OID ``1.3.6.1.4.1.311.3.3.1``, which is in the
+    Microsoft private namespace). This attribute contains its own signed data
+    structure.
 
     This is a subclass of :class:`signify.pkcs7.SignedData`, containing a RFC3161
     TSTInfo in its content field.

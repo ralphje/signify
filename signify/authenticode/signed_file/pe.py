@@ -37,7 +37,7 @@ import hashlib
 import logging
 import os
 import struct
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from functools import cached_property
 from typing import BinaryIO, cast
 
