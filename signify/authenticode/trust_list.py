@@ -126,7 +126,7 @@ class CertificateTrustList(AuthenticodeExplainVerifyMixin, SignedData):
     @property
     def _subjects(self) -> dict[str, CertificateTrustSubject]:
         return {
-            subj.identifier.hex().lower(): subj
+            subj.identifier_str: subj
             for subj in (
                 CertificateTrustSubject(subject, self)
                 for subject in self.content_asn1["trusted_subjects"]
@@ -235,15 +235,15 @@ class CertificateTrustSubject:
         a UTF-16 encoded string if indirect_data is present.
         """
         if not self.indirect_data:
-            return self.identifier.hex()
+            return self.identifier.hex().lower()
         try:
             value = self.identifier.decode("utf-16").rstrip("\0")
             # Attempt to encode in latin-1. If this is not possible, we can assume that
             # this is not intended to be decoded.
             value.encode("latin-1")
-            return value
+            return value.lower()
         except (UnicodeDecodeError, UnicodeEncodeError):
-            return self.identifier.hex()
+            return self.identifier.hex().lower()
 
     @property
     def attributes(self) -> dict[str, Any]:

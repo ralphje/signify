@@ -1,34 +1,11 @@
-# This is a derivative, modified, work from the verify-sigs project.
-# Please refer to the LICENSE file in the distribution for more
-# information. Original filename: auth_data_test.py
-#
-# Parts of this file are licensed as follows:
-#
-# Copyright 2012 Google Inc. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-
-import binascii
 import contextlib
 import datetime
-import hashlib
 import io
 
 import pytest
 
 from signify.authenticode import TRUSTED_CERTIFICATE_STORE_NO_CTL
-from signify.authenticode.signed_file.pe import SignedPEFile, SignedPEFingerprinter
+from signify.authenticode.signed_file.pe import SignedPEFile
 from signify.exceptions import (
     AuthenticodeNotSignedError,
     AuthenticodeVerificationError,
@@ -43,6 +20,10 @@ from tests._utils import open_test_data
 @pytest.mark.parametrize(
     "filename",
     [
+        "SoftwareUpdate.exe",
+        "pciide.sys",
+        # Test for SHA256 hashes used in sig
+        "software_reporter_tool.exe",
         # uses a different contenttype, 1.2.840.113549.1.9.16.1.4 instead of Data
         "3a7de393a36ca8911cd0842a9a25b058",
         # Solarwinds includes a 1.3.6.1.4.1.311.3.3.1 type countersignature
@@ -59,6 +40,8 @@ from tests._utils import open_test_data
         "zonealarm.exe",
         # this tests a sample that has an abnormal attribute order
         "8757bf55-0077-4df5-9807-122a3261ee40",
+        # sample that is signed with a catalog as well
+        "DXCore.dll",
     ],
 )
 def test_valid_signature(filename):
@@ -80,34 +63,6 @@ def test_invalid_signature(filename):
         pefile = SignedPEFile(f)
         with pytest.raises(VerificationError):
             pefile.verify()
-
-
-def test_software_update():
-    with open_test_data("SoftwareUpdate.exe") as f:
-        fingerprinter = SignedPEFingerprinter(f)
-        fingerprinter.add_signed_pe_hashers(hashlib.sha1)
-        hashes = fingerprinter.hash()
-
-        # Sanity check that the authenticode hash is still correct
-        assert (
-            binascii.hexlify(hashes["sha1"]).decode("ascii")
-            == "978b90ace99c764841d2dd17d278fac4149962a3"
-        )
-
-        pefile = SignedPEFile(f)
-
-        # This should not raise any errors.
-        signed_datas = list(pefile.embedded_signatures)
-        # There may be multiple of these, if the windows binary was signed multiple
-        # times, e.g. by different entities. Each of them adds a complete SignedData
-        # blob to the binary. For our sample, there is only one blob.
-        assert len(signed_datas), 1
-        signed_data = signed_datas[0]
-
-        signed_data.verify()
-
-        # should work as well
-        pefile.verify()
 
 
 def test_pciide():
@@ -376,3 +331,18 @@ def test_lifetime_signing(timestamp, expected):
                 trusted_certificate_store=certificate_store,
                 verification_context_kwargs={"timestamp": timestamp},
             )
+
+
+def test_pe_sample_with_catalog():
+    with (
+        open_test_data("DXCore.dll") as f,
+        open_test_data(
+            "115fe8649854ad531fb7ecd1318fbee6b33c9cbd78f02ed582092a96d5eb5899.cat"
+        ) as cat,
+    ):
+        pefile = SignedPEFile(f)
+        assert len(list(pefile.embedded_signatures)) == 1
+        assert len(list(pefile.signatures)) == 1
+        pefile.add_catalog(cat)
+        assert len(list(pefile.signatures)) == 2
+        pefile.verify(signature_types="embedded")
