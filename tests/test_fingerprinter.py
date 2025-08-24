@@ -22,93 +22,91 @@
 import hashlib
 import io
 import json
-import os.path
 import pathlib
-import unittest
+
+import pytest
 
 from signify.authenticode.signed_file.pe import SignedPEFingerprinter
 from signify.fingerprinter import Finger, Fingerprinter, Range
+from tests._utils import open_test_data
 
-root_dir = pathlib.Path(__file__).parent
+fingerprint_results = list(
+    json.load(
+        (pathlib.Path(__file__).parent / "fingerprint_results.json").open()
+    ).items()
+)
 
 
-class FingerPrinterTestCase(unittest.TestCase):
-    maxDiff = None
+@pytest.mark.parametrize(("filename", "expected_hashes"), fingerprint_results)
+def test_pe_hashes(filename, expected_hashes):
+    with open_test_data(filename) as file_obj:
+        fingerprinter = SignedPEFingerprinter(file_obj)
+        fingerprinter.add_hashers(
+            hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha512
+        )
+        fingerprinter.add_signed_pe_hashers(hashlib.md5, hashlib.sha1, hashlib.sha256)
+        results = fingerprinter.hashes()
 
-    def test_entire_blobs(self):
-        for filename in (root_dir / "test_data").iterdir():
-            if str(filename).endswith(".res") or not os.path.exists(
-                str(filename) + ".res"
-            ):
-                continue
-            with self.subTest(filename):
-                with open(str(filename), "rb") as file_obj:
-                    fingerprinter = SignedPEFingerprinter(file_obj)
-                    fingerprinter.add_hashers(
-                        hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha512
-                    )
-                    fingerprinter.add_signed_pe_hashers(
-                        hashlib.md5, hashlib.sha1, hashlib.sha256
-                    )
-                    results = fingerprinter.hashes()
+    # convert to hex
+    for v in results.values():
+        for k, b in v.items():
+            v[k] = b.hex()
 
-                # convert to hex
-                for v in results.values():
-                    for k, b in v.items():
-                        v[k] = b.hex()
+    assert expected_hashes == results
 
-                with open(str(filename) + ".res") as res_obj:
-                    expected_results = json.load(res_obj)
 
-                self.assertDictEqual(expected_results, results)
+def test_reasonable_interval():
+    # Check if the limit on maximum blocksize for processing still holds.
+    dummy = io.BytesIO(b"")
+    fp = Fingerprinter(dummy)
+    fp._fingers.append(Finger([], [Range(0, 1000001)], ""))
 
-    def test_reasonable_interval(self):
-        # Check if the limit on maximum blocksize for processing still holds.
-        dummy = io.BytesIO(b"")
-        fp = Fingerprinter(dummy)
-        fp._fingers.append(Finger([], [Range(0, 1000001)], ""))
+    start, stop = fp._next_interval
+    assert start == 0
+    assert stop == 1000000
 
-        start, stop = fp._next_interval
-        self.assertEqual(0, start)
-        self.assertEqual(1000000, stop)
 
-    def test_adjustments(self):
-        fp = Fingerprinter(io.BytesIO(b""))
-        fp._fingers.append(Finger([], [Range(10, 20)], ""))
+def test_adjustments():
+    fp = Fingerprinter(io.BytesIO(b""))
+    fp._fingers.append(Finger([], [Range(10, 20)], ""))
 
-        # The remaining range should not yet be touched...
-        fp._consume(9, 10)
-        self.assertEqual([Range(10, 20)], fp._fingers[0]._ranges)
-        # Trying to consume into the range. Blow up.
-        self.assertRaises(RuntimeError, fp._consume, 9, 11)
-        # We forgot a byte. Blow up.
-        self.assertRaises(RuntimeError, fp._consume, 11, 12)
-        # Consume a byte
-        fp._consume(10, 11)
-        self.assertEqual([Range(11, 20)], fp._fingers[0]._ranges)
-        # Consumed too much. Blow up.
-        self.assertRaises(RuntimeError, fp._consume, 11, 21)
-        # Consume exactly.
-        fp._consume(11, 20)
-        self.assertEqual(0, len(fp._fingers[0]._ranges))
+    # The remaining range should not yet be touched...
+    fp._consume(9, 10)
+    assert [Range(10, 20)] == fp._fingers[0]._ranges
+    # Trying to consume into the range. Blow up.
+    with pytest.raises(RuntimeError):
+        fp._consume(9, 11)
+    # We forgot a byte. Blow up.
+    with pytest.raises(RuntimeError):
+        fp._consume(11, 12)
+    # Consume a byte
+    fp._consume(10, 11)
+    assert [Range(11, 20)] == fp._fingers[0]._ranges
+    # Consumed too much. Blow up.
+    with pytest.raises(RuntimeError):
+        fp._consume(11, 21)
+    # Consume exactly.
+    fp._consume(11, 20)
+    assert len(fp._fingers[0]._ranges) == 0
 
-    def test_hash_block(self):
-        # Does it invoke a hash function?
-        dummy = b"12345"
-        fp = Fingerprinter(io.BytesIO(dummy))
-        big_finger = Finger([], [Range(0, len(dummy))], "")
 
-        class MockHasher:
-            def __init__(self):
-                self.seen = b""
+def test_hash_block():
+    # Does it invoke a hash function?
+    dummy = b"12345"
+    fp = Fingerprinter(io.BytesIO(dummy))
+    big_finger = Finger([], [Range(0, len(dummy))], "")
 
-            def update(self, content):  # pylint: disable-msg=C6409
-                self.seen += content
+    class MockHasher:
+        def __init__(self):
+            self.seen = b""
 
-        hasher = MockHasher()
+        def update(self, content):  # pylint: disable-msg=C6409
+            self.seen += content
 
-        big_finger.hashers = [hasher]
-        fp._fingers.append(big_finger)
-        # Let's process the block
-        fp._hash_block(dummy, 0, len(dummy))
-        self.assertEqual(hasher.seen, dummy)
+    hasher = MockHasher()
+
+    big_finger.hashers = [hasher]
+    fp._fingers.append(big_finger)
+    # Let's process the block
+    fp._hash_block(dummy, 0, len(dummy))
+    assert hasher.seen == dummy

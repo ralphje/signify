@@ -1,0 +1,239 @@
+{
+    "0d8c2bcb575378f6a88d17b5f6ce70e794a264cdc8556c8e812f0b5f9c709198": {
+        "generic": {
+            "md5": "cc1db5360109de3b857654297d262ca1",
+            "sha1": "758240613c362bb1fd13e07d3d19f357b7f8a6da",
+            "sha256": "0d8c2bcb575378f6a88d17b5f6ce70e794a264cdc8556c8e812f0b5f9c709198",
+            "sha512": "63492d7be766606e3102f6444d94676a068378d7cf85d5bec27062f5fb9cc99bc8a34ee32d173b5a392d4773464327296985a0a7fc1fe27cdd8e060278f4ec28"
+        },
+        "authentihash": {
+            "md5": "192e49d52237ab02b6eaae461c770ad2",
+            "sha1": "38b18f60bc514915b0e534c43ea953e16cac5988",
+            "sha256": "0dfb8c944014acfeafdfa700279d100e945d1c2a4911f7dc1c99e5302f31b4c5"
+        }
+    },
+    "19e818d0da361c4feedd456fca63d68d4b024fbbd3d9265f606076c7ee72e8f8.ViR": {
+        "generic": {
+            "md5": "5cfd31b1573461a381f5bffa49ea1ed6",
+            "sha1": "0081e20b4efb5e75f9ce51e03b2d2d2396e140d4",
+            "sha256": "19e818d0da361c4feedd456fca63d68d4b024fbbd3d9265f606076c7ee72e8f8",
+            "sha512": "06d45ebe50c20863edea5cd4879de48b2c3e27fbd9864dd816442246feb9c2327dda4306cec3ad63b16f6c2c9913282357f796e9984472f852fad39f1afa5b6b"
+        },
+        "authentihash": {
+            "md5": "fd15bce789b3f5580504c7440830878f",
+            "sha1": "08790983e161cedc4773c217645b3099502bd297",
+            "sha256": "4185ebaa7b55faa47f22ef5065c2ab799ab1efcd40c2cae19911e71c7bf3a1d1"
+        }
+    },
+    "3a7de393a36ca8911cd0842a9a25b058": {
+        "generic": {
+            "md5": "3a7de393a36ca8911cd0842a9a25b058",
+            "sha1": "ee6dcc03db66e8254bc795175415c1fd61ea4f2e",
+            "sha256": "e6da01763be37aff599df7886e2dec188c67a8d4b7b41c8c348dfd219d758d59",
+            "sha512": "c2b9f0a44c5bf0777b9d932aab9d55cfd6377e09e6392982739ed0fc3b04a0894558572ac573d0b358cb3add25aad99ae07724012c016a509cddf2e9104bfe59"
+        },
+        "authentihash": {
+            "md5": "b30159a13e1f026ff06595ce3a4e355d",
+            "sha1": "77f38dbda8c10a61a1fe6895a6b260e3633d08ba",
+            "sha256": "ee33821f5498333778d33ad8df89ef73db41ad467daafb007cc43787d6f5eabc"
+        }
+    },
+    "7dc674b46d51cb42963417a487ef8e88e547e3e0902a1e236ff13c3f1fdd60e4.exe": {
+        "generic": {
+            "md5": "4a83ad9f752d9e89085c82a6e7b04771",
+            "sha1": "43170beeae26497d7e4e76dba1d62945aef5a23d",
+            "sha256": "7dc674b46d51cb42963417a487ef8e88e547e3e0902a1e236ff13c3f1fdd60e4",
+            "sha512": "46b9cd91fecf2df2ff51639a0b66ca795b38752472febbfb6c66a037d58d7de172392c3aab9fe30e5aae0ae58cf1a7288083e735d502262407e31bca004087cd"
+        },
+        "authentihash": {
+            "md5": "b52f8d30340b8e22899c3d6d8866e0b1",
+            "sha1": "777be6123891509a156999f611ed4ce1f9f2476e",
+            "sha256": "6e2d34f3024fff90c57d23e92987e4c82f6624d428cb2dbf61bc9ac4c155b05c"
+        }
+    },
+    "7z1900-x64_signed.exe": {
+        "generic": {
+            "md5": "0f9123e06327648d3926700890883691",
+            "sha1": "352d85cff27f2d41f71f18aca233e90f75170669",
+            "sha256": "43bc0e260fc811b04475ab15c962f26816214fc5ba3706f16f10ac3cb26bea41",
+            "sha512": "e73443f91b84cffcf52cbf1472ceb50d8df5fa7bc50e33afe442a247d8daec77a532d003505f4b4fc2b61b924c7810b025bbedbe06437a849ac2c61793b8bf16"
+        },
+        "authentihash": {
+            "md5": "74acb96c3339776a61c78d4ee50c3580",
+            "sha1": "7f0139e4b2016d37a8e151b65268056f00ce4768",
+            "sha256": "12c7635e53e70f626b5d6b7ece26ac1cd92af4ecdb86046f172bf89ad7b9a8c4"
+        }
+    },
+    "8757bf55-0077-4df5-9807-122a3261ee40": {
+        "generic": {
+            "md5": "6ac468f060098782b4559d17772e58b3",
+            "sha1": "6476c81eca04909a2514c7e7c93c533f3ab17cfb",
+            "sha256": "2435b4ad40d447161b5ee1b4e76103345f0d8d4737abbdc0ffca74533bb5d771",
+            "sha512": "7786787118b35ab72b10b483335926d06ecd4dec8e962a1593ae4d45794059f8d9a631106062799ae3f23ec77f7cf4048a8485a6caf19a8433c8402754488b6b"
+        },
+        "authentihash": {
+            "md5": "bf34c20090c9901ade840481c83baa9b",
+            "sha1": "fd479ff7c54c953f8f9eb4b882da86e6d16a86d8",
+            "sha256": "e484ad19f5b47f60db91d70bcc4ffe8b4be74f4dd553484d02272934cdde8d9e"
+        }
+    },
+    "jameslth": {
+        "generic": {
+            "md5": "ef8dcdf16d30876906f23650156cdd6a",
+            "sha1": "51fa6e8f86364cba46b25798eebb9feafb7895a8",
+            "sha256": "b23504990949945298994fe36a74f143e6534c45c9b7186451f46891e117da6e",
+            "sha512": "f2d966d82541ea1245fd5ffa3d5507e0f7a31dd3ad4101b6b52ef5e280ae355f5a6ed6a3edb7d34a7a872f570e84372bab077bbfda1f870c04272daa22c6d9ae"
+        },
+        "authentihash": {
+            "md5": "7881ccfdee49a264d40a094d3c8d4cd5",
+            "sha1": "feaadac426ceecee1567d252c9903709780ee7d9",
+            "sha256": "93b6ad779074c65d19218b7fea69c0a2f4d645c9640f3f4e9f7706e42346baec"
+        }
+    },
+    "kdbazis.dll": {
+        "generic": {
+            "md5": "56bd3993e118f86d890529dff7f03b12",
+            "sha1": "6f09a54f201052235aef233221d3629ee7ae5811",
+            "sha256": "4518b17aecceaa1af5f5ae5256668d14b8de5b131e79301e0c6f3a09323a73bf",
+            "sha512": "ee998c54727decb55f79cf1d0c99f8eacef24d394b0b2cf63c7ae23bf0972dd1b3afb6414f13fcc78bae0f53aad160b59df7653398a1ba346dcb6ba589eb7219"
+        },
+        "authentihash": {
+            "md5": "a91383aa094ad9a6f38cc24bf4323aec",
+            "sha1": "c187960f665e82f9e2d984d8aca03feaa84e0854",
+            "sha256": "e6a9221b1ead47cd782e693a0d19d4c6ed470115a0ab0dd3d3fb3f3c58bc8c1d"
+        }
+    },
+    "pciide.sys": {
+        "generic": {
+            "md5": "b5b8b5ef2e5cb34df8dcf8831e3534fa",
+            "sha1": "98cc3b8f38311abfdf577be403ff9f74aa55f745",
+            "sha256": "f2a7cc645b96946cc65bf60e14e70dc09c848d27c7943ce5dea0c01a6b863480",
+            "sha512": "2d04e52a5d4eaaab96be6651b7a06413e03477840f675ee73e243761b21919e5268e772b99e2fcb5b960d789c53ebc1bff83601d272732d44b616553e1746a0f"
+        },
+        "authentihash": {
+            "md5": "7103145d42e81968d1a7371336055b2d",
+            "sha1": "9bd444d58b59cca832bb5fc911f81f6c66b40fcc",
+            "sha256": "5cd3641543e7849664975a1465e6835c91d311dd4468decc38caa63c1fb6d462"
+        }
+    },
+    "putty.msi": {
+        "generic": {
+            "md5": "9037248f8c8c8e5f4fcd4af8a4bd8388",
+            "sha1": "e5fc81d1f33a3054f7bf54bde779f5049190286a",
+            "sha256": "d816fba5750e95ae5f845ad22bd165e19ebefbbf298f453abc1db2ef7655e4b8",
+            "sha512": "99c7a783145252822038eb8f48fd7b951b133a7b0491517c94c2fe8194b6df074930b318e5dae21a0a1275cd7040b23559d8d0f48a795cc8cc048b80fda4e098"
+        }
+    },
+    "sigcheck.exe": {
+        "generic": {
+            "md5": "ab35c68e263bb4dca6c11e16cd7fb9d8",
+            "sha1": "ceaee2c6a2305d454aea111eb882ef8070c54548",
+            "sha256": "8b54bf9e38afe5f0123f513b450f4ef9b773f93ed24d30e0f559df4ae067e40a",
+            "sha512": "2149b32f83c0c78623cb6a0e0542e90ead9b61b4b67ae6fd0d505c0d83a0ad08ae3ddaa26aaf30c32b15ab567a05317f3473a4bcf0ab025fd741c602aaa45996"
+        },
+        "authentihash": {
+            "md5": "0c7f7499015352f437fe9fede6327eaa",
+            "sha1": "dfbdc3905728da39d9f74d857ac1d228a0ac0218",
+            "sha256": "a74a343be2234235f57f21b794fdbd379f246a388f7b17bf21cd1d26ece699ef"
+        }
+    },
+    "simple": {
+        "generic": {
+            "md5": "489b02745027cb62e9b0d7e0c1ef4944",
+            "sha1": "26b49e7b07de3f92b31f124a3e6186af6f07162b",
+            "sha256": "d55a298fa768131555667035ef60d47634418e24ffeddbd4f341c188e4cb5fe4",
+            "sha512": "460568655c4a5de0ae12b9b0001851b93d9edd3f5b0b33457d7fcf5e4814b9cf40717609f75e5941586a37aba425c44140262c122bb624e722d7d12ddb2c2c2e"
+        }
+    },
+    "SoftwareUpdate.exe": {
+        "generic": {
+            "md5": "7b43567b4c32ad7aded537cd3b1342b9",
+            "sha1": "8322f1c2c355d88432f1f03a1f231f63912186bd",
+            "sha256": "050bbeb6b9aa404261b20989325c68433708367aaaed4e1dff3d24ae29a52d2a",
+            "sha512": "f8c060cc3c2e44db4c040e7c9cfb05428a17920a27c44e258fe75d11e36ce656a7d01886e646fe8e1aa7b49a1659770c212ab4914942356506160d1fac6b1672"
+        },
+        "authentihash": {
+            "md5": "e0286e9a7a8df0d5d9ea886dea8ee600",
+            "sha1": "978b90ace99c764841d2dd17d278fac4149962a3",
+            "sha256": "e6dd1a879c88a9d487c8e62986354d6e8b6bed216b20b584bdfb23752718ef67"
+        }
+    },
+    "software_reporter_tool.exe": {
+        "generic": {
+            "md5": "90382189de215ee16a35bedc3377b572",
+            "sha1": "31475fcf8fff71521a2e75f87fae26909a83fa86",
+            "sha256": "ef0f8c79b38d828e41967656144c7f809f9ee6f956220c3ba7a7ec03f8678996",
+            "sha512": "0aff1e47ff22dd2860b285cec224829a3d9b2d6733d7809e0afdfc78f3a13a3294f066f0ed3337f454eac54db57117b7e54aa4f5c9ce226bbfb28487a4701bcd"
+        },
+        "authentihash": {
+            "md5": "d610c43272c753abd08170b16a8980ce",
+            "sha1": "7fd20ef7d299ce715e2b111c0fdc95addc62f29b",
+            "sha256": "236457e862d8a83b37081d77cbcf150b0494d2a59d939d8abb43f53aacf18feb"
+        }
+    },
+    "SolarWinds.exe": {
+        "generic": {
+            "md5": "3a99313e208584ea3d66116e7eea68b6",
+            "sha1": "6c567b62080c8f6ee6c4cd58e8dd2524ec7b552e",
+            "sha256": "bc0445089d7d9a2486f5b466e2f5bcae9ad4887d63cc8a8c05d71b16c64d925c",
+            "sha512": "20635bc6c9c2ee01045ddded41e851e7b40e72872b2f2a7c466486e8559f36b96dceb3edcb2f26005e6a3f0a181c3129cf52229a9cc21ac6c4195550cd75459e"
+        },
+        "authentihash": {
+            "md5": "09769b27db780479d6bfcc4404addafa",
+            "sha1": "ed9cfa29d8448128da1af2b7b4ca596f980e40de",
+            "sha256": "4952ea5742725da9fce057407607c74f331d6783d2fad30b482f9d5b3e1efcdc"
+        }
+    },
+    "spotify_sample.exe": {
+        "generic": {
+            "md5": "18966a143a6cfa038ca592693168a144",
+            "sha1": "1c5c3e9e30e4e1c9d63d3c0454399ca88f9274ef",
+            "sha256": "819d0d6036e1c138f88788f1ddf9be710ea7c398ce823c170eedd555aaec9f0d",
+            "sha512": "4b3807a5c2e03dc0f89225495db6ab5b9758add4b19a3c242a8a7a67910a73efffa51fe7831e5ce34cc3c9229cbd7627dafb2349169038dedd6b2b96afbef7c5"
+        },
+        "authentihash": {
+            "md5": "058ebc27228feb893865bdf0d08f9b7e",
+            "sha1": "f46bebe047057ff7dbba2062ea60bb6a1dc70429",
+            "sha256": "70f7a25442d6f74a95eeb461529528496274f00bc49aeb6c5b7e27504b2e038c"
+        }
+    },
+    "whois.exe": {
+        "generic": {
+            "md5": "ff54b2974f60016fc14638f3043b29d5",
+            "sha1": "f91eef5471c2a171a0e90742ed03bbe39b62e28d",
+            "sha256": "292def98af78c3cb240ed52e0a0a0bc7a15b31ca5ac101891b96875070ed6a9c",
+            "sha512": "7363249748a027700bd2f67aa489471f3a4a4474d9714589ea9536a5a105b970a297284adc8f4c0ae0e5b3ba57404fd2092c39556d0eb133ba088348cb5bb4dd"
+        },
+        "authentihash": {
+            "md5": "6a6a2957ce433f0907da42bdcf66d015",
+            "sha1": "e03a51c21a628290611b7a16c5f932009ca68f12",
+            "sha256": "000111ef0c96ec458f0be466f95a931becde968a33bf1ce06979357c3355f0f8"
+        }
+    },
+    "zonealarm.exe": {
+        "generic": {
+            "md5": "b2d8aaa583915e35ab2088e8a6640048",
+            "sha1": "7ca25125ce18b7a8b051c06baaf9cf8dac8e41b7",
+            "sha256": "ba7a60c6bebb2f2e7d6df132e7e5522b0b213f1e9256b7c9821b1b26aaf4f0df",
+            "sha512": "b3472c0f9df592dd745c362deb45369f96b10906d68451f8ee7766082166a81bb8dc415e0d960d0e3138e6b715af7d6809e639aeece8f0d7688f0404eb5bda75"
+        },
+        "authentihash": {
+            "md5": "386cdfc58eb10d2606689f25e419f3ce",
+            "sha1": "adbd1cdb8c301ab0317e8c4109e1afe95aae4fc2",
+            "sha256": "bbf814a1ecdf035eec7d5c5e39cf3e3269ac34fd8cbabedec496728a71afe5f0"
+        }
+    },
+    "___2A6E.tmp": {
+        "generic": {
+            "md5": "8102aef50b9c7456f62cdbeefa5fa9de",
+            "sha1": "e6bfe33c591fd024aac97d5734250fb72e3cf6b6",
+            "sha256": "1488f56b62c37c789875dd3725103cdc3e17a6216aaba47d4543f3593f5040d5",
+            "sha512": "b6970a0f2d97f24ee8253d1caf2d68739d5ea7fb8d747d1e98a5ee28b2662b490f6655aded6b77a6fd3190ef7ea60d3899239ce326b80c4a065c866b1078aae9"
+        },
+        "authentihash": {
+            "md5": "a3cb9249ade31cc840fbb044093811e4",
+            "sha1": "1417aaae3b687fe9e4363756fd28c976498c62e7",
+            "sha256": "52d5aec0f309024229db6a9ec4f596e786cdeb1c321e1180891d7f8f25d928c9"
+        }
+    }
+}

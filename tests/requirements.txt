@@ -2,3 +2,5 @@ coverage~=6.2
 mypy~=1.9.0
 black~=25.1
 ruff~=0.4.7
+pytest~=8.4
+

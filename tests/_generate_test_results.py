@@ -23,15 +23,19 @@ import hashlib
 import json
 import pathlib
 
-from signify.authenticode import SignedPEFingerprinter
+from signify.authenticode.signed_file.pe import SignedPEFingerprinter
 
 
 def main():
-    for filename in pathlib.Path("tests/test_data").iterdir():
-        if str(filename).endswith(".res") or str(filename).endswith(".rst"):
+    result = {}
+    for filename in pathlib.Path("test_data").iterdir():
+        if (
+            any(str(filename).endswith(ext) for ext in {".rst"})
+            or not filename.is_file()
+        ):
             continue
-        print(f"Updating {filename}...")
-        with open(str(filename), "rb") as file_obj:
+        print(f"Generating {filename}...")
+        with filename.open("rb") as file_obj:
             fingerprinter = SignedPEFingerprinter(file_obj)
             fingerprinter.add_hashers(
                 hashlib.md5, hashlib.sha1, hashlib.sha256, hashlib.sha512
@@ -45,8 +49,8 @@ def main():
         for v in results.values():
             for k, b in v.items():
                 v[k] = b.hex()
-        with open(str(filename) + ".res", "w") as res_obj:
-            json.dump(results, res_obj)
+        result[filename.name] = results
+    print(json.dumps(result, indent=4))
 
 
 if __name__ == "__main__":
