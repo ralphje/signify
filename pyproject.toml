@@ -45,6 +45,9 @@ Changelog = "https://signify.readthedocs.io/en/latest/changelog.html"
 msi = ["olefile"]
 full = ["olefile"]
 
+[project.scripts]
+authenticode = "signify.authenticode.cli:main"
+
 [tool.black]
 line-length = 88
 target-version = ['py39', 'py310', 'py311', 'py312', 'py313']

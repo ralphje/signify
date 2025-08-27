@@ -9,6 +9,7 @@ v0.9.0 (unreleased)
   signatures.
 * Added support for verifying flat images (i.e. non-Authenticode files) using
   these external signatures.
+* Added entrypoint (CLI script) for displaying various details about Authenticode files.
 
 * Added ``AuthenticodeFile.iter_signatures`` and ``.signatures`` to iterate over all
   available signatures (embedded and catalogs). You can specify which of these

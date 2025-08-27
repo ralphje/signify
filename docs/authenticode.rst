@@ -28,8 +28,8 @@ If you need to get more information about the signature, you can use this::
             if signed_data.signer_info.countersigner is not None:
                 print(signed_data.signer_info.countersigner.signing_time)
 
-A more thorough example is available in the examples directory of the Signify
-repository.
+A more thorough example can be found in ``signify/authenticode/cli.py``, which is also
+available as a ``authenticode`` command line script.
 
 Note that the file must remain open as long as not all SignedData objects have been
 parsed or verified.
