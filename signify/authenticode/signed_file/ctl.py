@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
-from typing import Any, BinaryIO, Literal
+from typing import Any, BinaryIO
 
 from typing_extensions import Self
 

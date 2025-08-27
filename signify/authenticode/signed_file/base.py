@@ -72,6 +72,17 @@ class AuthenticodeFile:
                 if attempt is not None:
                     return attempt
 
+        # If we are not AuthenticodeFile ourselves, we are already a subclass
+        # of AuthenticodeFile. Perhaps we know how to open this file.
+        if cls is not AuthenticodeFile:
+            try:
+                attempt = cls._try_open(file_obj, file_name, header)
+            except Exception as e:
+                logger.debug(f"Error while trying {cls.__name__}: {e!r}")
+            else:
+                if attempt is not None:
+                    return attempt
+
         if allow_flat:
             from .flat import FlatFile
 

@@ -16,8 +16,12 @@ from signify.asn1.hashing import _get_digest_algorithm
 from signify.authenticode.signer_info import AuthenticodeSignerInfo
 from signify.authenticode.verification_result import AuthenticodeExplainVerifyMixin
 from signify.exceptions import (
+    AuthenticodeCounterSignerError,
+    AuthenticodeInvalidDigestError,
     CertificateTrustListParseError,
+    CounterSignerError,
     CTLCertificateVerificationError,
+    InvalidDigestError,
 )
 from signify.pkcs7 import SignedData
 from signify.x509 import Certificate, VerificationContext
@@ -142,12 +146,20 @@ class CertificateTrustList(AuthenticodeExplainVerifyMixin, SignedData):
         return self._subjects.values()
 
     def verify(self, *args: Any, **kwargs: Any) -> Iterable[list[Certificate]]:
-        """Override to make sure that the TRUSTED_CERTIFICATE_STORE is set properly."""
+        """Override to make sure that the TRUSTED_CERTIFICATE_STORE is set properly and
+        that the proper exceptions are raised.
+        """
         if "trusted_certificate_store" not in kwargs:
             from signify.authenticode import TRUSTED_CERTIFICATE_STORE
 
             kwargs["trusted_certificate_store"] = TRUSTED_CERTIFICATE_STORE
-        return super().verify(*args, **kwargs)
+
+        try:
+            return super().verify(*args, **kwargs)
+        except InvalidDigestError as e:
+            raise AuthenticodeInvalidDigestError(str(e))
+        except CounterSignerError as e:
+            raise AuthenticodeCounterSignerError(str(e))
 
     def verify_trust(self, chain: list[Certificate], *args: Any, **kwargs: Any) -> bool:
         """Checks whether the specified certificate is valid in the given conditions

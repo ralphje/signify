@@ -21,9 +21,7 @@ class FlatFile(AuthenticodeFile):
         return Fingerprinter(self.file)
 
     def get_fingerprint(self, digest_algorithm: HashFunction) -> bytes:
-        fingerprinter = self.get_fingerprinter()
-        fingerprinter.add_hashers(digest_algorithm)
-        return fingerprinter.hash()[digest_algorithm().name]
+        return self.get_fingerprints(digest_algorithm)[digest_algorithm().name]
 
     def get_fingerprints(self, *digest_algorithms: HashFunction) -> dict[str, bytes]:
         if not digest_algorithms:
@@ -31,7 +29,7 @@ class FlatFile(AuthenticodeFile):
 
         fingerprinter = self.get_fingerprinter()
         fingerprinter.add_hashers(*digest_algorithms)
-        return fingerprinter.hashes()["generic"]
+        return fingerprinter.hash()
 
     def iter_embedded_signatures(
         self, *, include_nested: bool = True, ignore_parse_errors: bool = True

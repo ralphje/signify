@@ -86,10 +86,10 @@ class SignedData:
         return signed_data
 
     def _validate_asn1(self) -> None:
-        if len(self.asn1["digest_algorithms"]) != 1:
+        if len(self.asn1["digest_algorithms"]) > 1:
             raise ParseError(
                 f"SignedData.digestAlgorithms must contain"
-                f" exactly 1 algorithm, not {len(self.asn1['digestAlgorithms'])}"
+                f" exactly 1 algorithm, not {len(self.asn1['digest_algorithms'])}"
             )
 
         if self.content_type != self._expected_content_type:
@@ -103,6 +103,12 @@ class SignedData:
         """The digest algorithm, i.e. the hash algorithm, that is used by the signers of
         the data.
         """
+        if len(self.asn1["digest_algorithms"]) != 1:
+            raise InvalidDigestError(
+                "SignedData.digestAlgorithms does not contain any algorithms and is"
+                " probably not signed."
+            )
+
         return _get_digest_algorithm(
             self.asn1["digest_algorithms"][0], "SignedData.digestAlgorithm"
         )
@@ -159,8 +165,7 @@ class SignedData:
             f" not {len(self.signer_infos)}"
         )
 
-    @property
-    def content_digest(self) -> bytes:
+    def get_content_digest(self) -> bytes:
         """Returns the actual digest of the content of the SignedData object,
         adhering to the specs in RFC2315, 9.3; the identifier (tag) and
         length need to be stripped for hashing.
@@ -182,7 +187,7 @@ class SignedData:
 
         :raises InvalidDigestError: If the digest is invalid
         """
-        if self.content_digest != self.signer_info.message_digest:
+        if self.get_content_digest() != self.signer_info.message_digest:
             raise InvalidDigestError(
                 "The expected hash of the content does not match SignerInfo"
             )

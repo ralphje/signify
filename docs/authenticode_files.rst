@@ -178,6 +178,10 @@ a generic SignedData object, and there's no indirect data that contains an addit
 signature. That's why this file format does not return ``AuthenticodeSignature``
 objects, but rather a different subclass of ``SignedData``.
 
+If you wanted to verify this type of file through another catalog, you'd need to
+interpret it as a flat image. This is not natively supported, since this is most likely
+done by mistake and will probably lead to more confusion.
+
 .. autoclass:: CtlFile
    :members:
    :special-members: __init__
@@ -206,7 +210,8 @@ the parsed SignedData object is present, but the original file is no longer pres
 or for parsing P7X files.
 
 Note that this subclass does not know what content to hash or how to hash it, and so
-has only limited use.
+has only limited use. It cannot be verified through catalog files, and must be
+interpreted as flat image if you need to do this.
 
 .. autoclass:: AuthenticodeSignatureFile
    :members:

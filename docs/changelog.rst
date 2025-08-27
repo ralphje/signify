@@ -29,9 +29,13 @@ v0.9.0 (unreleased)
 * Moved various structures out of ``signify.authenticode.structures`` and direct imports
   out of ``signify.authenticode`` to prevent circular imports. These are now split
   across multiple files. While doing so, some other files were renamed as well.
+* Add support for unsigned SignedData objects.
+* Changed calculated property ``SignedData.content_digest`` to a method
+  ``SignedData.get_content_digest``
 * Improved parsing of ``CertificateTrustList`` attributes.
 * Add support for passing ``OleFileIO`` directly into ``SignedMsiFile``.
 * Optimize ``SignedPEFingerprinter`` to use the current instance of ``SignedPEFile``.
+* Rewritten all tests to use pytest instead of unittest.
 
 v0.8.1 (2025-08-16)
 -------------------
