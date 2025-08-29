@@ -258,10 +258,6 @@ class CertificateName:
         "2.5.4.11": "OU",  # organizationalUnitName
         "0.9.2342.19200300.100.1.25": "DC",  # domainComponent
         "1.2.840.113549.1.9.1": "EMAIL",  # emailAddress (shortcut not in OpenSSL)
-        # Related to Microsoft EV certificates
-        "1.3.6.1.4.1.311.60.2.1.1": "jurisdictionOfIncorporationLocalityName",
-        "1.3.6.1.4.1.311.60.2.1.2": "jurisdictionOfIncorporationStateOrProvinceName",
-        "1.3.6.1.4.1.311.60.2.1.3": "jurisdictionOfIncorporationCountryName",
         # The remainder of this list is based on the OIDs present in OpenSSL
         # See https://github.com/openssl/openssl/blob/master/crypto/objects/objects.txt
         # Note that the official list is with IANA at
@@ -369,6 +365,10 @@ class CertificateName:
         "2.5.4.98": "c3",
         "2.5.4.99": "n3",
         "2.5.4.100": "dnsName",
+        # Related to Microsoft EV certificates (names from OpenSSL)
+        "1.3.6.1.4.1.311.60.2.1.1": "jurisdictionL",
+        "1.3.6.1.4.1.311.60.2.1.2": "jurisdictionST",
+        "1.3.6.1.4.1.311.60.2.1.3": "jurisdictionC",
     }
 
     def __init__(self, asn1: asn1crypto.x509.Name | asn1crypto.x509.GeneralName):

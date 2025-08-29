@@ -114,7 +114,7 @@ class CertificateTrustList(AuthenticodeExplainVerifyMixin, SignedData):
 
     @property
     def _subject_algorithm(self) -> str:
-        return self.content_asn1["subject_algorithm"]["algorithm"].native
+        return cast(str, self.content_asn1["subject_algorithm"]["algorithm"].native)
 
     @property
     def subject_algorithm(self) -> HashFunction:
