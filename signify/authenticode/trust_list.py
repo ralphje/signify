@@ -113,11 +113,13 @@ class CertificateTrustList(AuthenticodeExplainVerifyMixin, SignedData):
         )
 
     @property
+    def _subject_algorithm(self) -> str:
+        return self.content_asn1["subject_algorithm"]["algorithm"].native
+
+    @property
     def subject_algorithm(self) -> HashFunction:
-        """Digest algorithm of verifying the list. When the TrustList is for a catalog,
-        this may return a string.
-        """
-        algorithm = self.content_asn1["subject_algorithm"]["algorithm"].native
+        """Digest algorithm of identifying subjects in the list."""
+        algorithm = self._subject_algorithm
         if algorithm == "microsoft_catalog_list_member":
             return hashlib.sha1
         elif algorithm == "microsoft_catalog_list_member_v2":
@@ -129,12 +131,14 @@ class CertificateTrustList(AuthenticodeExplainVerifyMixin, SignedData):
 
     @property
     def _subjects(self) -> dict[str, CertificateTrustSubject]:
+        return {subj.identifier_str: subj for subj in self.subjects}
+
+    @property
+    def _subjects_by_indirect_data_hash(self) -> dict[str, CertificateTrustSubject]:
         return {
-            subj.identifier_str: subj
-            for subj in (
-                CertificateTrustSubject(subject, self)
-                for subject in self.content_asn1["trusted_subjects"]
-            )
+            subj.indirect_data.digest.hex().lower(): subj
+            for subj in self.subjects
+            if subj.indirect_data is not None
         }
 
     # TODO: extensions??
@@ -142,8 +146,10 @@ class CertificateTrustList(AuthenticodeExplainVerifyMixin, SignedData):
     @property
     def subjects(self) -> Iterable[CertificateTrustSubject]:
         """A list of :class:`CertificateTrustSubject` s in this list."""
-
-        return self._subjects.values()
+        return (
+            CertificateTrustSubject(subject, self)
+            for subject in self.content_asn1["trusted_subjects"]
+        )
 
     def verify(self, *args: Any, **kwargs: Any) -> Iterable[list[Certificate]]:
         """Override to make sure that the TRUSTED_CERTIFICATE_STORE is set properly and
@@ -200,6 +206,11 @@ class CertificateTrustList(AuthenticodeExplainVerifyMixin, SignedData):
             fingerprint = subject.get_fingerprint(self.subject_algorithm)
             identifier = fingerprint.hex().lower()
 
+        if self._subject_algorithm in (
+            "microsoft_catalog_list_member",
+            "microsoft_catalog_list_member_v2",
+        ):
+            return self._subjects_by_indirect_data_hash.get(identifier)
         return self._subjects.get(identifier)
 
     @classmethod
@@ -253,7 +264,7 @@ class CertificateTrustSubject:
             # Attempt to encode in latin-1. If this is not possible, we can assume that
             # this is not intended to be decoded.
             value.encode("latin-1")
-            return value.lower()
+            return value
         except (UnicodeDecodeError, UnicodeEncodeError):
             return self.identifier.hex().lower()
 
