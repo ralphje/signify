@@ -32,13 +32,13 @@ class CertificateStore:
         self,
         *args: Certificate | Iterable[Certificate],
         trusted: bool = False,
-        ctl: CertificateTrustList | None = None,
+        ctl: CertificateTrustList | dict[str, list[str] | None] | None = None,
     ):
         """
         :param trusted: If true, all certificates that are appended to this structure
             are set to trusted.
-        :param signify.authenticode.CertificateTrustList ctl: The certificate trust
-            list to use (if any)
+        :param ctl: The certificate trust list to use (if any), or a mapping of SHA-1
+            hashes to acceptable EKU's.
         """
         self.trusted = trusted
         self.ctl = ctl
@@ -52,6 +52,14 @@ class CertificateStore:
 
     def __iter__(self) -> Iterator[Certificate]:
         yield from self.data
+
+    def __or__(self, other: CertificateStore) -> CertificateStore:
+        if self.trusted != other.trusted:
+            raise ValueError("Cannot combine trusted and non-trusted stores.")
+        if isinstance(other, CombinedCertificateStore):
+            other.stores.append(other)
+            return other
+        return CombinedCertificateStore(self, other, trusted=self.trusted)
 
     def append(self, elem: Certificate) -> None:
         return self.data.append(elem)
@@ -73,7 +81,22 @@ class CertificateStore:
             )
 
         if self.ctl is not None:
-            self.ctl.verify_trust(chain, context=context)
+            if not isinstance(self.ctl, dict):
+                self.ctl.verify_trust(chain, context=context)
+            elif context is not None and chain[0].sha1_fingerprint in self.ctl:
+                allowed_extended_key_usages = self.ctl[chain[0].sha1_fingerprint]
+                if context.extended_key_usages:
+                    requested_eku = set(context.extended_key_usages)
+                else:
+                    requested_eku = set()
+
+                if allowed_extended_key_usages is not None and requested_eku - set(
+                    allowed_extended_key_usages
+                ):
+                    raise CertificateNotTrustedVerificationError(
+                        f"The certificate {chain[0]} cannot use extended key usages"
+                        f" {requested_eku - set(allowed_extended_key_usages)}."
+                    )
 
         return True
 
@@ -140,6 +163,63 @@ class CertificateStore:
             ):
                 continue
             yield certificate
+
+
+class CombinedCertificateStore(CertificateStore):
+    def __init__(self, *stores: CertificateStore, **kwargs: Any):
+        super().__init__(**kwargs)
+        self.stores = list(stores)
+
+    def __contains__(self, item: Certificate) -> bool:
+        return any(item in store for store in self.stores)
+
+    def __len__(self) -> int:
+        return len({c for store in self.stores for c in store})
+
+    def __iter__(self) -> Iterator[Certificate]:
+        for store in self.stores:
+            yield from store
+
+    def __or__(self, other: CertificateStore) -> CertificateStore:
+        if self.trusted != other.trusted:
+            raise ValueError("Cannot combine trusted and non-trusted stores.")
+        if isinstance(other, CombinedCertificateStore):
+            self.stores.extend(other.stores)
+        else:
+            self.stores.append(other)
+        return self
+
+    def append(self, elem: Certificate) -> None:
+        raise NotImplementedError()
+
+    def extend(self, elem: Iterable[Certificate]) -> None:
+        raise NotImplementedError()
+
+    def verify_trust(
+        self, chain: list[Certificate], context: VerificationContext | None = None
+    ) -> bool:
+        last_error = None
+        for store in self.stores:
+            try:
+                store.verify_trust(chain, context=context)
+            except Exception as e:  # noqa: PERF203
+                last_error = e
+            else:
+                return True
+        if last_error is not None:
+            raise last_error
+        return True
+
+    def is_trusted(self, certificate: Certificate) -> bool:
+        return any(store.is_trusted(certificate) for store in self.stores)
+
+    def find_certificates(self, **kwargs: Any) -> Iterable[Certificate]:
+        seen_certificates = set()
+        for store in self.stores:
+            for cert in store.find_certificates(**kwargs):
+                if cert not in seen_certificates:
+                    seen_certificates.add(cert)
+                    yield cert
 
 
 class FileSystemCertificateStore(CertificateStore):

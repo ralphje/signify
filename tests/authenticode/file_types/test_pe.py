@@ -4,7 +4,7 @@ import io
 
 import pytest
 
-from signify.authenticode import TRUSTED_CERTIFICATE_STORE_NO_CTL
+from signify.authenticode import TRUSTED_CERTIFICATE_STORE
 from signify.authenticode.signed_file.pe import SignedPEFile
 from signify.exceptions import (
     AuthenticodeNotSignedError,
@@ -22,6 +22,7 @@ from tests._utils import open_test_data
     [
         "SoftwareUpdate.exe",
         "pciide.sys",
+        "0d8c2bcb575378f6a88d17b5f6ce70e794a264cdc8556c8e812f0b5f9c709198",
         # Test for SHA256 hashes used in sig
         "software_reporter_tool.exe",
         # uses a different contenttype, 1.2.840.113549.1.9.16.1.4 instead of Data
@@ -42,6 +43,8 @@ from tests._utils import open_test_data
         "8757bf55-0077-4df5-9807-122a3261ee40",
         # sample that is signed with a catalog as well
         "DXCore.dll",
+        # this tests a sample that has two signed datas, that are both valid
+        "sigcheck.exe",
     ],
 )
 def test_valid_signature(filename):
@@ -56,6 +59,10 @@ def test_valid_signature(filename):
         "___2A6E.tmp",
         # This tests against CVE-2020-0601
         "7z1900-x64_signed.exe",
+        # This sample is expired
+        "19e818d0da361c4feedd456fca63d68d4b024fbbd3d9265f606076c7ee72e8f8.ViR",
+        # This sample is expired and revoked
+        "jameslth",
     ],
 )
 def test_invalid_signature(filename):
@@ -98,34 +105,13 @@ def test_simple():
             list(pefile.iter_embedded_signatures(ignore_parse_errors=False))
 
 
-def test_0d8c_valid():
-    with open_test_data(
-        "0d8c2bcb575378f6a88d17b5f6ce70e794a264cdc8556c8e812f0b5f9c709198"
-    ) as f:
-        pefile = SignedPEFile(f)
-        pefile.verify(trusted_certificate_store=TRUSTED_CERTIFICATE_STORE_NO_CTL)
-
-
 def test_provide_hash():
     with open_test_data(
         "0d8c2bcb575378f6a88d17b5f6ce70e794a264cdc8556c8e812f0b5f9c709198"
     ) as f:
         pefile = SignedPEFile(f)
         with pytest.raises(VerificationError):
-            pefile.verify(
-                trusted_certificate_store=TRUSTED_CERTIFICATE_STORE_NO_CTL,
-                expected_hashes={"sha1": b"asdf"},
-            )
-
-
-def test_19e8_expired():
-    """this is an expired sample"""
-    with open_test_data(
-        "19e818d0da361c4feedd456fca63d68d4b024fbbd3d9265f606076c7ee72e8f8.ViR"
-    ) as f:
-        pefile = SignedPEFile(f)
-        with pytest.raises(VerificationError):
-            pefile.verify()
+            pefile.verify(expected_hashes={"sha1": b"asdf"})
 
 
 def test_19e8_valid_within_period():
@@ -200,10 +186,7 @@ def test_multiple_signatures_all_valid(mode):
     with open_test_data("sigcheck.exe") as f:
         pefile = SignedPEFile(f)
         assert len(list(pefile.embedded_signatures)) == 2
-        pefile.verify(
-            trusted_certificate_store=TRUSTED_CERTIFICATE_STORE_NO_CTL,
-            multi_verify_mode=mode,
-        )
+        pefile.verify(multi_verify_mode=mode)
 
 
 @pytest.mark.parametrize(
@@ -267,10 +250,7 @@ def test_multiple_signatures_one_invalid(mode, patch_location, expected):
     with io.BytesIO(data) as f:
         pefile = SignedPEFile(f)
         with expected:
-            pefile.verify(
-                trusted_certificate_store=TRUSTED_CERTIFICATE_STORE_NO_CTL,
-                multi_verify_mode=mode,
-            )
+            pefile.verify(multi_verify_mode=mode)
 
 
 @pytest.mark.parametrize("mode", ["all", "best", "any", "first"])
@@ -292,10 +272,7 @@ def test_multiple_signatures_all_invalid(mode):
         # we can test for the fact that all signatures are invalid here as well,
         # because the normal CTL will disallow sha1
         with pytest.raises(VerificationError):
-            pefile.verify(
-                trusted_certificate_store=TRUSTED_CERTIFICATE_STORE_NO_CTL,
-                multi_verify_mode=mode,
-            )
+            pefile.verify(multi_verify_mode=mode)
 
 
 @pytest.mark.parametrize(
@@ -319,8 +296,7 @@ def test_lifetime_signing(timestamp, expected):
     """
     with open_test_data("kdbazis.dll.crt") as crt:
         certificate_store = CertificateStore(
-            list(TRUSTED_CERTIFICATE_STORE_NO_CTL)
-            + list(Certificate.from_pems(crt.read())),
+            list(TRUSTED_CERTIFICATE_STORE) + list(Certificate.from_pems(crt.read())),
             trusted=True,
         )
 
