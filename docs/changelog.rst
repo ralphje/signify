@@ -10,6 +10,7 @@ v0.9.0 (unreleased)
 * Added support for verifying flat images (i.e. non-Authenticode files) using
   these external signatures.
 * Added entrypoint (CLI script) for displaying various details about Authenticode files.
+* Added support binaries signed with legacy root certificates trusted in Windows.
 
 * Added ``AuthenticodeFile.iter_signatures`` and ``.signatures`` to iterate over all
   available signatures (embedded and catalogs). You can specify which of these
@@ -34,6 +35,10 @@ v0.9.0 (unreleased)
 * Changed calculated property ``SignedData.content_digest`` to a method
   ``SignedData.get_content_digest``
 * Improved parsing of ``CertificateTrustList`` attributes.
+* Added ``CombinedCertificateStore`` with the ability to combine multiple certificate
+  stores (use ``CertificateStore() | CertificateStore()``)
+* Added the ability to use dicts as ``ctl`` argument for ``CertificateStore``, allowing
+  limited use of extended key usages for certain certificates.
 * Add support for passing ``OleFileIO`` directly into ``SignedMsiFile``.
 * Optimize ``SignedPEFingerprinter`` to use the current instance of ``SignedPEFile``.
 * Rewritten all tests to use pytest instead of unittest.
