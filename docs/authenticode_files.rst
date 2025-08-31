@@ -169,6 +169,12 @@ Catalog Files (.cat) are used for externally signing files, mostly used in the c
 driver files. They can be used to sign virtually any type of file. They are usually
 found in a subdirectory of ``C:\Windows\System32\CatRoot``.
 
+A Windows Service (``cryptsvc``) is used to register and index the catalog files on the
+system. The ``catdb`` database file, located in the ``catroot2`` folder, is used by this
+service to store its data. Signify does not parse the contents of these files, but
+`Dissect <https://docs.dissect.tools/en/stable/api/dissect/target/plugins/os/windows/catroot/index.html>`_
+appears to be able to.
+
 The same file format is used by Certificate Trust Lists (e.g. authroot.stl), which is
 used for distributing lists of certificates, particularly the Microsoft Root CA program,
 but can be used more widely.
