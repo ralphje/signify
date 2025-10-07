@@ -57,9 +57,9 @@ class CertificateStore:
         if self.trusted != other.trusted:
             raise ValueError("Cannot combine trusted and non-trusted stores.")
         if isinstance(other, CombinedCertificateStore):
-            other.stores.append(other)
-            return other
-        return CombinedCertificateStore(self, other, trusted=self.trusted)
+            return CombinedCertificateStore(self, *other.stores, trusted=self.trusted)
+        else:
+            return CombinedCertificateStore(self, other, trusted=self.trusted)
 
     def append(self, elem: Certificate) -> None:
         return self.data.append(elem)
@@ -184,10 +184,11 @@ class CombinedCertificateStore(CertificateStore):
         if self.trusted != other.trusted:
             raise ValueError("Cannot combine trusted and non-trusted stores.")
         if isinstance(other, CombinedCertificateStore):
-            self.stores.extend(other.stores)
+            return CombinedCertificateStore(
+                *self.stores, *other.stores, trusted=self.trusted
+            )
         else:
-            self.stores.append(other)
-        return self
+            return CombinedCertificateStore(*self.stores, other, trusted=self.trusted)
 
     def append(self, elem: Certificate) -> None:
         raise NotImplementedError()
