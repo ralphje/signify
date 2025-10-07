@@ -2,7 +2,7 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
-v0.9.0 (unreleased)
+v0.9.0 (2025-10-07)
 -------------------
 * Added support for verifying catalog (.cat) files and CTL (.stl) files.
 * Added support for validation using external catalog files containing (additional)
