@@ -36,6 +36,9 @@ dynamic = ["version"]
 [tool.setuptools.dynamic]
 version = {attr = "signify.__version__"}
 
+[tool.setuptools.package-data]
+"signify.authenticode" = ["*.pem"]
+
 [project.urls]
 Documentation = "http://signify.readthedocs.io/en/latest/"
 Repository = "https://github.com/ralphje/signify"

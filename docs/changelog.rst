@@ -2,6 +2,10 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
+v0.9.1 (2025-10-07)
+-------------------
+* Resolve packaging issue with legacy certificates not being included
+
 v0.9.0 (2025-10-07)
 -------------------
 * Added support for verifying catalog (.cat) files and CTL (.stl) files.
