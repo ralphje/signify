@@ -45,6 +45,8 @@ from tests._utils import open_test_data
         "DXCore.dll",
         # this tests a sample that has two signed datas, that are both valid
         "sigcheck.exe",
+        # sample has a different SectionAlignment than 0x1000
+        "d62d3ca4f677eb06ba81b1eba82f375c0c345f0e8f8097c92fc5e36e4d72294e.sample",
     ],
 )
 def test_valid_signature(filename):

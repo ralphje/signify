@@ -279,16 +279,18 @@ class SignedPEFile(AuthenticodeFile):
 
     @cached_property
     def page_size(self) -> int:
-        """Gets the page size from the optional COFF header, or if not available,
-        returns 4096 as best guess.
-        """
-        optional_header_offset, optional_header_size = self._seek_optional_header()
+        """Gets the page size from the target machine architecture."""
+        pe_offset = self._seek_start_of_pe()
+        self.file.seek(pe_offset + 4, os.SEEK_SET)
+        machine_type = struct.unpack("<H", self.file.read(2))[0]
 
-        if optional_header_size < 36:
-            return 4096
-
-        self.file.seek(optional_header_offset + 32, os.SEEK_SET)
-        return cast(int, struct.unpack("<I", self.file.read(4))[0])
+        # For Itanium binaries, the page size is 0x2000. Otherwise, at least for
+        # MIPS and x86, the size is 0x1000 (4096). Note that we haven't tested this
+        # against Itanium binaries, so we may be doing a wrong assumption here.
+        if machine_type == 0x200:
+            return 0x2000
+        else:
+            return 0x1000
 
     def get_fingerprinter(self) -> SignedPEFingerprinter:
         """Returns a fingerprinter object for this file.
