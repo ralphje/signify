@@ -223,6 +223,27 @@ class AuthenticodeFile:
                 if self._get_subject_from_catalog(catalog, expected_hashes):
                     yield catalog
 
+    def iter_indirect_data(
+        self, **kwargs: Any
+    ) -> Iterable[tuple[AuthenticodeSignature | CertificateTrustList, IndirectData]]:
+        """Simple helper method that allows iterating over all signatures for this
+        Authenticode-signed file with their contained :class:`IndirectData` objects.
+        The arguments are the same as for :meth:`iter_signatures`.
+
+        Using :meth:`verify_signature` to retrieve the signature, with its
+        :class:`IndirectData` and verification result, is often the more appropriate
+        method to use.
+        """
+        for signature in self.iter_signatures(**kwargs):
+            if isinstance(signature, AuthenticodeSignature):
+                yield signature, signature.indirect_data
+            elif isinstance(signature, CertificateTrustList):
+                subject = self._get_subject_from_catalog(
+                    signature, kwargs.get("expected_hashes", {})
+                )
+                if subject and subject.indirect_data:
+                    yield signature, subject.indirect_data
+
     def verify(
         self,
         *,
@@ -463,6 +484,8 @@ class AuthenticodeFile:
     ) -> CertificateTrustSubject | None:
         """Gets the CertificateTrustSubject from the CertificateTrustList, taking
         the already-provided hashes into account.
+
+        The primary API for this is ``catalog.find_subject(self)``.
         """
         return catalog.find_subject(
             expected_hashes.get(catalog.subject_algorithm().name, self)
@@ -475,7 +498,15 @@ class AuthenticodeFile:
         expected_hash: bytes | None = None,
         verify_additional_hashes: bool = True,
     ) -> None:
-        """Verifies the provided IndirectData against the current file.
+        """Verifies the provided IndirectData against the current file. This does not
+        verify that the signature itself is properly signed, but verifies that the
+        :class:`IndirectData` matches this file.
+
+        This method is called from :meth:`AuthenticodeSignature.verify` for
+        :class:`IndirectData` objects contained in an :class:`AuthenticodeSignature`,
+        but :meth:`AuthenticodeSignature.verify` does perform some additional checks
+        on the used hashing algorithms. Use :meth:`verify_signature` to call the method
+        for verification.
 
         If no expected hash is provided, the hash is calculated by calling
         :meth:`get_fingerprint` with the appropriate algorithm.
