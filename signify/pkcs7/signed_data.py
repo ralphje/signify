@@ -192,6 +192,65 @@ class SignedData:
                 "The expected hash of the content does not match SignerInfo"
             )
 
+    def _create_verification_context(
+        self,
+        *,
+        trusted_certificate_store: CertificateStore | None = None,
+        extended_key_usages: list[str] | None = None,
+        **kwargs: Any,
+    ) -> VerificationContext:
+        """Creates a :class:`VerificationContext` instance suitable for the verification
+        of this SignedData.
+
+        :param trusted_certificate_store: A :class:`CertificateStore`
+            object that contains a list of trusted certificates to be used.
+        :param extended_key_usages: EKU's to check for in the verification context
+            of this :class:`SignedData` object.
+        :param dict verification_context_kwargs: If provided, keyword arguments that
+            are passed to the instantiation of :class:`VerificationContext` s created
+            in this function. Used for e.g. providing a timestamp.
+        """
+        if trusted_certificate_store is None:
+            trusted_certificate_store = CertificateStore()
+        return VerificationContext(
+            trusted_certificate_store,
+            self.certificates,
+            extended_key_usages=extended_key_usages,
+            **kwargs,
+        )
+
+    def _create_countersigner_verification_context(
+        self, trusted_certificate_store: CertificateStore | None = None, **kwargs: Any
+    ) -> VerificationContext:
+        """Creates a :class:`VerificationContext` instance suitable for the verification
+        of this SignedData's countersignature.
+
+        This is similar to :meth:`_create_verification_context`, but uses the
+        :class:`SignedData`'s included certificates of a nested
+        :class:`RFC3161SignedData` countersignature when available (otherwise uses this
+        :class:`SignedData`'s included certificates). Also forces the
+        ``extended_key_usages`` to be ``["time_stamping"]``
+
+        :param trusted_certificate_store: A :class:`CertificateStore`
+            object that contains a list of trusted certificates to be used.
+        :param dict verification_context_kwargs: If provided, keyword arguments that
+            are passed to the instantiation of :class:`VerificationContext` s created
+            in this function. Used for e.g. providing a timestamp.
+        """
+
+        if isinstance(self.signer_info.countersigner, SignedData):
+            return self.signer_info.countersigner._create_verification_context(
+                trusted_certificate_store=trusted_certificate_store,
+                extended_key_usages=["time_stamping"],
+                **kwargs,
+            )
+        else:
+            return self._create_verification_context(
+                trusted_certificate_store=trusted_certificate_store,
+                extended_key_usages=["time_stamping"],
+                **kwargs,
+            )
+
     def verify(
         self,
         verification_context: VerificationContext | None = None,
@@ -255,33 +314,21 @@ class SignedData:
 
         if verification_context_kwargs is None:
             verification_context_kwargs = {}
-        if trusted_certificate_store is None:
-            trusted_certificate_store = CertificateStore()
         if verification_context is None:
-            verification_context = VerificationContext(
-                trusted_certificate_store,
-                self.certificates,
+            verification_context = self._create_verification_context(
+                trusted_certificate_store=trusted_certificate_store,
                 extended_key_usages=extended_key_usages,
                 **verification_context_kwargs,
             )
-
         if (
             cs_verification_context is None
             and self.signer_info.countersigner
             and countersignature_mode != "ignore"
         ):
-            cs_verification_context = VerificationContext(
-                trusted_certificate_store,
-                self.certificates,
-                extended_key_usages=["time_stamping"],
+            cs_verification_context = self._create_countersigner_verification_context(
+                trusted_certificate_store=trusted_certificate_store,
                 **verification_context_kwargs,
             )
-            # Add the local certificate store for the countersignature
-            # (in the case of RFC3161SignedData)
-            if hasattr(self.signer_info.countersigner, "certificates"):
-                cs_verification_context.add_store(
-                    self.signer_info.countersigner.certificates
-                )
 
         # Can't check authAttr hash against encrypted hash, done implicitly in
         # M2's pubkey.verify.
