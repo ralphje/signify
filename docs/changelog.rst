@@ -6,6 +6,8 @@ v0.9.2 (unreleased)
 -------------------
 * Fix issue with incorrect page size assumptions leading to incorrectly reported errors
   on page hashes.
+* Fixed checking of keyUsage extension. Previous (incorrect) behaviour can be restored
+  by passing ``strict_validation=False`` to ``AuthenticodeSignature.verify``.
 * Added ``AuthenticodeFile.iter_indirect_data`` as an easy interface for inspection of
   signature data.
 
