@@ -161,6 +161,7 @@ class AuthenticodeSignature(AuthenticodeExplainVerifyMixin, SignedData):
         *,
         expected_hash: bytes | None = None,
         verify_additional_hashes: bool = True,
+        strict_validation: bool = True,
         cs_verification_context: VerificationContext | None = None,
         trusted_certificate_store: CertificateStore = TRUSTED_CERTIFICATE_STORE,
         verification_context_kwargs: dict[str, Any] | None = None,
@@ -180,6 +181,11 @@ class AuthenticodeSignature(AuthenticodeExplainVerifyMixin, SignedData):
         :param verify_additional_hashes: Defines whether additional hashes, should
             be verified, such as page hashes for PE files and extended digests for
             MSI files.
+        :param strict_validation: Defines whether we verify signatures more strictly.
+            For now, we only verify key usages more strictly, i.e. require the
+            extendedKeyUsage extension to be present, and verify the keyUsage extension
+            when it is present. If :const:`False`, we skip these checks, aligning with
+            what Windows seems to be doing.
         :param verification_context: See :meth:`SignedData.verify`
         :param cs_verification_context: See :meth:`SignedData.verify`
         :param trusted_certificate_store: See :meth:`SignedData.verify`
@@ -205,6 +211,24 @@ class AuthenticodeSignature(AuthenticodeExplainVerifyMixin, SignedData):
             expected_hash=expected_hash,
             verify_additional_hashes=verify_additional_hashes,
         )
+
+        if verification_context_kwargs is None:
+            verification_context_kwargs = {}
+
+        # The specification does not actually require this keyUsage to be set,
+        # and Windows does not actually verify that this is properly set, even if it is
+        # marked critical. This appears to be a bug with Windows itself. We therefore
+        # only verify the key usage when we want to be strict about it.
+        if strict_validation:
+            verification_context_kwargs.setdefault("key_usages", ["digital_signature"])
+            verification_context_kwargs.setdefault("optional_ku", True)
+        # The Authenticode specification requires the code_signing EKU to be present
+        # (or the entire chain must not contain any EKU). Windows does not actually
+        # care whether the EKU is present, even if the chain does. We choose to verify
+        # the EKU when it is present, and ignore failures when it is not, aligning with
+        # what Windows does. In strict mode, we require the EKU to be present and set.
+        if strict_validation:
+            verification_context_kwargs.setdefault("optional_eku", False)
 
         try:
             return super().verify(

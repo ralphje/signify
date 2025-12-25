@@ -266,8 +266,9 @@ class VerificationContext:
         *stores: CertificateStore,
         timestamp: datetime.datetime | None = None,
         key_usages: Iterable[str] | None = None,
+        optional_ku: Literal["critical"] | bool = True,
         extended_key_usages: Iterable[str] | None = None,
-        optional_eku: bool = True,
+        optional_eku: Literal["critical"] | bool = True,
         allow_legacy: bool = True,
         revocation_mode: Literal["soft-fail", "hard-fail", "require"] = "soft-fail",
         allow_fetching: bool = False,
@@ -284,10 +285,20 @@ class VerificationContext:
             current time is used. Must be a timezone-aware timestamp.
         :param key_usages: An iterable with the keyUsages to check for. For valid
             options, see :meth:`certvalidator.CertificateValidator.validate_usage`
+        :param optional_ku: If :const:`True`, sets the ``key_usages`` as optionally
+            present in the certificates, i.e. the certificate successfully validates
+            when the keyUsage extension is missing from the certificate. When
+            :const:`False`, the ``key_usages`` must be present. When ``critical``, the
+            key usage is considered validly absent when the keyUsage extension is not
+            marked as critical.
         :param extended_key_usages: An iterable with the EKU's to check for. See
             :meth:`certvalidator.CertificateValidator.validate_usage`
         :param optional_eku: If :const:`True`, sets the ``extended_key_usages`` as
-            optionally present in the certificates.
+            optionally present in the certificates, i.e. the certificate validates
+            successfully validates when the extendedKeyUsage extension is missing from
+            the certificate. When :const:`False`, the ``extended_key_usages`` must be
+            present. When ``critical``, the extended key usage is considered validly
+            absent when the extendedKeyUsage extension is not marked as critical.
         :param allow_legacy: If :const:`True`, allows chain verification if the
             signature hash algorithm is very old (e.g. MD2). Additionally, allows the
             verification of encrypted hashes in :meth:`Certificate.verify_signature`
@@ -309,6 +320,7 @@ class VerificationContext:
         self.stores = list(stores)
         self.timestamp = timestamp
         self.key_usages = key_usages
+        self.optional_ku = optional_ku
         self.extended_key_usages = extended_key_usages
         self.optional_eku = optional_eku
         self.allow_legacy = allow_legacy
@@ -438,14 +450,31 @@ class VerificationContext:
             validation_context=context,
         )
 
-        # verify the chain
+        # Verify the chain and their usage.
+        # Do not verify key_usage if optional_ku is set and the certificate does not
+        # provide a key usage. This is because the validator does not handle this case.
         try:
             chain = validator.validate_usage(
-                key_usage=set(self.key_usages) if self.key_usages else set(),
-                extended_key_usage=(
-                    set(self.extended_key_usages) if self.extended_key_usages else set()
+                key_usage=(
+                    set(self.key_usages)
+                    if self.key_usages
+                    and (not self.optional_ku or to_check_asn1cert.key_usage_value)
+                    and (
+                        self.optional_ku != "critical"
+                        or "key_usage" in to_check_asn1cert.critical_extensions
+                    )
+                    else set()
                 ),
-                extended_optional=self.optional_eku,
+                extended_key_usage=(
+                    set(self.extended_key_usages)
+                    if self.extended_key_usages
+                    and (
+                        self.optional_eku != "critical"
+                        or "extended_key_usage" in to_check_asn1cert.critical_extensions
+                    )
+                    else set()
+                ),
+                extended_optional=bool(self.optional_eku),
             )
         except Exception as e:
             raise CertificateVerificationError(

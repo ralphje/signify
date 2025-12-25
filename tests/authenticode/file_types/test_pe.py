@@ -65,6 +65,8 @@ def test_valid_signature(filename):
         "19e818d0da361c4feedd456fca63d68d4b024fbbd3d9265f606076c7ee72e8f8.ViR",
         # This sample is expired and revoked
         "jameslth",
+        # This sample has an invalid keyUsage
+        "17ad1735a13898c978cc6bbe6b2056cb8471329b",
     ],
 )
 def test_invalid_signature(filename):
@@ -324,3 +326,17 @@ def test_pe_sample_with_catalog():
         pefile.add_catalog(cat)
         assert len(list(pefile.signatures)) == 2
         pefile.verify(signature_types="embedded")
+
+
+def test_17ad_valid_without_strict():
+    """test whether the 17ad sample with incorrect keyUsage is valid when not performing
+    strict validation
+    """
+    with open_test_data("17ad1735a13898c978cc6bbe6b2056cb8471329b") as f:
+        pefile = SignedPEFile(f)
+        pefile.verify(
+            strict_validation=False,
+            verification_context_kwargs={
+                "timestamp": datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+            },
+        )
