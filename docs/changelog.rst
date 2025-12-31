@@ -2,7 +2,7 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
-v0.9.2 (unreleased)
+v0.9.2 (2025-12-31)
 -------------------
 * Fix issue with incorrect page size assumptions leading to incorrectly reported errors
   on page hashes.
