@@ -394,7 +394,7 @@ class SignerInfo:
         # this loop was designed in the same way that Certificate._build_chain was built
         # first_error is None until the first iteration. When it becomes False, we do
         # not need to raise anything.
-        first_error: VerificationError | None | Literal[False] = None
+        first_error: VerificationError | Literal[False] | None = None
         for issuer in context.find_certificates(
             issuer=self.issuer, serial_number=self.serial_number
         ):
