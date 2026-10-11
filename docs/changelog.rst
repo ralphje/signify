@@ -2,6 +2,10 @@ Release notes
 =============
 This page contains the most significant changes in Signify between each release.
 
+v0.9.3 (unreleased)
+-------------------
+* Fix crash on certificates with key algorithms unknown to asn1crypto (e.g. ML-DSA).
+
 v0.9.2 (2025-12-31)
 -------------------
 * Fix issue with incorrect page size assumptions leading to incorrectly reported errors

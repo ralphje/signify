@@ -128,25 +128,10 @@ class Certificate:
         )
 
     def __hash__(self) -> int:
-        return hash(
-            (
-                self.issuer,
-                self.serial_number,
-                self.subject,
-                self.subject_public_algorithm,
-                self.subject_public_key,
-            )
-        )
+        return hash(self.asn1.dump())
 
     def __eq__(self, other: object) -> bool:
-        return (
-            isinstance(other, Certificate)
-            and self.issuer == other.issuer
-            and self.serial_number == other.serial_number
-            and self.subject == other.subject
-            and self.subject_public_algorithm == other.subject_public_algorithm
-            and self.subject_public_key == other.subject_public_key
-        )
+        return isinstance(other, Certificate) and self.asn1.dump() == other.asn1.dump()
 
     @classmethod
     def from_der(cls, content: bytes) -> Certificate:

@@ -7,13 +7,25 @@ from signify.authenticode import (
     TRUSTED_CERTIFICATE_STORE_NO_CTL,
 )
 from signify.exceptions import VerificationError
+from signify.x509 import Certificate
 from signify.x509.context import CertificateStore, VerificationContext
+from tests._utils import open_test_data
+
+
+def has_known_signature_algorithm(certificate: Certificate) -> bool:
+    # certvalidator cannot verify signature algorithms unknown to asn1crypto
+    try:
+        return certificate.asn1["signature_algorithm"].signature_algo is not None
+    except ValueError:
+        return False
 
 
 def test_all_trusted_certificates_are_trusted():
     context = VerificationContext(TRUSTED_CERTIFICATE_STORE_NO_CTL)
     # only select 50 to speed up testing
     for certificate in itertools.islice(TRUSTED_CERTIFICATE_STORE_NO_CTL, 50):
+        if not has_known_signature_algorithm(certificate):
+            continue
         # Trust depends on the timestamp
         context.timestamp = certificate.valid_to
         chain = certificate.verify(context)
@@ -22,6 +34,19 @@ def test_all_trusted_certificates_are_trusted():
 
 def test_no_duplicates_in_default_store():
     assert len(TRUSTED_CERTIFICATE_STORE) == len(set(TRUSTED_CERTIFICATE_STORE))
+
+
+def test_certificate_with_unknown_public_key_algorithm():
+    # ML-DSA root from the Microsoft trust store; asn1crypto cannot parse its key
+    with open_test_data("certs/digicert_pqc_mldsa87_root.pem") as f:
+        certificate = Certificate.from_pem(f.read())
+    same_certificate = Certificate.from_der(certificate.asn1.dump())
+    other_certificate = next(iter(TRUSTED_CERTIFICATE_STORE_NO_CTL))
+
+    assert len({certificate, same_certificate}) == 1
+    assert certificate == same_certificate
+    assert certificate != other_certificate
+    assert certificate in CertificateStore([certificate], trusted=True)
 
 
 def test_trust_fails():
